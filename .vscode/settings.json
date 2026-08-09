@@ -1,0 +1,9 @@
+{
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "always"
+    },
+    "editor.minimap.enabled": false,
+    "editor.inlineSuggest.enabled": true,
+    "files.autoSave": "onFocusChange"
+}
