@@ -43,3 +43,26 @@ def test_different_txn_type_produces_different_key() -> None:
 
 def test_none_amount_and_units_do_not_collide_with_zero() -> None:
     assert _key(amount_paise=None, units=None) != _key(amount_paise=0, units=Decimal("0"))
+
+
+def test_different_balance_after_produces_different_key() -> None:
+    """Real-data regression: two distinct same-day, same-amount, same-unit
+    transactions (e.g. two SIP top-ups landing on the same date) must not
+    collide — casparser's running balance differs even when everything else
+    matches, since it reflects cumulative ledger position."""
+    assert _key(balance_after=Decimal("100.5")) != _key(balance_after=Decimal("250.0"))
+
+
+def test_none_balance_after_does_not_collide_with_zero() -> None:
+    assert _key(balance_after=None) != _key(balance_after=Decimal("0"))
+
+
+def test_different_ordinal_produces_different_key() -> None:
+    """Last-resort tiebreaker for rows tying on every other field (e.g. two
+    identical-amount stamp-duty-tax lines on the same day, which carry no
+    units or balance)."""
+    assert _key(ordinal=0) != _key(ordinal=1)
+
+
+def test_ordinal_defaults_to_zero() -> None:
+    assert _key() == _key(ordinal=0)

@@ -40,15 +40,31 @@ def parse_transactions_csv(content: str) -> list[TransactionRecord]:
         raise CSVValidationError(f"CSV is missing required columns: {missing}")
 
     records: list[TransactionRecord] = []
+    ordinal_counts: dict[tuple, int] = {}
     for row_number, row in enumerate(reader, start=2):  # header is row 1
         try:
             txn_date = date.fromisoformat(row["txn_date"])
             txn_type = TransactionType(row["txn_type"])
             amount_paise = _to_paise(Decimal(row["amount"]))
             units = _optional_decimal(row.get("units"))
+            balance_after = _optional_decimal(row.get("balance_after"))
             isin = row.get("isin") or None
             amfi_code = row.get("amfi_code") or None
             scheme_identifier = isin or amfi_code or row["scheme_name"]
+
+            # Ordinal tiebreaker for rows tying on every other field — see
+            # natural_key.py docstring. Tracked per (folio, scheme), in file order.
+            tie_key = (
+                row["folio"],
+                scheme_identifier,
+                txn_date,
+                txn_type.value,
+                amount_paise,
+                units,
+                balance_after,
+            )
+            ordinal = ordinal_counts.get(tie_key, 0)
+            ordinal_counts[tie_key] = ordinal + 1
 
             records.append(
                 TransactionRecord(
@@ -64,7 +80,7 @@ def parse_transactions_csv(content: str) -> list[TransactionRecord]:
                     units=units,
                     nav=_optional_decimal(row.get("nav")),
                     amount_paise=amount_paise,
-                    balance_after=_optional_decimal(row.get("balance_after")),
+                    balance_after=balance_after,
                     dividend_rate=_optional_decimal(row.get("dividend_rate")),
                     gift_folio=row.get("gift_folio") or None,
                     natural_key=compute_natural_key(
@@ -74,6 +90,8 @@ def parse_transactions_csv(content: str) -> list[TransactionRecord]:
                         txn_type=txn_type.value,
                         amount_paise=amount_paise,
                         units=units,
+                        balance_after=balance_after,
+                        ordinal=ordinal,
                     ),
                 )
             )

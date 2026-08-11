@@ -56,7 +56,22 @@ uniformly, typed by `txn_type`.
 | balance_after | numeric(20,4), nullable | `casparser`'s running unit balance after this row — a free cross-check against our own FIFO ledger (compute-engine.md §1) |
 | dividend_rate | numeric(12,4), nullable | only present on dividend rows |
 | gift_folio | text, nullable | only present on `GIFT_IN`/`GIFT_OUT` rows |
-| natural_key | text, unique | `sha256(folio, scheme_identifier, txn_date, txn_type, amount_paise, units)` where `scheme_identifier` is `isin` if present else `amfi_code` else `scheme_name` — the FR-1.2 dedupe key |
+| natural_key | text, unique | `sha256(folio, scheme_identifier, txn_date, txn_type, amount_paise, units, balance_after, ordinal)` — the FR-1.2 dedupe key. See below; `scheme_identifier` is `isin` if present else `amfi_code` else `scheme_name` |
+
+**Natural key — corrected against real data.** The first six fields (through `units`) looked
+sufficient on synthetic fixtures but proved incomplete against a real 1,578-transaction MFCentral
+CAS: 95 genuinely distinct purchase/switch transactions collided because two same-day,
+same-amount, same-unit rows are indistinguishable on those fields alone. Two more fields were
+added:
+- `balance_after` — casparser's running unit balance after the row. Distinct transactions
+  necessarily leave the ledger at different cumulative balances; this alone resolved 100% of the
+  real-data collisions among unit-bearing rows. It's null for zero-unit rows (tax lines), so it
+  can't help there.
+- `ordinal` — for rows tying on every field including `balance_after` (chiefly STT/stamp-duty/TDS
+  tax lines, which carry neither units nor a balance), the Nth occurrence of an identical tuple
+  within its scheme's transaction list, in the stable order `casparser` emits them. Deterministic
+  and stable across re-uploads of overlapping data, since historical entries don't reorder
+  between CAS pulls.
 
 **Gap detection (FR-1.2):** `casparser`'s `Scheme.open` gives the opening unit balance at the
 start of the statement period. A nonzero `open` is a precise, built-in signal that the CAS does

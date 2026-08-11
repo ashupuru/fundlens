@@ -57,9 +57,18 @@ def cas_data_to_parsed(cas: CASData) -> ParsedCAS:
                 )
 
             scheme_identifier = _scheme_identifier(scheme)
+            ordinal_counts: dict[tuple, int] = {}
             for txn in scheme.transactions:
                 amount_paise = _to_paise(txn.amount)
                 txn_date = _to_date(txn.date)
+
+                # Ordinal tiebreaker for rows that tie on every other field
+                # (see natural_key.py docstring) — tracked per scheme, in the
+                # stable order casparser emits transactions.
+                tie_key = (txn_date, txn.type.value, amount_paise, txn.units, txn.balance)
+                ordinal = ordinal_counts.get(tie_key, 0)
+                ordinal_counts[tie_key] = ordinal + 1
+
                 natural_key = compute_natural_key(
                     folio=folio.folio,
                     scheme_identifier=scheme_identifier,
@@ -67,6 +76,8 @@ def cas_data_to_parsed(cas: CASData) -> ParsedCAS:
                     txn_type=txn.type.value,
                     amount_paise=amount_paise,
                     units=txn.units,
+                    balance_after=txn.balance,
+                    ordinal=ordinal,
                 )
                 transactions.append(
                     TransactionRecord(

@@ -153,3 +153,89 @@ def test_transaction_with_no_units_or_amount_still_maps() -> None:
     assert txn.units is None
     assert txn.amount_paise == 1250
     assert txn.txn_type == TransactionType.STT_TAX
+
+
+def test_same_day_same_amount_purchases_with_different_balance_stay_distinct() -> None:
+    """Regression for a real-data collision: a real 1,578-transaction MFCentral
+    CAS had 95 genuinely distinct purchase/switch transactions collapse onto
+    the same natural_key before balance_after was added, because two separate
+    same-day, same-amount, same-unit purchases are common (e.g. two SIP
+    mandates landing on the same date). casparser's running balance always
+    differs between them even when everything else ties."""
+    first_purchase = make_transaction(
+        txn_date=date(2021, 4, 15), amount=Decimal("5000"), units=Decimal("100"),
+        balance=Decimal("100"),
+    )
+    second_purchase = make_transaction(
+        txn_date=date(2021, 4, 15), amount=Decimal("5000"), units=Decimal("100"),
+        balance=Decimal("200"),
+    )
+    cas = make_cas_data(
+        folios=[make_folio(schemes=[make_scheme(transactions=[first_purchase, second_purchase])])]
+    )
+
+    parsed = cas_data_to_parsed(cas)
+
+    assert len(parsed.transactions) == 2
+    keys = {t.natural_key for t in parsed.transactions}
+    assert len(keys) == 2, "both real transactions must survive with distinct keys"
+
+
+def test_identical_tax_lines_use_ordinal_to_stay_distinct() -> None:
+    """Tax lines carry neither units nor a balance, so two genuinely separate
+    same-day, same-amount stamp-duty charges (one per underlying purchase)
+    tie on every field except their position in the scheme's transaction
+    list — the ordinal tiebreaker must keep them distinct rather than
+    silently dropping one."""
+    tax_line_1 = make_transaction(
+        type=CasparserTransactionType.STAMP_DUTY_TAX,
+        txn_date=date(2021, 4, 15),
+        amount=Decimal("2.50"),
+        units=None,
+        nav=None,
+        balance=None,
+    )
+    tax_line_2 = make_transaction(
+        type=CasparserTransactionType.STAMP_DUTY_TAX,
+        txn_date=date(2021, 4, 15),
+        amount=Decimal("2.50"),
+        units=None,
+        nav=None,
+        balance=None,
+    )
+    cas = make_cas_data(
+        folios=[make_folio(schemes=[make_scheme(transactions=[tax_line_1, tax_line_2])])]
+    )
+
+    parsed = cas_data_to_parsed(cas)
+
+    assert len(parsed.transactions) == 2
+    keys = {t.natural_key for t in parsed.transactions}
+    assert len(keys) == 2, "both tax lines must survive with distinct keys via ordinal"
+
+
+def test_ordinal_assignment_is_stable_across_repeated_parses() -> None:
+    """Cross-upload idempotency requires that re-parsing the same overlapping
+    data (e.g. a newer CAS covering the same historical period) assigns the
+    same ordinals to the same tied rows, so natural_keys match and the merge
+    layer correctly treats them as duplicates rather than re-inserting them."""
+    tax_line_1 = make_transaction(
+        type=CasparserTransactionType.STAMP_DUTY_TAX,
+        amount=Decimal("2.50"),
+        units=None,
+        balance=None,
+    )
+    tax_line_2 = make_transaction(
+        type=CasparserTransactionType.STAMP_DUTY_TAX,
+        amount=Decimal("2.50"),
+        units=None,
+        balance=None,
+    )
+    cas = make_cas_data(
+        folios=[make_folio(schemes=[make_scheme(transactions=[tax_line_1, tax_line_2])])]
+    )
+
+    first_parse_keys = [t.natural_key for t in cas_data_to_parsed(cas).transactions]
+    second_parse_keys = [t.natural_key for t in cas_data_to_parsed(cas).transactions]
+
+    assert first_parse_keys == second_parse_keys
