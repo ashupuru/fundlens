@@ -21,32 +21,48 @@ One row per CAS file ingested. Never deleted; superseded uploads are marked, not
 | column | type | notes |
 |---|---|---|
 | id | uuid pk | |
-| file_hash | text | sha256 of the decrypted PDF bytes, for dedupe of re-uploads |
+| file_hash | text | sha256 of the uploaded PDF's raw bytes, for dedupe of byte-identical re-uploads |
+| source_filename | text, nullable | as supplied by the user, for display only |
 | uploaded_at | timestamp | |
-| statement_period_start / end | date | parsed from CAS header |
+| statement_period_start / end | date | parsed from `CASData.statement_period` |
 | parser_version | text | `casparser` version pinned at parse time |
 | status | enum | `parsed` \| `parse_failed` \| `superseded` |
 
 ### `raw_transaction`
 The atomic unit of truth. Natural key enforces the PRD's idempotent-merge rule (FR-1.2).
 
+**Corrected against `casparser`'s actual output** (v1.3.0, inspected directly rather than assumed):
+STT, stamp duty, and TDS are **not** fields on a purchase row — `casparser` emits them as their
+own transaction rows (`TransactionType.STT_TAX` / `STAMP_DUTY_TAX` / `TDS_TAX`), so the earlier
+`stamp_duty`/`stt` columns below were wrong and are dropped in favor of storing every row
+uniformly, typed by `txn_type`.
+
 | column | type | notes |
 |---|---|---|
 | id | uuid pk | |
 | upload_id | fk → raw_cas_upload | provenance |
-| pan | text | masked in all LLM-facing paths |
+| pan | text, nullable | from `Folio.PAN`; masked in all LLM-facing paths |
 | folio | text | |
 | amc | text | |
-| scheme_amfi_code | text | |
-| scheme_isin | text | nullable — not all CAS rows carry ISIN |
-| txn_type | enum | purchase, sip, redemption, switch_in, switch_out, dividend_payout, dividend_reinvest, segregation |
+| scheme_name | text | `Scheme.scheme`, the raw name as printed on the CAS |
+| isin | text, nullable | not all CAS rows carry ISIN |
+| amfi_code | text, nullable | `Scheme.amfi`; backfilled via `scheme_identity` (§2) when absent |
+| txn_type | enum | full `casparser.types.TransactionType` set: `PURCHASE`, `PURCHASE_SIP`, `REDEMPTION`, `DIVIDEND_PAYOUT`, `DIVIDEND_REINVEST`, `SWITCH_IN`, `SWITCH_IN_MERGER`, `SWITCH_OUT`, `SWITCH_OUT_MERGER`, `STT_TAX`, `STAMP_DUTY_TAX`, `TDS_TAX`, `SEGREGATION`, `GIFT_IN`, `GIFT_OUT`, `MISC`, `UNKNOWN`, `REVERSAL` |
 | txn_date | date | |
-| units | numeric(20,4) | signed: positive for inflow-to-folio, negative for outflow |
-| nav | numeric(12,4) | |
-| amount | integer | paise |
-| stamp_duty | integer | paise, nullable |
-| stt | integer | paise, nullable |
-| natural_key | text, unique | `sha256(folio, scheme_amfi_code, txn_date, txn_type, amount, units)` — the FR-1.2 dedupe key |
+| description | text, nullable | free-text line description from the PDF, kept for audit/debugging and SIP detection (FR-2.3) |
+| units | numeric(20,4), nullable | signed: positive for inflow-to-folio, negative for outflow; null for pure-cash rows like tax lines |
+| nav | numeric(12,4), nullable | |
+| amount_paise | integer, nullable | fixed-point; `casparser` gives `Decimal`, converted on ingest |
+| balance_after | numeric(20,4), nullable | `casparser`'s running unit balance after this row — a free cross-check against our own FIFO ledger (compute-engine.md §1) |
+| dividend_rate | numeric(12,4), nullable | only present on dividend rows |
+| gift_folio | text, nullable | only present on `GIFT_IN`/`GIFT_OUT` rows |
+| natural_key | text, unique | `sha256(folio, scheme_identifier, txn_date, txn_type, amount_paise, units)` where `scheme_identifier` is `isin` if present else `amfi_code` else `scheme_name` — the FR-1.2 dedupe key |
+
+**Gap detection (FR-1.2):** `casparser`'s `Scheme.open` gives the opening unit balance at the
+start of the statement period. A nonzero `open` is a precise, built-in signal that the CAS does
+not cover that scheme's full history — units existed before the statement period that this
+document has no transaction-level detail for. Surfaced per (folio, scheme) as part of the
+ingestion result; persisting it into the data quality dashboard proper is P0.6.
 
 Re-upload merge algorithm: parse new CAS → compute `natural_key` for every row → `INSERT ... ON
 CONFLICT (natural_key) DO NOTHING`. This is intentionally a set-union, not a diff/replace, so a

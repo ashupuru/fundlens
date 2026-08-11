@@ -11,6 +11,9 @@ dependencies = [
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "keyring>=25.5",
+    "casparser>=1.3.0",
+    "python-dateutil>=2.9",
+    "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]
@@ -34,9 +37,15 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = ["src/fundlens/db/migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom (Depends()/File()/Form() as defaults)
+# is not the mutable-default-argument bug B008 is meant to catch.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form"]
 
 [tool.mypy]
 python_version = "3.12"
