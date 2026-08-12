@@ -21,15 +21,22 @@ Note: the PRD names `www.amfiindia.com/spages/NAVAll.txt`, which now
 redirects (HTTP 301, confirmed live) to `portal.amfiindia.com/spages/NAVAll.txt`.
 """
 
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
 import httpx
 from dateutil import parser as date_parser
 
-from fundlens.market_data.records import NavRow
+from fundlens.market_data.records import NavRow, SchemeCategoryRow
 
 NAVALL_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
+
+# A category header line, e.g. "Open Ended Schemes(Equity Scheme - Large Cap
+# Fund)". Verified live (2026-08) that every such line starts with one of
+# these three prefixes and is the only line shape containing "Schemes(" —
+# distinguishing it from data rows (which never contain a literal "(").
+_CATEGORY_HEADER_RE = re.compile(r"^(Open|Close|Interval)[^;]*\([^;]*\)\s*$")
 
 
 def fetch_navall_text(timeout_seconds: float = 30.0) -> str:
@@ -61,6 +68,36 @@ def parse_navall(text: str) -> list[NavRow]:
             continue
 
         rows.append(NavRow(amfi_code=amfi_code, nav_date=nav_date, nav=nav))
+
+    return rows
+
+
+def parse_navall_categories(text: str) -> list[SchemeCategoryRow]:
+    """Tracks the current category header as it descends through the file's
+    sections, tagging each data row it passes with that category. The
+    schedule (category header, then a run of data rows until the next
+    header) is the file's only real structure — every scheme falls under
+    exactly one category header at parse time.
+    """
+    rows: list[SchemeCategoryRow] = []
+    current_category: str | None = None
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _CATEGORY_HEADER_RE.match(stripped):
+            current_category = stripped
+            continue
+
+        fields = line.split(";")
+        if len(fields) != 6:
+            continue
+        amfi_code = fields[0].strip()
+        if not amfi_code.isdigit():
+            continue
+        if current_category is None:
+            continue  # defensive: a data row before any header is seen
+
+        rows.append(SchemeCategoryRow(amfi_code=amfi_code, category_raw=current_category))
 
     return rows
 

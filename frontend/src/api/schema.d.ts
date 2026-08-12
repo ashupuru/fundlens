@@ -157,6 +157,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/capital-gains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capital Gains */
+        get: operations["capital_gains_reports_capital_gains_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/capital-gains.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Capital Gains Csv */
+        get: operations["capital_gains_csv_reports_capital_gains_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -181,6 +215,50 @@ export interface components {
         Body_ingest_csv_ingest_csv_post: {
             /** File */
             file: string;
+        };
+        /** CapitalGainsLineResponse */
+        CapitalGainsLineResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Isin */
+            isin: string | null;
+            /** Amfi Code */
+            amfi_code: string | null;
+            /** Tax Asset Class */
+            tax_asset_class: string | null;
+            /** Purchase Date */
+            purchase_date: string;
+            /** Sale Date */
+            sale_date: string;
+            /** Holding Period Days */
+            holding_period_days: number;
+            /** Units */
+            units: string;
+            /** Sale Value Paise */
+            sale_value_paise: number;
+            /** Cost Of Acquisition Paise */
+            cost_of_acquisition_paise: number;
+            /** Gain Paise */
+            gain_paise: number;
+            /** Gain Type */
+            gain_type: string;
+        };
+        /** CapitalGainsReportResponse */
+        CapitalGainsReportResponse: {
+            /** Financial Year */
+            financial_year: string;
+            /** Lines */
+            lines: components["schemas"]["CapitalGainsLineResponse"][];
+            /** Total Stcg Paise */
+            total_stcg_paise: number;
+            /** Total Ltcg Paise */
+            total_ltcg_paise: number;
+            /** Total Unclassified Paise */
+            total_unclassified_paise: number;
+            /** Schemes Missing Metadata */
+            schemes_missing_metadata: number;
         };
         /** CoverageGapResponse */
         CoverageGapResponse: {
@@ -539,6 +617,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioMetricsResponse"];
+                };
+            };
+        };
+    };
+    capital_gains_reports_capital_gains_get: {
+        parameters: {
+            query: {
+                /** @description Financial year, e.g. '2024-25' */
+                fy: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapitalGainsReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    capital_gains_csv_reports_capital_gains_csv_get: {
+        parameters: {
+            query: {
+                /** @description Financial year, e.g. '2024-25' */
+                fy: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
