@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/market-data/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh */
+        post: operations["refresh_market_data_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -97,6 +114,19 @@ export interface components {
             duplicate_count: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["CoverageGapResponse"][];
+        };
+        /** RefreshResponse */
+        RefreshResponse: {
+            /** Backfilled Schemes */
+            backfilled_schemes: number;
+            /** Backfilled Rows */
+            backfilled_rows: number;
+            /** Amfi Refresh Rows */
+            amfi_refresh_rows: number;
+            /** Amfi Refresh Ok */
+            amfi_refresh_ok: boolean;
+            /** Amfi Error */
+            amfi_error: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -204,6 +234,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_market_data_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefreshResponse"];
                 };
             };
         };

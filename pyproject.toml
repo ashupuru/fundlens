@@ -14,12 +14,12 @@ dependencies = [
     "casparser>=1.3.0",
     "python-dateutil>=2.9",
     "python-multipart>=0.0.12",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    "httpx>=0.27",
     "ruff>=0.7",
     "mypy>=1.13",
 ]
@@ -41,6 +41,11 @@ extend-exclude = ["src/fundlens/db/migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Real-shaped market-data fixtures mirror actual feed lines verbatim, which
+# run long — readability from matching the real format wins here.
+"tests/market_data/*" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom (Depends()/File()/Form() as defaults)

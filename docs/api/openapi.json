@@ -108,6 +108,27 @@
           }
         }
       }
+    },
+    "/market-data/refresh": {
+      "post": {
+        "tags": [
+          "market-data"
+        ],
+        "summary": "Refresh",
+        "operationId": "refresh_market_data_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -216,6 +237,46 @@
           "coverage_gaps"
         ],
         "title": "IngestResponse"
+      },
+      "RefreshResponse": {
+        "properties": {
+          "backfilled_schemes": {
+            "type": "integer",
+            "title": "Backfilled Schemes"
+          },
+          "backfilled_rows": {
+            "type": "integer",
+            "title": "Backfilled Rows"
+          },
+          "amfi_refresh_rows": {
+            "type": "integer",
+            "title": "Amfi Refresh Rows"
+          },
+          "amfi_refresh_ok": {
+            "type": "boolean",
+            "title": "Amfi Refresh Ok"
+          },
+          "amfi_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amfi Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "backfilled_schemes",
+          "backfilled_rows",
+          "amfi_refresh_rows",
+          "amfi_refresh_ok",
+          "amfi_error"
+        ],
+        "title": "RefreshResponse"
       },
       "ValidationError": {
         "properties": {
