@@ -51,6 +51,7 @@ def merge_transactions(
                 amfi_code=record.amfi_code,
                 txn_type=record.txn_type,
                 txn_date=record.txn_date,
+                sequence=record.sequence,
                 description=record.description,
                 units=record.units,
                 nav=record.nav,

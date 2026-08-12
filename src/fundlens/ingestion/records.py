@@ -21,6 +21,7 @@ class TransactionRecord:
     amfi_code: str | None
     txn_type: TransactionType
     txn_date: date
+    sequence: int
     description: str | None
     units: Decimal | None
     nav: Decimal | None

@@ -10,25 +10,52 @@ on (PRD FR-5.2).
 
 ## 1. Lot Accounting (FIFO)
 
-**Input:** `raw_transaction` rows for one `(folio, scheme_amfi_code)`, sorted by `txn_date`, then
-by a stable secondary key (transaction sequence in the source CAS) to break same-day ties
-deterministically.
+Implemented in `src/fundlens/compute/lots.py` (pure, no I/O) + `compute/service.py`
+(DB-aware grouping/persistence). Validated against a real 1,578-transaction, 26-folio,
+57-scheme MFCentral CAS spanning 1980–2026 — several design decisions below were corrected
+against what that real data actually showed, not assumed.
 
-**Algorithm:** classic FIFO queue of open lots.
-- `purchase` / `sip` / `dividend_reinvest` / `switch_in` → push a new lot (units, cost_per_unit,
-  open_date = txn_date).
-- `redemption` / `switch_out` → consume from the oldest open lot(s) first; split a lot if the
-  redemption doesn't consume it fully; each consumed unit's realized gain = `(sale_nav -
-  lot.cost_per_unit) * units_consumed`.
-- `segregation` (side-pocketing): PRD FR-2.4 flags this as a correctness-critical case. Modeled
-  as: original scheme's units reduce pro-rata, a new "segregated" scheme entity is created with
-  lots inheriting the original cost basis pro-rata by value — so total cost basis is conserved
-  across the split. This preserves XIRR correctness because no cash flow is invented at the
-  split point.
-- `dividend_payout` (non-reinvest): a positive cash flow at `txn_date`, no lot change.
+**Input:** `raw_transaction` rows for one `(folio, scheme_key)`, sorted by `(txn_date, sequence)`
+— `sequence` (data-model.md §2) is the stable secondary key that breaks same-day ties, since
+`txn_date` alone doesn't disambiguate multiple same-day transactions, which real data has.
 
-**Output:** `lot` rows (§data-model.md §3) plus a realized-gains ledger (lot, sale_date,
-sale_txn_id, realized_gain, holding_period_days) that the tax engine consumes directly.
+**Algorithm:** classic FIFO queue of open lots, branching purely on the *sign* of `units` —
+verified live that casparser already gives correctly signed units (positive=inflow,
+negative=outflow) across every observed transaction type without exception, so no
+`txn_type`-based sign flip is needed or performed:
+- **units > 0** (`PURCHASE`, `PURCHASE_SIP`, `DIVIDEND_REINVEST`, `SWITCH_IN`, `SEGREGATION`,
+  and presumably `SWITCH_IN_MERGER`/`GIFT_IN` by the same pattern) → push a new lot. Cost per
+  unit prefers `nav` (the row's own per-unit price), falls back to `amount/units` if `nav` is
+  absent, else zero with `zero_cost_flag` set.
+- **units < 0** (`REDEMPTION`, `SWITCH_OUT`, `REVERSAL`, presumably `SWITCH_OUT_MERGER`/`GIFT_OUT`)
+  → consume from the oldest open lot(s) first (FIFO); split a lot if the outflow doesn't consume
+  it fully. Each consumed slice's realized gain = `(sale_price_per_unit − lot.cost_per_unit) ×
+  units_consumed`, using the same nav→amount→zero price fallback. Consuming more than the open
+  lots hold raises `InsufficientLotsError` (surfaced as a per-scheme error on the rebuild
+  summary, not a crash) — the expected signal when ingested history doesn't cover a scheme's
+  full past (see gap detection, data-model.md §2).
+- **units is `None` or 0** (`STT_TAX`, `STAMP_DUTY_TAX`, `TDS_TAX`, `DIVIDEND_PAYOUT`, `MISC`,
+  `UNKNOWN`) → skipped entirely; these never touch the lot ledger.
+
+**`SEGREGATION` — corrected against real data.** The original design here assumed segregation
+(side-pocketing) reduces the original scheme's units pro-rata while a new segregated scheme
+inherits a pro-rata cost basis. Real data shows otherwise: `SEGREGATION` rows are **always
+positive** (the new side-pocket scheme's inflow) with **no corresponding transaction in the
+original scheme at all** — units held in the original scheme don't change, only its valuation
+does (via NAV), consistent with how Indian MF side-pocketing actually works. `SEGREGATION` rows
+also carry **no `amount` or `nav`** (0/5 in the validation set) — a structural event, not a
+priced one — so the allocator opens a zero-cost, `zero_cost_flag`-marked lot for it. Indian tax
+rules require carrying over the *original* lot's cost basis pro-rata to the segregated units;
+implementing that carryover is the tax engine's job (P1.2), not this allocator's — flagged, not
+guessed.
+
+**`REVERSAL` needs no special-casing.** Despite the name suggesting something unusual, real data
+shows it carries a normal negative `units` value plus a real `amount`/`nav` (4/4 in the
+validation set) — it's priced and consumes lots exactly like a redemption.
+
+**Output:** `lot` and `realized_gain` rows (data-model.md §3), rebuilt wholesale per folio on
+every call (delete-then-regenerate, never patched in place) — `compute/service.py`'s
+`rebuild_lots_for_folio` / `rebuild_all_lots`.
 
 ## 2. XIRR
 

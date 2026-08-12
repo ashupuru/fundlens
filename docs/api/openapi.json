@@ -129,10 +129,104 @@
           }
         }
       }
+    },
+    "/portfolio/rebuild-lots": {
+      "post": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Rebuild Lots",
+        "operationId": "rebuild_lots_portfolio_rebuild_lots_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RebuildResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/holdings": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Holdings",
+        "operationId": "holdings_portfolio_holdings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HoldingResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Holdings Portfolio Holdings Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/holdings/by-amc": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Holdings By Amc",
+        "operationId": "holdings_by_amc_portfolio_holdings_by_amc_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AmcHoldingResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Holdings By Amc Portfolio Holdings By Amc Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AmcHoldingResponse": {
+        "properties": {
+          "amc": {
+            "type": "string",
+            "title": "Amc"
+          },
+          "scheme_count": {
+            "type": "integer",
+            "title": "Scheme Count"
+          },
+          "cost_basis_paise": {
+            "type": "integer",
+            "title": "Cost Basis Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amc",
+          "scheme_count",
+          "cost_basis_paise"
+        ],
+        "title": "AmcHoldingResponse"
+      },
       "Body_ingest_cas_ingest_cas_post": {
         "properties": {
           "file": {
@@ -207,6 +301,68 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HoldingResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "amc": {
+            "type": "string",
+            "title": "Amc"
+          },
+          "isin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isin"
+          },
+          "amfi_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amfi Code"
+          },
+          "units_remaining": {
+            "type": "string",
+            "title": "Units Remaining"
+          },
+          "cost_basis_paise": {
+            "type": "integer",
+            "title": "Cost Basis Paise"
+          },
+          "average_cost_per_unit": {
+            "type": "string",
+            "title": "Average Cost Per Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_name",
+          "amc",
+          "isin",
+          "amfi_code",
+          "units_remaining",
+          "cost_basis_paise",
+          "average_cost_per_unit"
+        ],
+        "title": "HoldingResponse"
+      },
       "IngestResponse": {
         "properties": {
           "upload_id": {
@@ -237,6 +393,42 @@
           "coverage_gaps"
         ],
         "title": "IngestResponse"
+      },
+      "RebuildResponse": {
+        "properties": {
+          "folios_processed": {
+            "type": "integer",
+            "title": "Folios Processed"
+          },
+          "schemes_processed": {
+            "type": "integer",
+            "title": "Schemes Processed"
+          },
+          "lots_created": {
+            "type": "integer",
+            "title": "Lots Created"
+          },
+          "realized_gains_created": {
+            "type": "integer",
+            "title": "Realized Gains Created"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/SchemeRebuildErrorResponse"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folios_processed",
+          "schemes_processed",
+          "lots_created",
+          "realized_gains_created",
+          "errors"
+        ],
+        "title": "RebuildResponse"
       },
       "RefreshResponse": {
         "properties": {
@@ -277,6 +469,29 @@
           "amfi_error"
         ],
         "title": "RefreshResponse"
+      },
+      "SchemeRebuildErrorResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key",
+          "message"
+        ],
+        "title": "SchemeRebuildErrorResponse"
       },
       "ValidationError": {
         "properties": {

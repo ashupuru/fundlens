@@ -49,6 +49,7 @@ uniformly, typed by `txn_type`.
 | amfi_code | text, nullable | `Scheme.amfi`; backfilled via `scheme_identity` (§2) when absent |
 | txn_type | enum | full `casparser.types.TransactionType` set: `PURCHASE`, `PURCHASE_SIP`, `REDEMPTION`, `DIVIDEND_PAYOUT`, `DIVIDEND_REINVEST`, `SWITCH_IN`, `SWITCH_IN_MERGER`, `SWITCH_OUT`, `SWITCH_OUT_MERGER`, `STT_TAX`, `STAMP_DUTY_TAX`, `TDS_TAX`, `SEGREGATION`, `GIFT_IN`, `GIFT_OUT`, `MISC`, `UNKNOWN`, `REVERSAL` |
 | txn_date | date | |
+| sequence | integer | position within this scheme's transaction list, in the stable order casparser/the CSV importer emits them (0-indexed, per folio+scheme). Added in P0.3: FIFO lot ordering needs a same-day tiebreaker, and no existing field could serve that role — `balance_after` moves in opposite directions for inflows vs outflows, so it can't order a mixed same-day sequence |
 | description | text, nullable | free-text line description from the PDF, kept for audit/debugging and SIP detection (FR-2.3) |
 | units | numeric(20,4), nullable | signed: positive for inflow-to-folio, negative for outflow; null for pure-cash rows like tax lines |
 | nav | numeric(12,4), nullable | |
@@ -145,18 +146,47 @@ dashboard (technical-spec.md §4) for manual correction rather than being silent
 
 ### `lot`
 One row per FIFO cost-basis lot, derived by replaying `raw_transaction` per (folio, scheme) in
-date order. Rebuilt, not updated — a change anywhere in a folio's transaction history invalidates
-and regenerates every lot for that folio.
+`(txn_date, sequence)` order — see `raw_transaction.sequence` below; date alone doesn't
+disambiguate multiple same-day transactions, which real data has. Rebuilt, not updated — a
+change anywhere in a folio's transaction history invalidates and regenerates every lot for that
+folio (compute/service.py deletes and regenerates a folio's lots wholesale).
 
 | column | type | notes |
 |---|---|---|
 | folio | text | |
-| scheme_amfi_code | text | |
+| scheme_key | text | matches `scheme_identity`'s ISIN → AMFI → name fallback |
 | open_date | date | |
 | units_remaining | numeric(20,4) | reduced by FIFO consumption on redemption/switch-out |
-| cost_per_unit | numeric(20,4) | |
+| cost_per_unit | numeric(20,4) | prefers `nav`, falls back to `amount/units`, else 0 (flagged) |
 | source_txn_id | fk → raw_transaction | the purchase/SIP/reinvest/switch-in that opened this lot |
+| source_txn_type | enum | the `raw_transaction.txn_type` that opened this lot, kept for audit/SIP-detection |
 | close_date | date, nullable | set when fully consumed |
+| zero_cost_flag | boolean | true when neither `nav` nor `amount` was available to cost the lot — real-data-verified to occur only for `SEGREGATION` rows (side-pocket creation carries no priced amount). Indian tax rules require carrying over the original lot's cost basis pro-rata for these; that refinement is the tax engine's job (P1.2), not this table's |
+
+**FIFO allocator design (implemented in compute/lots.py), corrected against a real 1,578-row
+CAS:** the allocator branches purely on the *sign* of `units` — verified live that casparser
+already gives correctly signed units (positive=inflow, negative=outflow) across every observed
+transaction type without exception, including `SEGREGATION` (always +) and `REVERSAL` (always −,
+and carries a real `amount`/`nav` despite the name, so it needs no special-casing beyond the sign
+check). No `txn_type`-based sign flip is performed or needed.
+
+### `realized_gain`
+One row per FIFO consumption slice — a lot split across several outflows, or one outflow
+draining several lots, each produce their own row here. Feeds the tax engine (P1.2) directly.
+
+| column | type | notes |
+|---|---|---|
+| folio | text | |
+| scheme_key | text | |
+| source_txn_id | fk → raw_transaction | the lot's opening transaction |
+| open_date | date | |
+| sale_txn_id | fk → raw_transaction | the outflow transaction that consumed this slice |
+| sale_date | date | |
+| units_consumed | numeric(20,4) | |
+| cost_per_unit | numeric(20,4) | copied from the lot at consumption time |
+| sale_price_per_unit | numeric(20,4) | the outflow's own price-per-unit (same nav/amount fallback as lot costing) |
+| realized_gain_paise | integer | `(sale_price_per_unit − cost_per_unit) × units_consumed`, fixed-point |
+| holding_period_days | integer | `sale_date − open_date`, for the tax engine's STCG/LTCG threshold check |
 
 ### `derived_xirr_cache`
 Memoization table: key = `sha256(entity_type, entity_id, txn_set_hash, nav_asof_date)`. Avoids

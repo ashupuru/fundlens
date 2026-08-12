@@ -10,22 +10,19 @@ dividend_rate, gift_folio.
 
 import csv
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from io import StringIO
 
 from fundlens.db.models import TransactionType
 from fundlens.ingestion.natural_key import compute_natural_key
 from fundlens.ingestion.records import TransactionRecord
+from fundlens.money import to_paise
 
 REQUIRED_COLUMNS = {"folio", "amc", "scheme_name", "txn_type", "txn_date", "amount"}
 
 
 class CSVValidationError(Exception):
     """Raised when the CSV is missing required columns or has an unparseable row."""
-
-
-def _to_paise(amount: Decimal) -> int:
-    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _optional_decimal(value: str | None) -> Decimal | None:
@@ -41,11 +38,12 @@ def parse_transactions_csv(content: str) -> list[TransactionRecord]:
 
     records: list[TransactionRecord] = []
     ordinal_counts: dict[tuple, int] = {}
+    sequence_counts: dict[tuple[str, str], int] = {}
     for row_number, row in enumerate(reader, start=2):  # header is row 1
         try:
             txn_date = date.fromisoformat(row["txn_date"])
             txn_type = TransactionType(row["txn_type"])
-            amount_paise = _to_paise(Decimal(row["amount"]))
+            amount_paise = to_paise(Decimal(row["amount"]))
             units = _optional_decimal(row.get("units"))
             balance_after = _optional_decimal(row.get("balance_after"))
             isin = row.get("isin") or None
@@ -66,6 +64,12 @@ def parse_transactions_csv(content: str) -> list[TransactionRecord]:
             ordinal = ordinal_counts.get(tie_key, 0)
             ordinal_counts[tie_key] = ordinal + 1
 
+            # Sequence within (folio, scheme), in file order — same role as
+            # mapping.py's casparser-order sequence, for FIFO lot ordering.
+            scheme_group = (row["folio"], scheme_identifier)
+            sequence = sequence_counts.get(scheme_group, 0)
+            sequence_counts[scheme_group] = sequence + 1
+
             records.append(
                 TransactionRecord(
                     pan=row.get("pan") or None,
@@ -76,6 +80,7 @@ def parse_transactions_csv(content: str) -> list[TransactionRecord]:
                     amfi_code=amfi_code,
                     txn_type=txn_type,
                     txn_date=txn_date,
+                    sequence=sequence,
                     description=row.get("description") or None,
                     units=units,
                     nav=_optional_decimal(row.get("nav")),
