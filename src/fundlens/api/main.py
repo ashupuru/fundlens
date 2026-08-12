@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from fundlens.api.routers import health, ingestion, market_data, portfolio, reports
+from fundlens.api.routers import data_quality, health, ingestion, market_data, portfolio, reports
 from fundlens.settings import get_settings
 
 
@@ -21,6 +21,7 @@ def create_app() -> FastAPI:
     app.include_router(market_data.router)
     app.include_router(portfolio.router)
     app.include_router(reports.router)
+    app.include_router(data_quality.router)
     return app
 
 

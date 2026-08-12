@@ -191,6 +191,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/data-quality/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Summary */
+        get: operations["summary_data_quality_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -260,16 +277,65 @@ export interface components {
             /** Schemes Missing Metadata */
             schemes_missing_metadata: number;
         };
-        /** CoverageGapResponse */
-        CoverageGapResponse: {
+        /** DataFreshnessResponse */
+        DataFreshnessResponse: {
+            /** Source */
+            source: string;
+            /** Last Attempt At */
+            last_attempt_at: string;
+            /** Last Success At */
+            last_success_at: string | null;
+            /** Status */
+            status: string;
+            /** Error Message */
+            error_message: string | null;
+            /** Rows Updated */
+            rows_updated: number | null;
+        };
+        /** DataQualitySummaryResponse */
+        DataQualitySummaryResponse: {
+            /** Folios */
+            folios: components["schemas"]["FolioSummaryResponse"][];
+            /** Coverage Gaps */
+            coverage_gaps: components["schemas"]["fundlens__api__routers__data_quality__CoverageGapResponse"][];
+            /** Unmatched Schemes */
+            unmatched_schemes: components["schemas"]["UnmatchedSchemeResponse"][];
+            /** Failed Xirr Positions */
+            failed_xirr_positions: components["schemas"]["FailedXirrPositionResponse"][];
+            /** Data Freshness */
+            data_freshness: components["schemas"]["DataFreshnessResponse"][];
+        };
+        /** FailedXirrPositionResponse */
+        FailedXirrPositionResponse: {
             /** Folio */
             folio: string;
             /** Scheme Name */
             scheme_name: string;
-            /** Opening Balance Units */
-            opening_balance_units: string;
-            /** Message */
-            message: string;
+            /** Amc */
+            amc: string;
+            /** Xirr Reason */
+            xirr_reason: string | null;
+            /** Is Fully Exited */
+            is_fully_exited: boolean;
+            /** Less Than One Year */
+            less_than_one_year: boolean;
+        };
+        /** FolioSummaryResponse */
+        FolioSummaryResponse: {
+            /** Folio */
+            folio: string;
+            /** Amc */
+            amc: string;
+            /** Pan */
+            pan: string | null;
+            /** Scheme Count */
+            scheme_count: number;
+            /** Txn Count */
+            txn_count: number;
+            /** First Txn Date */
+            first_txn_date: string;
+            /** Last Txn Date */
+            last_txn_date: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -339,7 +405,7 @@ export interface components {
             /** Duplicate Count */
             duplicate_count: number;
             /** Coverage Gaps */
-            coverage_gaps: components["schemas"]["CoverageGapResponse"][];
+            coverage_gaps: components["schemas"]["fundlens__api__routers__ingestion__CoverageGapResponse"][];
         };
         /** PortfolioMetricsResponse */
         PortfolioMetricsResponse: {
@@ -391,6 +457,19 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** UnmatchedSchemeResponse */
+        UnmatchedSchemeResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Amc */
+            amc: string;
+            /** Isin */
+            isin: string | null;
+            /** Amfi Code */
+            amfi_code: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -403,6 +482,32 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** CoverageGapResponse */
+        fundlens__api__routers__data_quality__CoverageGapResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Opening Balance Units */
+            opening_balance_units: string;
+            /** Message */
+            message: string;
+            /** Source Filename */
+            source_filename: string | null;
+            /** Detected At */
+            detected_at: string;
+        };
+        /** CoverageGapResponse */
+        fundlens__api__routers__ingestion__CoverageGapResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Opening Balance Units */
+            opening_balance_units: string;
+            /** Message */
+            message: string;
         };
     };
     responses: never;
@@ -681,6 +786,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summary_data_quality_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataQualitySummaryResponse"];
                 };
             };
         };
