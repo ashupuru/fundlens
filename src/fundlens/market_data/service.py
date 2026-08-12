@@ -15,10 +15,22 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fundlens.db.models import DataFreshness, FetchStatus, NavHistory, NavSource, RawTransaction
-from fundlens.market_data.amfi_client import fetch_navall_text, parse_navall
+from fundlens.db.models import (
+    DataFreshness,
+    FetchStatus,
+    NavHistory,
+    NavSource,
+    RawTransaction,
+    SchemeMetadata,
+)
+from fundlens.market_data.amfi_client import (
+    fetch_navall_text,
+    parse_navall,
+    parse_navall_categories,
+)
 from fundlens.market_data.mfapi_client import fetch_scheme_history, parse_scheme_history
-from fundlens.market_data.records import NavRow
+from fundlens.market_data.records import NavRow, SchemeCategoryRow
+from fundlens.tax.asset_class import classify_category
 
 
 @dataclass(frozen=True)
@@ -120,9 +132,51 @@ def refresh_latest_via_amfi(session: Session, held_amfi_codes: set[str]) -> tupl
     all_rows = parse_navall(text)
     relevant_rows = [r for r in all_rows if r.amfi_code in held_amfi_codes]
     inserted = _insert_new_rows(session, relevant_rows, NavSource.AMFI_NAVALL)
+
+    # Same fetch already has category headers in it (PRD FR-10.2's tax
+    # classification needs equity/debt per scheme) — no extra network call.
+    category_rows = parse_navall_categories(text)
+    relevant_categories = [r for r in category_rows if r.amfi_code in held_amfi_codes]
+    _upsert_scheme_metadata(session, relevant_categories)
+
     _record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.OK, inserted, None)
     session.commit()
     return inserted, None
+
+
+def _upsert_scheme_metadata(session: Session, rows: list[SchemeCategoryRow]) -> None:
+    """Current state, not a time series (unlike nav_history) — a scheme's
+    category can be corrected/recategorized, so later fetches overwrite
+    earlier ones rather than accumulating."""
+    if not rows:
+        return
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    existing = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(SchemeMetadata).where(
+                SchemeMetadata.amfi_code.in_({r.amfi_code for r in rows})
+            )
+        )
+    }
+
+    for row in rows:
+        tax_asset_class = classify_category(row.category_raw)
+        metadata = existing.get(row.amfi_code)
+        if metadata is None:
+            session.add(
+                SchemeMetadata(
+                    amfi_code=row.amfi_code,
+                    category_raw=row.category_raw,
+                    tax_asset_class=tax_asset_class,
+                    fetched_at=now,
+                )
+            )
+        else:
+            metadata.category_raw = row.category_raw
+            metadata.tax_asset_class = tax_asset_class
+            metadata.fetched_at = now
 
 
 def refresh_all_held_schemes(session: Session) -> RefreshSummary:

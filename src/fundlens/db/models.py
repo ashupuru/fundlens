@@ -8,6 +8,8 @@ from decimal import Decimal
 from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from fundlens.tax.asset_class import TaxAssetClass
+
 
 class Base(DeclarativeBase):
     pass
@@ -141,6 +143,23 @@ class DataFreshness(Base):
     status: Mapped[FetchStatus] = mapped_column(Enum(FetchStatus))
     error_message: Mapped[str | None] = mapped_column(String(500))
     rows_updated: Mapped[int | None] = mapped_column()
+
+
+class SchemeMetadata(Base):
+    """Scheme category, refreshed alongside NAV during the AMFI bulk fetch
+    (market_data/service.py). `tax_asset_class` is derived from
+    `category_raw` at write time (tax/asset_class.py) — see that module's
+    docstring for the full real-data-grounded classification taxonomy.
+    """
+
+    __tablename__ = "scheme_metadata"
+
+    amfi_code: Mapped[str] = mapped_column(String(20), primary_key=True)
+    category_raw: Mapped[str] = mapped_column(String(255))
+    tax_asset_class: Mapped[TaxAssetClass] = mapped_column(Enum(TaxAssetClass))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
 
 
 class Lot(Base):

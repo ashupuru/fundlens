@@ -123,9 +123,18 @@ Same shape as `nav_history` but keyed by benchmark id (`NIFTY50_TRI`, `BSE100_TR
 mitigation, with the substitution documented in `benchmark_history.proxy_note`.
 
 ### `scheme_metadata`
-Category (SEBI classification), expense ratio (time-series, since it changes), AUM, fund manager,
-AMC-declared benchmark, plan type (`direct` \| `regular`). Sourced from AMFI/AMC disclosures,
-refreshed on the same cadence as NAV.
+**Shipped in P0.5, narrower than originally planned**: `amfi_code` (PK), `category_raw` (the SEBI
+category string exactly as AMFI publishes it, e.g.
+`"Open Ended Schemes(Equity Scheme - Large Cap Fund)"`), `tax_asset_class` (`equity` \| `debt` \|
+`needs_review`, derived from `category_raw` — see compute-engine.md §3.1), `fetched_at`. Sourced
+from the AMFI NAVAll feed's category section headers (parsed alongside the NAV rows in the same
+fetch, no extra network call — `market_data/amfi_client.py::parse_navall_categories`), refreshed
+on the same cadence as NAV, scoped to currently-held schemes only. Upserted (current state, not a
+time series).
+
+Expense ratio, AUM, fund manager, AMC-declared benchmark, and plan type (`direct` \| `regular`)
+are **not sourced yet** — AMFI's NAVAll feed doesn't carry them; these need a separate AMC-
+disclosure or RTA data source and are deferred to a later phase.
 
 ### `scheme_identity` (resolved: missing-ISIN handling)
 Some CAS rows carry only an AMFI scheme code, no ISIN. Resolution is **deterministic, not

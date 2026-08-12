@@ -133,31 +133,59 @@ XIRR rather than a separate computation:
 
 ## 3. Tax Engine
 
-Modeled as a **versioned, config-driven ruleset**, not hardcoded branches, per PRD §5.1 and the
-§10 risk "tax rules change (budget cycles)."
+**Status: §3.1–3.3 shipped in P0.5. §3.4–3.5 are P1, not yet built** — noted inline below so this
+doc doesn't drift back into describing aspirational behavior as current, which happened in an
+earlier draft of this section.
 
-### 3.1 Classification
-Per lot, at redemption: `asset_class` (equity / debt / hybrid — derived from `scheme_metadata`
-SEBI category) × `holding_period` determines STCG vs LTCG, per the `assumption` version active on
-`sale_date` (not today's rules applied retroactively — historical redemptions use the rules in
-force when they happened).
+### 3.1 Classification (`fundlens/tax/asset_class.py`)
+`classify_category(category_raw) -> TaxAssetClass` (`EQUITY` / `DEBT` / `NEEDS_REVIEW`) runs
+**substring matching against the actual live AMFI NAVAll category-header taxonomy**, not a
+config-driven equity-allocation percentage — AMFI's feed exposes only the SEBI category string
+(e.g. `"Open Ended Schemes(Equity Scheme - Large Cap Fund)"`), never a numeric equity-allocation
+%, so the originally-planned "≥65%/<65% hybrid test" (below) isn't derivable from this data source
+and was dropped in favor of an honest `NEEDS_REVIEW` bucket for categories that are genuinely
+tax-ambiguous without allocation data (Balanced Hybrid, Multi Asset, Dynamic Asset Allocation,
+Equity Savings, domestic Fund-of-Funds, Gold/Silver ETF, Solution Oriented, Life Cycle, and bare
+legacy "Growth" labels). Classification result is persisted per `amfi_code` in `scheme_metadata`,
+refreshed on every AMFI feed pull (`market_data/service.py::_upsert_scheme_metadata`), scoped to
+currently-held schemes only (not the full ~16k-scheme universe).
 
-### 3.2 Rules covered at P0/P1
-- Equity-oriented (≥65% equity): LTCG (>12mo) taxed above ₹1.25L exemption/FY; STCG (≤12mo) flat
-  rate.
-- Debt-oriented: post-April-2023 rules — all gains taxed at slab rate regardless of holding
-  period, no indexation, no LTCG concept (config flag `debt_indexation_eligible` scoped per
-  purchase date, since pre-2023 purchases retain the old regime — this is the grandfathering
-  case the PRD explicitly calls out).
-- Hybrid: classified by the ≥65%/<65% equity-allocation test at the scheme level.
+Real-data check (13 open holdings across the user's actual CAS): 8 equity, 1 debt, 4
+needs_review — 0 missing metadata.
 
-### 3.3 Exemption tracking
-`ltcg_exemption_used_this_fy` is computed across **all lots realized in the FY, per PAN**
+### 3.2 STCG/LTCG rules (`fundlens/tax/classification.py`)
+`classify_gain(asset_class, purchase_date, holding_period_days) -> GainClassification`, per lot at
+redemption:
+- **Equity**: LTCG if holding period > 365 days, else STCG. (Exemption-headroom math, i.e. the
+  ₹1.25L/FY LTCG threshold, is **not yet implemented** — see §3.4.)
+- **Debt, purchased on/after 2023-04-01** ("specified mutual fund" under the Finance Act 2023
+  redefinition): always STCG-equivalent — the LTCG concept doesn't exist for these regardless of
+  holding period.
+- **Debt, purchased before 2023-04-01**: old regime — LTCG if holding period > 3×365 days, else
+  STCG (grandfathered; this is the case the PRD explicitly calls out).
+- **`NEEDS_REVIEW` asset class, or purchase predates scheme_metadata coverage**: `GainType.UNCLASSIFIED`
+  — never guessed.
+
+Actual tax rates and slab logic are out of scope for this classification step; it labels
+STCG/LTCG/UNCLASSIFIED only.
+
+### 3.3 Capital gains report (FR-10.2 — `compute/capital_gains.py`, `reports/capital_gains_csv.py`)
+`get_capital_gains_report(session, fy_label)` joins `RealizedGain` (filtered to `sale_date` within
+the FY) with `RawTransaction` (scheme identity) and `SchemeMetadata` (tax classification), scheme-
+and lot-wise. `gain_paise` is **derived** as `sale_value_paise − cost_of_acquisition_paise` in the
+report layer rather than trusted verbatim from the FIFO ledger's independently-rounded
+`realized_gain_paise`, guaranteeing `sale − cost == gain` holds exactly for every line (verified
+against 3 real financial years of the user's actual redemption history — held for all 384 lines
+across FY2023-24/2024-25/2025-26). Exposed via `GET /reports/capital-gains` (JSON) and
+`GET /reports/capital-gains.csv` (Schedule-112A-adjacent CSV export), both scoped by `?fy=`.
+
+### 3.4 Exemption tracking — **not yet built (P1)**
+Planned: `ltcg_exemption_used_this_fy` computed across all lots realized in the FY, per PAN
 (PRD §12.2 — tax math never crosses PAN boundaries), ordered by `sale_date`, consuming the ₹1.25L
-headroom on a first-realized-first-consumed basis. This feeds both the capital-gains report
-(FR-10.2) and the harvesting action-plan generator (FR-6.3).
+headroom first-realized-first-consumed. Would feed both the capital-gains report (§3.3) and the
+harvesting action-plan generator (FR-6.3).
 
-### 3.4 SELL friction statement (FR-6.2)
+### 3.5 SELL friction statement (FR-6.2) — **not yet built (P1)**
 For any proposed sell/switch, the tax engine computes:
 ```
 tax_impact = Σ per-lot (STCG or LTCG tax owed, net of remaining exemption headroom)
@@ -208,7 +236,7 @@ confidence since 3yr/5yr components are unavailable), and a "what would change t
 counterfactual (e.g. "would flip to HOLD if expense ratio dropped below 1.1% via a direct-plan
 switch").
 
-Any `SELL`/`SWITCH` verdict is required (FR-6.2) to attach the §3.4 tax-friction statement before
+Any `SELL`/`SWITCH` verdict is required (FR-6.2) to attach the §3.5 tax-friction statement before
 it can be surfaced in the UI — enforced by the verdict schema making `tax_impact` non-nullable
 when `verdict_type != HOLD`.
 

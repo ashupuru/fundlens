@@ -246,6 +246,94 @@
           }
         }
       }
+    },
+    "/reports/capital-gains": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Capital Gains",
+        "operationId": "capital_gains_reports_capital_gains_get",
+        "parameters": [
+          {
+            "name": "fy",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Financial year, e.g. '2024-25'",
+              "title": "Fy"
+            },
+            "description": "Financial year, e.g. '2024-25'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapitalGainsReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/capital-gains.csv": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Capital Gains Csv",
+        "operationId": "capital_gains_csv_reports_capital_gains_csv_get",
+        "parameters": [
+          {
+            "name": "fy",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Financial year, e.g. '2024-25'",
+              "title": "Fy"
+            },
+            "description": "Financial year, e.g. '2024-25'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -305,6 +393,141 @@
           "file"
         ],
         "title": "Body_ingest_csv_ingest_csv_post"
+      },
+      "CapitalGainsLineResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "isin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isin"
+          },
+          "amfi_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amfi Code"
+          },
+          "tax_asset_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Asset Class"
+          },
+          "purchase_date": {
+            "type": "string",
+            "title": "Purchase Date"
+          },
+          "sale_date": {
+            "type": "string",
+            "title": "Sale Date"
+          },
+          "holding_period_days": {
+            "type": "integer",
+            "title": "Holding Period Days"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "sale_value_paise": {
+            "type": "integer",
+            "title": "Sale Value Paise"
+          },
+          "cost_of_acquisition_paise": {
+            "type": "integer",
+            "title": "Cost Of Acquisition Paise"
+          },
+          "gain_paise": {
+            "type": "integer",
+            "title": "Gain Paise"
+          },
+          "gain_type": {
+            "type": "string",
+            "title": "Gain Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_name",
+          "isin",
+          "amfi_code",
+          "tax_asset_class",
+          "purchase_date",
+          "sale_date",
+          "holding_period_days",
+          "units",
+          "sale_value_paise",
+          "cost_of_acquisition_paise",
+          "gain_paise",
+          "gain_type"
+        ],
+        "title": "CapitalGainsLineResponse"
+      },
+      "CapitalGainsReportResponse": {
+        "properties": {
+          "financial_year": {
+            "type": "string",
+            "title": "Financial Year"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/CapitalGainsLineResponse"
+            },
+            "type": "array",
+            "title": "Lines"
+          },
+          "total_stcg_paise": {
+            "type": "integer",
+            "title": "Total Stcg Paise"
+          },
+          "total_ltcg_paise": {
+            "type": "integer",
+            "title": "Total Ltcg Paise"
+          },
+          "total_unclassified_paise": {
+            "type": "integer",
+            "title": "Total Unclassified Paise"
+          },
+          "schemes_missing_metadata": {
+            "type": "integer",
+            "title": "Schemes Missing Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "financial_year",
+          "lines",
+          "total_stcg_paise",
+          "total_ltcg_paise",
+          "total_unclassified_paise",
+          "schemes_missing_metadata"
+        ],
+        "title": "CapitalGainsReportResponse"
       },
       "CoverageGapResponse": {
         "properties": {

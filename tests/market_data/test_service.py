@@ -14,16 +14,23 @@ from fundlens.db.models import (
     NavSource,
     RawCASUpload,
     RawTransaction,
+    SchemeMetadata,
     TransactionType,
     UploadStatus,
 )
 from fundlens.market_data import service
+from fundlens.tax.asset_class import TaxAssetClass
 
 NAVALL_TEXT = (
     "Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;"
     "Scheme Name;Net Asset Value;Date\n"
     "\n"
+    "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)\n"
+    "\n"
     "119551;INF209KA12Z1;INF209KA13Z9;Held Fund;107.1766;11-Aug-2026\n"
+    "\n"
+    "Open Ended Schemes(Equity Scheme - Large Cap Fund)\n"
+    "\n"
     "999999;-;-;Not Held Fund;250.0000;11-Aug-2026\n"
 )
 
@@ -221,3 +228,38 @@ def test_refresh_all_held_schemes_backfills_new_scheme_then_refreshes(
     assert summary.backfilled_schemes == 1
     assert summary.backfilled_rows == 2
     assert summary.amfi_refresh_ok is True
+
+
+def test_refresh_persists_scheme_metadata_for_held_schemes(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: NAVALL_TEXT)
+
+    service.refresh_latest_via_amfi(session, {"119551"})
+
+    metadata = session.get(SchemeMetadata, "119551")
+    assert metadata is not None
+    assert metadata.category_raw == "Open Ended Schemes(Debt Scheme - Banking and PSU Fund)"
+    assert metadata.tax_asset_class == TaxAssetClass.DEBT
+
+
+def test_refresh_only_persists_metadata_for_held_schemes_not_every_scheme(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: NAVALL_TEXT)
+
+    service.refresh_latest_via_amfi(session, {"119551"})
+
+    # "999999" (Not Held Fund) is in the feed but not in held_amfi_codes.
+    assert session.get(SchemeMetadata, "999999") is None
+
+
+def test_refresh_updates_existing_scheme_metadata_not_duplicates(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: NAVALL_TEXT)
+
+    service.refresh_latest_via_amfi(session, {"119551"})
+    service.refresh_latest_via_amfi(session, {"119551"})  # re-run
+
+    assert len(session.scalars(select(SchemeMetadata)).all()) == 1
