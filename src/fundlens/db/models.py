@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -79,6 +79,13 @@ class RawTransaction(Base):
 
     txn_type: Mapped[TransactionType] = mapped_column(Enum(TransactionType))
     txn_date: Mapped[date] = mapped_column(Date, index=True)
+    # Position within this scheme's transaction list, in the stable order
+    # casparser/the CSV importer emits them (0-indexed, per (folio, scheme)).
+    # FIFO lot ordering needs a same-day tiebreaker (compute-engine.md §1),
+    # and balance_after can't serve that role — it moves in opposite
+    # directions for inflows vs outflows, so it can't order a mixed same-day
+    # sequence.
+    sequence: Mapped[int] = mapped_column(default=0)
     description: Mapped[str | None] = mapped_column(String(255))
 
     units: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
@@ -134,3 +141,50 @@ class DataFreshness(Base):
     status: Mapped[FetchStatus] = mapped_column(Enum(FetchStatus))
     error_message: Mapped[str | None] = mapped_column(String(500))
     rows_updated: Mapped[int | None] = mapped_column()
+
+
+class Lot(Base):
+    """FIFO cost-basis lot (compute-engine.md §1, data-model.md §3).
+
+    Derived, rebuildable state: regenerated wholesale for a folio whenever
+    its transactions change, never patched in place — see compute/service.py.
+    """
+
+    __tablename__ = "lot"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    folio: Mapped[str] = mapped_column(String(64), index=True)
+    scheme_key: Mapped[str] = mapped_column(String(255), index=True)
+
+    open_date: Mapped[date] = mapped_column(Date)
+    units_remaining: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    cost_per_unit: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    source_txn_id: Mapped[str] = mapped_column(ForeignKey("raw_transaction.id"))
+    source_txn_type: Mapped[TransactionType] = mapped_column(Enum(TransactionType))
+    close_date: Mapped[date | None] = mapped_column(Date)
+    zero_cost_flag: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class RealizedGain(Base):
+    """One row per FIFO consumption slice — a single lot may be split across
+    several of these if more than one outflow consumes from it over time,
+    or a single outflow may span several of these if it drains more than
+    one lot. Feeds the tax engine (P1.2) directly.
+    """
+
+    __tablename__ = "realized_gain"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    folio: Mapped[str] = mapped_column(String(64), index=True)
+    scheme_key: Mapped[str] = mapped_column(String(255), index=True)
+
+    source_txn_id: Mapped[str] = mapped_column(ForeignKey("raw_transaction.id"))
+    open_date: Mapped[date] = mapped_column(Date)
+    sale_txn_id: Mapped[str] = mapped_column(ForeignKey("raw_transaction.id"))
+    sale_date: Mapped[date] = mapped_column(Date)
+
+    units_consumed: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    cost_per_unit: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    sale_price_per_unit: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    realized_gain_paise: Mapped[int] = mapped_column(Integer)
+    holding_period_days: Mapped[int] = mapped_column(Integer)

@@ -20,6 +20,7 @@ def _make_record(**overrides: object) -> TransactionRecord:
         amfi_code="123456",
         txn_type=TransactionType.PURCHASE,
         txn_date=date(2021, 4, 15),
+        sequence=0,
         description="Purchase",
         units=Decimal("100.5"),
         nav=Decimal("49.75"),

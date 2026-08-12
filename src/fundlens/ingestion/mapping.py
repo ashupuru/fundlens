@@ -1,7 +1,6 @@
 """Maps casparser's CASData into FundLens's DB-independent transaction records."""
 
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
 
 import casparser
 from casparser.types import CASData, Scheme
@@ -10,12 +9,8 @@ from dateutil import parser as date_parser
 from fundlens.db.models import TransactionType
 from fundlens.ingestion.natural_key import compute_natural_key
 from fundlens.ingestion.records import CoverageGap, ParsedCAS, TransactionRecord
-
-
-def _to_paise(amount: Decimal | None) -> int | None:
-    if amount is None:
-        return None
-    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+from fundlens.money import to_paise
+from fundlens.scheme_identity import scheme_key
 
 
 def _to_date(value: date | str) -> date:
@@ -32,8 +27,7 @@ def _parse_statement_date(value: str) -> date | None:
 
 
 def _scheme_identifier(scheme: Scheme) -> str:
-    """Preference order matches data-model.md §2: ISIN, then AMFI code, then raw name."""
-    return scheme.isin or scheme.amfi or scheme.scheme
+    return scheme_key(scheme.isin, scheme.amfi, scheme.scheme)
 
 
 def cas_data_to_parsed(cas: CASData) -> ParsedCAS:
@@ -58,8 +52,8 @@ def cas_data_to_parsed(cas: CASData) -> ParsedCAS:
 
             scheme_identifier = _scheme_identifier(scheme)
             ordinal_counts: dict[tuple, int] = {}
-            for txn in scheme.transactions:
-                amount_paise = _to_paise(txn.amount)
+            for sequence, txn in enumerate(scheme.transactions):
+                amount_paise = to_paise(txn.amount)
                 txn_date = _to_date(txn.date)
 
                 # Ordinal tiebreaker for rows that tie on every other field
@@ -89,6 +83,7 @@ def cas_data_to_parsed(cas: CASData) -> ParsedCAS:
                         amfi_code=scheme.amfi,
                         txn_type=TransactionType(txn.type.value),
                         txn_date=txn_date,
+                        sequence=sequence,
                         description=txn.description,
                         units=txn.units,
                         nav=txn.nav,

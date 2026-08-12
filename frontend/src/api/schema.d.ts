@@ -72,10 +72,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/rebuild-lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebuild Lots */
+        post: operations["rebuild_lots_portfolio_rebuild_lots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Holdings */
+        get: operations["holdings_portfolio_holdings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/holdings/by-amc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Holdings By Amc */
+        get: operations["holdings_by_amc_portfolio_holdings_by_amc_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AmcHoldingResponse */
+        AmcHoldingResponse: {
+            /** Amc */
+            amc: string;
+            /** Scheme Count */
+            scheme_count: number;
+            /** Cost Basis Paise */
+            cost_basis_paise: number;
+        };
         /** Body_ingest_cas_ingest_cas_post */
         Body_ingest_cas_ingest_cas_post: {
             /** File */
@@ -104,6 +164,25 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HoldingResponse */
+        HoldingResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Amc */
+            amc: string;
+            /** Isin */
+            isin: string | null;
+            /** Amfi Code */
+            amfi_code: string | null;
+            /** Units Remaining */
+            units_remaining: string;
+            /** Cost Basis Paise */
+            cost_basis_paise: number;
+            /** Average Cost Per Unit */
+            average_cost_per_unit: string;
+        };
         /** IngestResponse */
         IngestResponse: {
             /** Upload Id */
@@ -114,6 +193,19 @@ export interface components {
             duplicate_count: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["CoverageGapResponse"][];
+        };
+        /** RebuildResponse */
+        RebuildResponse: {
+            /** Folios Processed */
+            folios_processed: number;
+            /** Schemes Processed */
+            schemes_processed: number;
+            /** Lots Created */
+            lots_created: number;
+            /** Realized Gains Created */
+            realized_gains_created: number;
+            /** Errors */
+            errors: components["schemas"]["SchemeRebuildErrorResponse"][];
         };
         /** RefreshResponse */
         RefreshResponse: {
@@ -127,6 +219,15 @@ export interface components {
             amfi_refresh_ok: boolean;
             /** Amfi Error */
             amfi_error: string | null;
+        };
+        /** SchemeRebuildErrorResponse */
+        SchemeRebuildErrorResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+            /** Message */
+            message: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -254,6 +355,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefreshResponse"];
+                };
+            };
+        };
+    };
+    rebuild_lots_portfolio_rebuild_lots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebuildResponse"];
+                };
+            };
+        };
+    };
+    holdings_portfolio_holdings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingResponse"][];
+                };
+            };
+        };
+    };
+    holdings_by_amc_portfolio_holdings_by_amc_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AmcHoldingResponse"][];
                 };
             };
         };
