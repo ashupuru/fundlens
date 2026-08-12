@@ -12,3 +12,14 @@ export async function getHealth(): Promise<HealthResponse> {
   }
   return response.json() as Promise<HealthResponse>;
 }
+
+type DataQualitySummaryResponse =
+  operations["summary_data_quality_summary_get"]["responses"][200]["content"]["application/json"];
+
+export async function getDataQualitySummary(): Promise<DataQualitySummaryResponse> {
+  const response = await fetch(`${API_BASE_URL}/data-quality/summary`);
+  if (!response.ok) {
+    throw new Error(`Data quality summary failed: ${response.status}`);
+  }
+  return response.json() as Promise<DataQualitySummaryResponse>;
+}

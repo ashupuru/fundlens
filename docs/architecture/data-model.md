@@ -78,7 +78,25 @@ added:
 start of the statement period. A nonzero `open` is a precise, built-in signal that the CAS does
 not cover that scheme's full history — units existed before the statement period that this
 document has no transaction-level detail for. Surfaced per (folio, scheme) as part of the
-ingestion result; persisting it into the data quality dashboard proper is P0.6.
+ingestion API response, and persisted to `coverage_gap` (below) so the data quality dashboard
+(P0.6) can show it after the fact, not only in the immediate upload response.
+
+### `coverage_gap`
+| column | type | notes |
+|---|---|---|
+| id | uuid, pk | |
+| upload_id | fk → raw_cas_upload | which upload detected this gap |
+| folio | text, indexed | |
+| scheme_name | text | |
+| opening_balance_units | numeric(20,4) | the CAS's own reported opening balance |
+| message | text | human-readable explanation |
+| detected_at | timestamp | |
+
+One row per (upload, folio, scheme) gap, written at ingest time (`ingestion/service.py`), never
+patched — a later, fuller-history upload doesn't retroactively delete an earlier gap record; the
+dashboard shows every gap ever detected, since the underlying incomplete-history problem doesn't
+resolve itself just because a different upload's statement period happens to start later. CSV
+import never produces gap rows (no `Scheme.open` equivalent in the CSV format).
 
 Re-upload merge algorithm: parse new CAS → compute `natural_key` for every row → `INSERT ... ON
 CONFLICT (natural_key) DO NOTHING`. This is intentionally a set-union, not a diff/replace, so a
@@ -113,7 +131,7 @@ table rather than trusting the last cached NAV as implicitly current.
 | last_attempt_at | timestamp | updated on every attempt, success or failure |
 | last_success_at | timestamp, nullable | only updated on success — the banner's real signal |
 | status | enum | `ok` \| `failed` |
-| error_message | text, nullable | set on failure, for the data quality dashboard (P0.6) |
+| error_message | text, nullable | set on failure, surfaced by the data quality dashboard (P0.6) |
 | rows_updated | integer, nullable | rows inserted on the most recent attempt |
 
 ### `benchmark_history`
@@ -136,20 +154,22 @@ Expense ratio, AUM, fund manager, AMC-declared benchmark, and plan type (`direct
 are **not sourced yet** — AMFI's NAVAll feed doesn't carry them; these need a separate AMC-
 disclosure or RTA data source and are deferred to a later phase.
 
-### `scheme_identity` (resolved: missing-ISIN handling)
-Some CAS rows carry only an AMFI scheme code, no ISIN. Resolution is **deterministic, not
-heuristic**: AMFI's own NAVAll master data publishes, for every scheme code, both the Growth-plan
-ISIN and the IDCW (dividend) ISIN alongside the canonical scheme name — independently of any CAS.
-The market-data fetcher ingests this into `scheme_identity` (`amfi_code → isin_growth, isin_idcw,
-scheme_name, amc`) on the same refresh cadence as NAV. Ingestion backfills any `raw_transaction`
-row missing ISIN by joining on `amfi_code` against this table — no fuzzy name matching, and no
-guessing. AMC scheme renames are handled by keying on `amfi_code` (stable) rather than name
-(not stable); `scheme_identity` keeps a `superseded_name` history so historic reports still render
-the name that was current at the time.
+### `scheme_identity` (missing-ISIN handling) — **not yet built**
+Some CAS rows carry only an AMFI scheme code, no ISIN. The original plan was a deterministic
+backfill table: AMFI's own NAVAll master data publishes, for every scheme code, both the
+Growth-plan ISIN and the IDCW (dividend) ISIN alongside the canonical scheme name — independently
+of any CAS — so a `scheme_identity` table (`amfi_code → isin_growth, isin_idcw, scheme_name, amc`)
+could backfill any `raw_transaction` row missing ISIN by joining on `amfi_code`, with a
+`superseded_name` history for AMC renames.
 
-The only residual gap is a CAS row missing *both* ISIN and a resolvable AMFI code — rare, and
-would indicate a malformed or very old CAS entry. Those rows surface in the data quality
-dashboard (technical-spec.md §4) for manual correction rather than being silently guessed at.
+**None of that exists yet.** `fundlens/scheme_identity.py` today is only a `scheme_key(isin,
+amfi_code, scheme_name)` helper — prefer ISIN, then AMFI code, then raw name — used to group
+transactions into "one scheme" consistently across dedup and lot accounting; it does no backfill.
+Currently, the P0.6 data quality dashboard's "unmatched schemes" view is the actual, honest
+mitigation in place today: any currently-held scheme still missing ISIN or AMFI code is flagged
+for the user to see, not silently guessed at or auto-resolved. Real-data check: 0/13 of the
+user's open holdings are currently unmatched, so this hasn't blocked anything in practice, but the
+backfill mechanism itself remains a future enhancement, not shipped functionality.
 
 ## 3. Derived Layer
 

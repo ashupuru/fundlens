@@ -8,7 +8,7 @@ import casparser
 from casparser.exceptions import ParserException
 from sqlalchemy.orm import Session
 
-from fundlens.db.models import RawCASUpload, UploadStatus
+from fundlens.db.models import CoverageGapRecord, RawCASUpload, UploadStatus
 from fundlens.ingestion.cas_parser import parse_cas_pdf
 from fundlens.ingestion.csv_import import parse_transactions_csv
 from fundlens.ingestion.mapping import cas_data_to_parsed
@@ -72,6 +72,16 @@ def ingest_cas_pdf(
     session.flush()  # assigns upload.id before it's used as a FK below
 
     merge_result = merge_transactions(session, upload.id, parsed.transactions)
+    for gap in parsed.coverage_gaps:
+        session.add(
+            CoverageGapRecord(
+                upload_id=upload.id,
+                folio=gap.folio,
+                scheme_name=gap.scheme_name,
+                opening_balance_units=gap.opening_balance_units,
+                message=gap.message,
+            )
+        )
     session.commit()
 
     return IngestResult(

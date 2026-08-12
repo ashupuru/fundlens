@@ -162,6 +162,31 @@ class SchemeMetadata(Base):
     )
 
 
+class CoverageGapRecord(Base):
+    """Persisted mirror of ingestion.records.CoverageGap (data-model.md §2):
+    a scheme whose CAS statement opened with a nonzero balance, meaning that
+    upload's transaction history doesn't cover the scheme's full lifetime.
+
+    Detected at ingest time (ingestion/service.py) and persisted per-upload
+    so the data quality dashboard (P0.6) can show it after the fact, not
+    only in the immediate ingest API response.
+    """
+
+    __tablename__ = "coverage_gap"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    upload_id: Mapped[str] = mapped_column(ForeignKey("raw_cas_upload.id"), index=True)
+    folio: Mapped[str] = mapped_column(String(64), index=True)
+    scheme_name: Mapped[str] = mapped_column(String(255))
+    opening_balance_units: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    message: Mapped[str] = mapped_column(String(500))
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+    upload: Mapped["RawCASUpload"] = relationship()
+
+
 class Lot(Base):
     """FIFO cost-basis lot (compute-engine.md §1, data-model.md §3).
 

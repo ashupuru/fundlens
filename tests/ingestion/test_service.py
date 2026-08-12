@@ -6,7 +6,7 @@ from casparser.exceptions import IncorrectPasswordError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fundlens.db.models import RawCASUpload, RawTransaction, UploadStatus
+from fundlens.db.models import CoverageGapRecord, RawCASUpload, RawTransaction, UploadStatus
 from fundlens.ingestion import service
 from tests.ingestion.factories import make_cas_data, make_folio, make_scheme
 
@@ -80,6 +80,21 @@ def test_coverage_gaps_are_surfaced_on_result(
     result = service.ingest_cas_pdf(session, fake_pdf, password="ABCDE1234F")
 
     assert len(result.coverage_gaps) == 1
+
+
+def test_coverage_gaps_are_persisted_not_only_returned_transiently(
+    session: Session, fake_pdf: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cas = make_cas_data(
+        folios=[make_folio(schemes=[make_scheme(open_balance=Decimal("10"))])]
+    )
+    monkeypatch.setattr(service, "parse_cas_pdf", lambda path, password: cas)
+
+    result = service.ingest_cas_pdf(session, fake_pdf, password="ABCDE1234F")
+
+    persisted = session.scalars(select(CoverageGapRecord)).all()
+    assert len(persisted) == 1
+    assert persisted[0].upload_id == result.upload_id
 
 
 def test_ingest_transactions_csv_persists_upload_and_transaction(session: Session) -> None:
