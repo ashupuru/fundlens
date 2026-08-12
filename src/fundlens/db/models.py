@@ -145,6 +145,42 @@ class DataFreshness(Base):
     rows_updated: Mapped[int | None] = mapped_column()
 
 
+class BenchmarkId(enum.StrEnum):
+    """FR-1.4/FR-4: the four benchmark indices the PRD names by name.
+    "Category-appropriate debt indices" (also named in FR-1.4) is not
+    represented here — deferred, see compute-engine.md §4."""
+
+    NIFTY50_TRI = "NIFTY50_TRI"
+    BSE100_TRI = "BSE100_TRI"
+    NIFTY_MIDCAP150_TRI = "NIFTY_MIDCAP150_TRI"
+    NIFTY_SMALLCAP250_TRI = "NIFTY_SMALLCAP250_TRI"
+
+
+class BenchmarkHistory(Base):
+    """One row per (benchmark, date) value. Same append-only, insert-if-absent
+    shape as nav_history (data-model.md §2).
+
+    `proxy`/`proxy_note`: PRD §10 names true TRI licensed data as hard to
+    source freely; live-verified during P1.1 (NSE/niftyindices block
+    unauthenticated fetches with 403/503). Every row here is therefore a
+    proxy — an index fund's actual NAV standing in for its benchmark's TRI —
+    per the PRD's own documented fallback, never presented as true TRI
+    without this flag (benchmark/proxy_config.py has the real scheme
+    mapping).
+    """
+
+    __tablename__ = "benchmark_history"
+
+    benchmark_id: Mapped[BenchmarkId] = mapped_column(Enum(BenchmarkId), primary_key=True)
+    nav_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    value: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    proxy: Mapped[bool] = mapped_column(Boolean, default=True)
+    proxy_note: Mapped[str | None] = mapped_column(String(255))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+
 class SchemeMetadata(Base):
     """Scheme category, refreshed alongside NAV during the AMFI bulk fetch
     (market_data/service.py). `tax_asset_class` is derived from

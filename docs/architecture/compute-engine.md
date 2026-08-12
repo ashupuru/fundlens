@@ -198,20 +198,52 @@ breakeven number itself is compute-engine output, never LLM-generated (PRD FR-5.
 
 ## 4. Benchmark Simulation Engine
 
-**"What if these cash flows had gone into the benchmark instead?"** (FR-4.1): take the exact same
-signed, dated cash-flow list used for a fund's XIRR, replace the terminal-flow logic with "buy
-benchmark units at each purchase date's benchmark level, redeem at each redemption date's level,"
-and run the same XIRR solver. This guarantees the comparison is apples-to-apples on timing, which
-is the entire point of the Zerodha-Coin-style comparison — a naive CAGR-vs-CAGR comparison would
-not control for cash flow timing and would misattribute alpha caused by contribution timing.
+**Shipped in P1.1** (`fundlens/benchmark/`, `compute/benchmark.py`). **"What if these cash flows
+had gone into the benchmark instead?"** (FR-4.1): on each purchase, the real rupee amount buys
+benchmark units at that date's benchmark value; on each redemption that reduces the fund's own
+units, the *same fraction* of the fund's currently-held units being liquidated is applied to the
+parallel benchmark-units position, and that fraction's benchmark value — not the fund's real
+redemption proceeds — becomes the benchmark-side cash flow. A still-held position gets a terminal
+flow from its remaining benchmark units at the latest available price. Both series then go through
+the same XIRR solver (`compute/xirr.py`), giving a cash-flow-timing-controlled "fund XIRR vs
+benchmark XIRR, alpha = the difference" — the entire point of the Zerodha-Coin-style comparison.
 
-- **Portfolio-level** (FR-4.2): same simulation against the user's chosen reference index
-  (default Nifty 50 TRI, PRD §12.3), computed per PAN, plus a display-only household rollup.
-- **Category-correct** (FR-4.3): default benchmark selection keyed off `scheme_metadata.category`
-  (e.g. midcap fund → Nifty Midcap 150 TRI), user-overridable per fund.
-- **Index-fund counterfactual** (FR-4.4): same simulation but against a specific index fund's
-  actual NAV series (fee-inclusive) rather than the raw TRI, so the comparison is fund-vs-fund,
-  not fund-vs-theoretical-index.
+**A real-data-caught bug, corrected before shipping**: an earlier version reused the fund's real
+redemption rupee amount as the benchmark-side flow too (reasoning: "same cash flows, same
+amounts"). Live-verified against the user's real 56-position portfolio, this made `benchmark_xirr`
+trivially equal `fund_xirr` for every fully-exited position (no terminal flow to differ on) —
+alpha landed at exactly 0.0 for two-thirds of exited positions and was never once negative, a
+statistically impossible pattern for independent real return series. The fund's real exit proceeds
+reflect the *fund's* performance, not what the benchmark would have been worth; reusing them
+silently erases the comparison for most of a typical portfolio's history. Fixed by tracking
+fund-units-held in parallel and liquidating the matching *fraction* of benchmark units instead —
+re-verified against the same real portfolio: alpha sign breakdown went from
+`{positive: 8, negative: 0, zero: 16}` (impossible) to `{positive: 18, negative: 6, zero: 0}`
+(plausible). `DIVIDEND_PAYOUT` (real-data-verified: never carries a `units` value — a cash-only
+distribution) has no benchmark-side equivalent under the Growth-option proxies used (see below)
+and is excluded from the benchmark timeline entirely, while remaining in the fund's own XIRR
+unchanged.
+
+**No free true-TRI source exists** (PRD §10 risk, live-verified P1.1: NSE/niftyindices.com return
+403/503 to unauthenticated requests — the same bot-hostile class of dependency the PRD explicitly
+avoids for Groww/MFCentral scraping). Every `BenchmarkId` is therefore backed by a real index
+fund/ETF's own NAV (`benchmark/proxy_config.py`), chosen empirically for longest available history
+via mfapi.in, always flagged `proxy=true` with a `proxy_note` naming the actual fund — this is the
+PRD's own documented fallback, used as the primary (only working) data source, not a last resort.
+
+- **Portfolio-level** (FR-4.2): same simulation against a single reference index, default Nifty 50
+  TRI (PRD §12.3), user-overridable via `?benchmark_id=` on `GET /benchmarks/comparison/portfolio`.
+  Per-PAN scoping and a household roll-up are not built — the app has no multi-PAN concept yet.
+- **Category-correct** (FR-4.3): default benchmark selection (`benchmark/category_mapping.py`)
+  keyed off `scheme_metadata.category_raw` — Large Cap/other equity → Nifty 50 TRI, Mid Cap →
+  Midcap 150 TRI, Small Cap → Smallcap 250 TRI, Large & Mid Cap → Nifty 50 TRI (spans both, no
+  single-cap index fits). Debt and `NEEDS_REVIEW` categories return no benchmark (`reason:
+  no_category_benchmark`) rather than comparing against an equity index, which would misattribute
+  category-driven return differences as fund skill. No per-fund override yet.
+- **Index-fund counterfactual** (FR-4.4): already what this module computes — every `BenchmarkId`
+  *is* a real index fund/ETF's NAV, not a theoretical TRI value, so no separate counterfactual
+  computation exists on top of the above. **Category-appropriate debt indices** (also FR-1.4-named)
+  remain unbuilt — no debt `BenchmarkId` exists; debt/hybrid schemes get no benchmark comparison.
 
 ## 5. Recommendation Rubric Engine
 

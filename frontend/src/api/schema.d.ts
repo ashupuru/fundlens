@@ -208,6 +208,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/benchmarks/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh */
+        post: operations["refresh_benchmarks_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/benchmarks/comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Comparison */
+        get: operations["comparison_benchmarks_comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/benchmarks/comparison/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio Comparison */
+        get: operations["portfolio_comparison_benchmarks_comparison_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -220,6 +271,38 @@ export interface components {
             scheme_count: number;
             /** Cost Basis Paise */
             cost_basis_paise: number;
+        };
+        /** BenchmarkComparisonResponse */
+        BenchmarkComparisonResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Amc */
+            amc: string;
+            /** Benchmark Id */
+            benchmark_id: string | null;
+            /** Proxy Note */
+            proxy_note: string | null;
+            /** Fund Xirr */
+            fund_xirr: number | null;
+            /** Fund Xirr Reason */
+            fund_xirr_reason: string | null;
+            /** Benchmark Xirr */
+            benchmark_xirr: number | null;
+            /** Benchmark Xirr Reason */
+            benchmark_xirr_reason: string | null;
+            /** Alpha Pct */
+            alpha_pct: number | null;
+        };
+        /** BenchmarkRefreshResultResponse */
+        BenchmarkRefreshResultResponse: {
+            /** Benchmark Id */
+            benchmark_id: string;
+            /** Inserted */
+            inserted: number;
+            /** Error */
+            error: string | null;
         };
         /** Body_ingest_cas_ingest_cas_post */
         Body_ingest_cas_ingest_cas_post: {
@@ -406,6 +489,23 @@ export interface components {
             duplicate_count: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["fundlens__api__routers__ingestion__CoverageGapResponse"][];
+        };
+        /** PortfolioBenchmarkComparisonResponse */
+        PortfolioBenchmarkComparisonResponse: {
+            /** Benchmark Id */
+            benchmark_id: string;
+            /** Proxy Note */
+            proxy_note: string;
+            /** Portfolio Xirr */
+            portfolio_xirr: number | null;
+            /** Portfolio Xirr Reason */
+            portfolio_xirr_reason: string | null;
+            /** Benchmark Xirr */
+            benchmark_xirr: number | null;
+            /** Benchmark Xirr Reason */
+            benchmark_xirr_reason: string | null;
+            /** Alpha Pct */
+            alpha_pct: number | null;
         };
         /** PortfolioMetricsResponse */
         PortfolioMetricsResponse: {
@@ -806,6 +906,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataQualitySummaryResponse"];
+                };
+            };
+        };
+    };
+    refresh_benchmarks_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkRefreshResultResponse"][];
+                };
+            };
+        };
+    };
+    comparison_benchmarks_comparison_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkComparisonResponse"][];
+                };
+            };
+        };
+    };
+    portfolio_comparison_benchmarks_comparison_portfolio_get: {
+        parameters: {
+            query?: {
+                /** @description Reference index for portfolio-level comparison (PRD §12.3 default: Nifty 50 TRI) */
+                benchmark_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioBenchmarkComparisonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

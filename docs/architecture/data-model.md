@@ -135,10 +135,18 @@ table rather than trusting the last cached NAV as implicitly current.
 | rows_updated | integer, nullable | rows inserted on the most recent attempt |
 
 ### `benchmark_history`
-Same shape as `nav_history` but keyed by benchmark id (`NIFTY50_TRI`, `BSE100_TRI`,
-`NIFTY_MIDCAP150_TRI`, `NIFTY_SMALLCAP250_TRI`, category debt indices). Includes a `proxy` boolean
-— set true when a TRI series is unavailable and an index-fund NAV is substituted per the PRD §10
-mitigation, with the substitution documented in `benchmark_history.proxy_note`.
+**Shipped in P1.1.** Same shape as `nav_history` but keyed by `benchmark_id` (PK, with
+`nav_date`): `NIFTY50_TRI`, `BSE100_TRI`, `NIFTY_MIDCAP150_TRI`, `NIFTY_SMALLCAP250_TRI`. Category
+debt indices (also PRD FR-1.4-named) are **not built** — no debt `BenchmarkId` exists.
+
+`proxy` is **always `true` today**, not merely a fallback flag: PRD §10 named true TRI data as
+hard to source freely, and P1.1 live-verified this — NSE/niftyindices.com return 403/503 to
+unauthenticated requests. Every row's `value` is therefore a real index fund or ETF's own NAV,
+chosen per benchmark for longest available history via mfapi.in (`benchmark/proxy_config.py` has
+the exact scheme mapping and rationale), backfilled the same way P0.2 backfills any held scheme's
+history (one `mfapi.in` call per benchmark, not the AMFI NAVAll bulk file). `proxy_note` names the
+actual fund standing in, e.g. "UTI Nifty 50 Index Fund (Direct, Growth) NAV — no free TRI source
+available" — never presented as true TRI without this note attached.
 
 ### `scheme_metadata`
 **Shipped in P0.5, narrower than originally planned**: `amfi_code` (PK), `category_raw` (the SEBI
