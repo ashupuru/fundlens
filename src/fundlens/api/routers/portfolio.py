@@ -1,11 +1,12 @@
-"""FR-2.1/2.2: rebuild FIFO lots and view current holdings by folio/scheme/AMC."""
+"""FR-2.1/2.2/3.1/3.2: rebuild FIFO lots, view current holdings, and return
+metrics (XIRR, CAGR, absolute return, realized/unrealized P&L)."""
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from fundlens.api.deps import get_session
-from fundlens.compute import service
+from fundlens.compute import metrics, service
 from fundlens.compute.holdings import get_current_holdings, get_holdings_by_amc
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -82,3 +83,69 @@ def holdings_by_amc(session: Session = Depends(get_session)) -> list[AmcHoldingR
         )
         for row in get_holdings_by_amc(session)
     ]
+
+
+class HoldingMetricsResponse(BaseModel):
+    folio: str
+    scheme_name: str
+    amc: str
+    invested_paise: int
+    received_paise: int
+    current_value_paise: int | None
+    nav_as_of: str | None
+    cost_basis_paise: int
+    realized_gain_paise: int
+    unrealized_gain_paise: int | None
+    absolute_return_pct: float | None
+    cagr_pct: float | None
+    xirr: float | None
+    xirr_reason: str | None
+    is_fully_exited: bool
+    less_than_one_year: bool
+
+
+class PortfolioMetricsResponse(BaseModel):
+    xirr: float | None
+    xirr_reason: str | None
+    invested_paise: int
+    received_paise: int
+    current_value_paise: int
+    positions_missing_nav: int
+
+
+@router.get("/metrics", response_model=list[HoldingMetricsResponse])
+def holding_metrics(session: Session = Depends(get_session)) -> list[HoldingMetricsResponse]:
+    return [
+        HoldingMetricsResponse(
+            folio=m.folio,
+            scheme_name=m.scheme_name,
+            amc=m.amc,
+            invested_paise=m.invested_paise,
+            received_paise=m.received_paise,
+            current_value_paise=m.current_value_paise,
+            nav_as_of=m.nav_as_of.isoformat() if m.nav_as_of else None,
+            cost_basis_paise=m.cost_basis_paise,
+            realized_gain_paise=m.realized_gain_paise,
+            unrealized_gain_paise=m.unrealized_gain_paise,
+            absolute_return_pct=m.absolute_return_pct,
+            cagr_pct=m.cagr_pct,
+            xirr=m.xirr,
+            xirr_reason=m.xirr_reason,
+            is_fully_exited=m.is_fully_exited,
+            less_than_one_year=m.less_than_one_year,
+        )
+        for m in metrics.get_all_holding_metrics(session)
+    ]
+
+
+@router.get("/metrics/portfolio", response_model=PortfolioMetricsResponse)
+def portfolio_metrics(session: Session = Depends(get_session)) -> PortfolioMetricsResponse:
+    m = metrics.compute_portfolio_metrics(session)
+    return PortfolioMetricsResponse(
+        xirr=m.xirr,
+        xirr_reason=m.xirr_reason,
+        invested_paise=m.invested_paise,
+        received_paise=m.received_paise,
+        current_value_paise=m.current_value_paise,
+        positions_missing_nav=m.positions_missing_nav,
+    )

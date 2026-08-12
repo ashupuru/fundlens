@@ -59,28 +59,77 @@ every call (delete-then-regenerate, never patched in place) — `compute/service
 
 ## 2. XIRR
 
-**Cash flow construction** (FR-3.1): for a given entity (fund / folio / category / goal /
-platform / portfolio):
-- Every `purchase`/`sip`/`switch_in` → negative flow at `txn_date`.
-- Every `redemption`/`dividend_payout`/`switch_out` → positive flow at `txn_date`.
-- Terminal flow: `units_remaining * latest_nav` as a positive flow at `as_of_date` (today, or the
-  report's as-of date).
+Implemented in `compute/xirr.py` (pure solver) + `compute/metrics.py` (cash-flow construction,
+DB-aware). Validated live against the same real 56-position, 1980–2026 portfolio used to validate
+§1, including a real market-data refresh (P0.2) to backfill NAV for every held scheme.
 
-**Solver:** `scipy.optimize.brentq` bracketed on `[-0.9999, 10.0]` annual rate, falling back to
-Newton's method (`scipy.optimize.newton`) seeded from the bracket's midpoint if `brentq` fails to
-bracket a root (can happen with unusual flow sign patterns). This two-tier approach is chosen
-deliberately over a single Newton solve because Newton alone can diverge on flow patterns common
-in real portfolios (large late lump sums, long fund histories) — this is exactly the kind of bug
-class the 0.01%-of-Excel accuracy NFR is designed to catch.
+**Cash flow construction** (FR-3.1): for a given entity (fund / folio / portfolio — category/goal/
+platform levels are P1+):
+- `PURCHASE`, `PURCHASE_SIP`, `SWITCH_IN`, `SWITCH_IN_MERGER` → negative flow (money out of the
+  investor's pocket) at `txn_date`.
+- `REDEMPTION`, `SWITCH_OUT`, `SWITCH_OUT_MERGER`, `DIVIDEND_PAYOUT`, `REVERSAL` → positive flow
+  (money back to the investor) at `txn_date`.
+- Excluded — no net external cash movement: `DIVIDEND_REINVEST` (dividend income reinvested
+  internally, not fresh cash), `SEGREGATION` (carries no amount at all, §1), tax lines, `MISC`,
+  `UNKNOWN`. `GIFT_IN`/`GIFT_OUT` are also excluded, conservatively — no real data exercised
+  this path to confirm whether they carry a genuine amount.
+- Terminal flow: `units_remaining * latest_nav` as a positive flow at the NAV's own as-of date,
+  for still-held positions only (fully-exited positions get no terminal flow — see below).
+
+**`amount_paise` sign — corrected against real data.** Originally assumed to be an unsigned
+magnitude, used as-is for inflow-classified transactions. Real data proved `amount_paise` is
+*signed to match `units`* (negative for `REDEMPTION`/`SWITCH_OUT`/`REVERSAL`) — a convention
+`compute/lots.py` never needed to check since it prices lots from `nav`, not `amount`. Left
+unguarded, this made every redemption/switch-out a *negative* cash flow instead of positive: on
+the validation portfolio, only 13/56 positions (the still-held ones, which never touch an
+inflow-classified row) produced a valid XIRR — every fully-exited fund silently read as
+"insufficient_flow_variation" despite its units correctly reaching zero in the FIFO ledger. Fixed
+by normalizing to `abs(amount_paise)` before applying the sign the classification above dictates.
+Re-verified: 54/56 positions now produce a valid XIRR; the remaining 2 have legitimate reasons
+(below), not bugs.
+
+**Portfolio-wide XIRR** is every held position's classified cash flows concatenated, with no
+special inter-fund netting: a `SWITCH_OUT` from fund A and its matching `SWITCH_IN` to fund B are
+equal and opposite on the same date, so they algebraically cancel in the XIRR objective function
+for any rate once aggregated. Verified with a closed-form cross-check (a switch pair plus a
+purchase and terminal value reduces to exactly the same rate as if the switch had never happened).
+
+**Solver** (`compute/xirr.py`): `scipy.optimize.brentq` bracketed on `[-0.9999, 10.0]` annual
+rate, falling back to `scipy.optimize.newton` seeded at 10% (not the bracket's raw midpoint —
+~4.5 is a poor real-world seed) if `brentq` fails to bracket a root. Every result is checked with
+`math.isfinite()` before being trusted: numpy silently returns NaN (with a warning, not an
+exception) for a negative base raised to a fractional exponent, which Newton's iteration can
+wander into for pathological flow patterns — left unguarded, a NaN could slip through as if it
+were a valid rate. `_objective` raises explicitly when `1 + rate ≤ 0` so both solvers treat that
+region as out-of-domain rather than silently computing NaN.
 
 **Edge cases (PRD FR-3.1):**
-- **Fully exited fund:** terminal flow is 0 (no `units_remaining`); this is "realized XIRR" and
-  is labeled as such in the UI, not conflated with a still-held fund's XIRR.
-- **< 1 year of history:** XIRR is still computed but the UI labels it "annualized — based on
-  < 1yr of data, treat as noisy" and shows absolute return alongside it as the primary number.
-- **Degenerate flows** (all-positive, all-negative, or a single flow): solver has no root:
-  return `null` with a reason code (`insufficient_flow_variation`) rather than raising, so a
-  portfolio-wide computation doesn't fail because one fund is degenerate.
+- **Fully exited fund:** no terminal flow (0 units remaining); this is "realized XIRR" and is
+  labeled as such (`is_fully_exited`), not conflated with a still-held fund's XIRR.
+- **< 1 year of history:** XIRR is still computed (`less_than_one_year` flag set); the "annualized
+  and noisy" framing is the UI/API consumer's job, not the solver's.
+- **Degenerate flows** (all-positive, all-negative, a single flow, or all-same-date): return
+  `null` with a reason code (`insufficient_flow_variation` or `same_date_flows`) rather than
+  raising, so a portfolio-wide computation doesn't fail because one position is degenerate. The
+  real portfolio's one genuinely all-positive case is a `SEGREGATION`-originated position with no
+  purchase leg at all — there's no investment cash flow to compute a return against, so `null` is
+  the *correct* answer, not a gap.
+
+### 2.1 CAGR, absolute return, realized/unrealized P&L (FR-3.2)
+
+Also `compute/metrics.py`, reusing the same cash-flow classification and terminal-value logic as
+XIRR rather than a separate computation:
+- **Invested** = sum of outflow-classified transaction amounts. **Received** = sum of
+  inflow-classified transaction amounts (gross proceeds already redeemed — distinct from
+  `realized_gain`, which is a *gain* figure from the FIFO lot ledger, not gross proceeds).
+- **Absolute return %** = `(received + current_value − invested) / invested × 100`.
+- **CAGR** = a simplified since-inception point-to-point figure —
+  `((received + current_value) / invested) ^ (365 / days_since_first_investment) − 1` — distinct
+  from true money-weighted XIRR and from NAV-based rolling CAGR (fund performance independent of
+  the investor's own cash-flow timing, FR-3.3/P1). Labeled accordingly, not conflated with either.
+- **Unrealized P&L** = `current_value − cost_basis_of_open_lots` (the open-lot cost basis comes
+  directly from `compute/holdings.py`, §data-model.md `lot` table).
+- **Realized P&L** = summed straight from the `realized_gain` table (§1), not recomputed.
 
 ## 3. Tax Engine
 
