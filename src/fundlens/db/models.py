@@ -91,3 +91,46 @@ class RawTransaction(Base):
     natural_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
 
     upload: Mapped["RawCASUpload"] = relationship(back_populates="transactions")
+
+
+class NavSource(enum.StrEnum):
+    AMFI_NAVALL = "amfi_navall"
+    MFAPI = "mfapi"
+    MANUAL = "manual"
+
+
+class NavHistory(Base):
+    """One row per (scheme, date) NAV. Append-only — see data-model.md §2."""
+
+    __tablename__ = "nav_history"
+
+    amfi_code: Mapped[str] = mapped_column(String(20), primary_key=True)
+    nav_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    nav: Mapped[Decimal] = mapped_column(Numeric(12, 4))
+    source: Mapped[NavSource] = mapped_column(Enum(NavSource))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+
+class FetchStatus(enum.StrEnum):
+    OK = "ok"
+    FAILED = "failed"
+
+
+class DataFreshness(Base):
+    """One row per market-data source, upserted on every fetch attempt.
+
+    Backs the "stale-data banner, never silent" NFR (technical-spec.md §7):
+    the UI reads this table rather than trusting the last cached NAV as
+    implicitly current.
+    """
+
+    __tablename__ = "data_freshness"
+
+    source: Mapped[NavSource] = mapped_column(Enum(NavSource), primary_key=True)
+    last_attempt_at: Mapped[datetime] = mapped_column(DateTime)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[FetchStatus] = mapped_column(Enum(FetchStatus))
+    error_message: Mapped[str | None] = mapped_column(String(500))
+    rows_updated: Mapped[int | None] = mapped_column()

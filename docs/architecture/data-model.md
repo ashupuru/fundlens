@@ -87,14 +87,33 @@ action on a specific transaction, logged separately.
 ### `nav_history`
 | column | type | notes |
 |---|---|---|
-| scheme_amfi_code | text | |
+| amfi_code | text | matches `raw_transaction.amfi_code` naming |
 | nav_date | date | |
 | nav | numeric(12,4) | |
 | source | enum | `amfi_navall` \| `mfapi` \| `manual` |
 | fetched_at | timestamp | |
 
-Primary key `(scheme_amfi_code, nav_date)`. Append-only; a later fetch for the same date
-overwrites only if the prior value was flagged provisional (same-day NAV before EOD publish).
+Primary key `(amfi_code, nav_date)`. Append-only, insert-if-absent — implemented this way in
+P0.2: a later fetch never overwrites an existing `(amfi_code, nav_date)` row, from either source.
+Verified live against both real feeds this doesn't cause gaps: AMFI NAVAll and mfapi.in agreed
+exactly on the current day's NAV in testing, so the "insert only if absent" rule naturally
+converges. The originally-planned "overwrite if the prior value was flagged provisional (same-day
+NAV before EOD publish)" refinement is deferred — not needed until same-day pre-EOD fetches are
+actually attempted, which P0.2 doesn't do (AMFI refresh runs once daily, not intraday).
+
+### `data_freshness`
+One row per `NavSource`, upserted on every fetch attempt — never a fetch history log, just current
+status. Backs the "stale-data banner, never silent" NFR (technical-spec.md §7): the UI reads this
+table rather than trusting the last cached NAV as implicitly current.
+
+| column | type | notes |
+|---|---|---|
+| source | enum, pk | `amfi_navall` \| `mfapi` \| `manual` |
+| last_attempt_at | timestamp | updated on every attempt, success or failure |
+| last_success_at | timestamp, nullable | only updated on success — the banner's real signal |
+| status | enum | `ok` \| `failed` |
+| error_message | text, nullable | set on failure, for the data quality dashboard (P0.6) |
+| rows_updated | integer, nullable | rows inserted on the most recent attempt |
 
 ### `benchmark_history`
 Same shape as `nav_history` but keyed by benchmark id (`NIFTY50_TRI`, `BSE100_TRI`,
@@ -181,6 +200,7 @@ Scheme *──1 scheme_metadata
 Scheme *──1 scheme_identity
 Scheme *──* nav_history
 Benchmark *──* benchmark_history
+NavSource 1──1 data_freshness
 
 PAN 1──1 risk_profile
 PAN *──* Goal *──* Folio (via tagged holdings)
