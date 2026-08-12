@@ -123,6 +123,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Holding Metrics */
+        get: operations["holding_metrics_portfolio_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/metrics/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Portfolio Metrics */
+        get: operations["portfolio_metrics_portfolio_metrics_portfolio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -164,6 +198,41 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HoldingMetricsResponse */
+        HoldingMetricsResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Amc */
+            amc: string;
+            /** Invested Paise */
+            invested_paise: number;
+            /** Received Paise */
+            received_paise: number;
+            /** Current Value Paise */
+            current_value_paise: number | null;
+            /** Nav As Of */
+            nav_as_of: string | null;
+            /** Cost Basis Paise */
+            cost_basis_paise: number;
+            /** Realized Gain Paise */
+            realized_gain_paise: number;
+            /** Unrealized Gain Paise */
+            unrealized_gain_paise: number | null;
+            /** Absolute Return Pct */
+            absolute_return_pct: number | null;
+            /** Cagr Pct */
+            cagr_pct: number | null;
+            /** Xirr */
+            xirr: number | null;
+            /** Xirr Reason */
+            xirr_reason: string | null;
+            /** Is Fully Exited */
+            is_fully_exited: boolean;
+            /** Less Than One Year */
+            less_than_one_year: boolean;
+        };
         /** HoldingResponse */
         HoldingResponse: {
             /** Folio */
@@ -193,6 +262,21 @@ export interface components {
             duplicate_count: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["CoverageGapResponse"][];
+        };
+        /** PortfolioMetricsResponse */
+        PortfolioMetricsResponse: {
+            /** Xirr */
+            xirr: number | null;
+            /** Xirr Reason */
+            xirr_reason: string | null;
+            /** Invested Paise */
+            invested_paise: number;
+            /** Received Paise */
+            received_paise: number;
+            /** Current Value Paise */
+            current_value_paise: number;
+            /** Positions Missing Nav */
+            positions_missing_nav: number;
         };
         /** RebuildResponse */
         RebuildResponse: {
@@ -415,6 +499,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AmcHoldingResponse"][];
+                };
+            };
+        };
+    };
+    holding_metrics_portfolio_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingMetricsResponse"][];
+                };
+            };
+        };
+    };
+    portfolio_metrics_portfolio_metrics_portfolio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioMetricsResponse"];
                 };
             };
         };

@@ -200,6 +200,52 @@
           }
         }
       }
+    },
+    "/portfolio/metrics": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Holding Metrics",
+        "operationId": "holding_metrics_portfolio_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HoldingMetricsResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Holding Metrics Portfolio Metrics Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/metrics/portfolio": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Portfolio Metrics",
+        "operationId": "portfolio_metrics_portfolio_metrics_portfolio_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioMetricsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -301,6 +347,143 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HoldingMetricsResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "amc": {
+            "type": "string",
+            "title": "Amc"
+          },
+          "invested_paise": {
+            "type": "integer",
+            "title": "Invested Paise"
+          },
+          "received_paise": {
+            "type": "integer",
+            "title": "Received Paise"
+          },
+          "current_value_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Value Paise"
+          },
+          "nav_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nav As Of"
+          },
+          "cost_basis_paise": {
+            "type": "integer",
+            "title": "Cost Basis Paise"
+          },
+          "realized_gain_paise": {
+            "type": "integer",
+            "title": "Realized Gain Paise"
+          },
+          "unrealized_gain_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Gain Paise"
+          },
+          "absolute_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Absolute Return Pct"
+          },
+          "cagr_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cagr Pct"
+          },
+          "xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr"
+          },
+          "xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr Reason"
+          },
+          "is_fully_exited": {
+            "type": "boolean",
+            "title": "Is Fully Exited"
+          },
+          "less_than_one_year": {
+            "type": "boolean",
+            "title": "Less Than One Year"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_name",
+          "amc",
+          "invested_paise",
+          "received_paise",
+          "current_value_paise",
+          "nav_as_of",
+          "cost_basis_paise",
+          "realized_gain_paise",
+          "unrealized_gain_paise",
+          "absolute_return_pct",
+          "cagr_pct",
+          "xirr",
+          "xirr_reason",
+          "is_fully_exited",
+          "less_than_one_year"
+        ],
+        "title": "HoldingMetricsResponse"
+      },
       "HoldingResponse": {
         "properties": {
           "folio": {
@@ -393,6 +576,58 @@
           "coverage_gaps"
         ],
         "title": "IngestResponse"
+      },
+      "PortfolioMetricsResponse": {
+        "properties": {
+          "xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr"
+          },
+          "xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr Reason"
+          },
+          "invested_paise": {
+            "type": "integer",
+            "title": "Invested Paise"
+          },
+          "received_paise": {
+            "type": "integer",
+            "title": "Received Paise"
+          },
+          "current_value_paise": {
+            "type": "integer",
+            "title": "Current Value Paise"
+          },
+          "positions_missing_nav": {
+            "type": "integer",
+            "title": "Positions Missing Nav"
+          }
+        },
+        "type": "object",
+        "required": [
+          "xirr",
+          "xirr_reason",
+          "invested_paise",
+          "received_paise",
+          "current_value_paise",
+          "positions_missing_nav"
+        ],
+        "title": "PortfolioMetricsResponse"
       },
       "RebuildResponse": {
         "properties": {
