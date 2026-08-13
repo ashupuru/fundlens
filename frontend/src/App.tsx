@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import DataQuality from "./pages/DataQuality";
 import Funds from "./pages/Funds";
+import Upload from "./pages/Upload";
 
 function DashboardIcon() {
   return (
@@ -37,9 +38,31 @@ function DataQualityIcon() {
   );
 }
 
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M8 10.5V2.5M8 2.5 5 5.5M8 2.5l3 3"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const links = [
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/funds", label: "Funds", icon: FundsIcon, end: false },
+  { to: "/upload", label: "Upload", icon: UploadIcon, end: false },
   { to: "/data-quality", label: "Data Quality", icon: DataQualityIcon, end: false },
 ];
 
@@ -64,6 +87,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/funds" element={<Funds />} />
+          <Route path="/upload" element={<Upload />} />
           <Route path="/data-quality" element={<DataQuality />} />
         </Routes>
       </div>
