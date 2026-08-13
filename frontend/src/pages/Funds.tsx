@@ -174,6 +174,13 @@ export default function Funds() {
 
   const totalReturns =
     portfolio.current_value_paise + portfolio.received_paise - portfolio.invested_paise;
+  // "Invested value" means money currently deployed in active funds -- the
+  // cost basis of open positions, not portfolio.invested_paise (lifetime
+  // cumulative purchases across every fund ever held, including ones fully
+  // exited). invested_paise is still the right basis for totalReturns above
+  // (it needs the lifetime figure to net exited positions against their
+  // proceeds correctly), so that calculation is unchanged.
+  const activeCostBasis = rows.reduce((sum, r) => sum + (r.metrics?.cost_basis_paise ?? 0), 0);
 
   return (
     <div>
@@ -186,7 +193,7 @@ export default function Funds() {
         </div>
         <div className="stat">
           <div className="stat-label">Invested value</div>
-          <div className="stat-value">{formatPaise(portfolio.invested_paise)}</div>
+          <div className="stat-value">{formatPaise(activeCostBasis)}</div>
         </div>
         <div className="stat">
           <div className="stat-label">Total returns</div>

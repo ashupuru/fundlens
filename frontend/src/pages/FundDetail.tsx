@@ -146,7 +146,11 @@ export default function FundDetail() {
               </div>
               <div className="stat">
                 <div className="stat-label">Invested</div>
-                <div className="stat-value">{formatPaise(detail.your_position.invested_paise)}</div>
+                <div className="stat-value">
+                  {formatPaise(
+                    detail.holdings.reduce((sum, h) => sum + h.cost_basis_paise, 0),
+                  )}
+                </div>
               </div>
               <div className="stat">
                 <div className="stat-label">XIRR</div>
