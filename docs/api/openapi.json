@@ -355,6 +355,101 @@
           }
         }
       }
+    },
+    "/benchmarks/refresh": {
+      "post": {
+        "tags": [
+          "benchmarks"
+        ],
+        "summary": "Refresh",
+        "operationId": "refresh_benchmarks_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkRefreshResultResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Refresh Benchmarks Refresh Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/benchmarks/comparison": {
+      "get": {
+        "tags": [
+          "benchmarks"
+        ],
+        "summary": "Comparison",
+        "operationId": "comparison_benchmarks_comparison_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkComparisonResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Comparison Benchmarks Comparison Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/benchmarks/comparison/portfolio": {
+      "get": {
+        "tags": [
+          "benchmarks"
+        ],
+        "summary": "Portfolio Comparison",
+        "operationId": "portfolio_comparison_benchmarks_comparison_portfolio_get",
+        "parameters": [
+          {
+            "name": "benchmark_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Reference index for portfolio-level comparison (PRD \u00a712.3 default: Nifty 50 TRI)",
+              "default": "NIFTY50_TRI",
+              "title": "Benchmark Id"
+            },
+            "description": "Reference index for portfolio-level comparison (PRD \u00a712.3 default: Nifty 50 TRI)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioBenchmarkComparisonResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -381,6 +476,143 @@
           "cost_basis_paise"
         ],
         "title": "AmcHoldingResponse"
+      },
+      "BenchmarkComparisonResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "amc": {
+            "type": "string",
+            "title": "Amc"
+          },
+          "benchmark_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Id"
+          },
+          "proxy_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proxy Note"
+          },
+          "fund_xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fund Xirr"
+          },
+          "fund_xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fund Xirr Reason"
+          },
+          "benchmark_xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr"
+          },
+          "benchmark_xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr Reason"
+          },
+          "alpha_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_name",
+          "amc",
+          "benchmark_id",
+          "proxy_note",
+          "fund_xirr",
+          "fund_xirr_reason",
+          "benchmark_xirr",
+          "benchmark_xirr_reason",
+          "alpha_pct"
+        ],
+        "title": "BenchmarkComparisonResponse"
+      },
+      "BenchmarkRefreshResultResponse": {
+        "properties": {
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id"
+          },
+          "inserted": {
+            "type": "integer",
+            "title": "Inserted"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "benchmark_id",
+          "inserted",
+          "error"
+        ],
+        "title": "BenchmarkRefreshResultResponse"
       },
       "Body_ingest_cas_ingest_cas_post": {
         "properties": {
@@ -994,6 +1226,84 @@
           "coverage_gaps"
         ],
         "title": "IngestResponse"
+      },
+      "PortfolioBenchmarkComparisonResponse": {
+        "properties": {
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id"
+          },
+          "proxy_note": {
+            "type": "string",
+            "title": "Proxy Note"
+          },
+          "portfolio_xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Xirr"
+          },
+          "portfolio_xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Xirr Reason"
+          },
+          "benchmark_xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr"
+          },
+          "benchmark_xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr Reason"
+          },
+          "alpha_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "benchmark_id",
+          "proxy_note",
+          "portfolio_xirr",
+          "portfolio_xirr_reason",
+          "benchmark_xirr",
+          "benchmark_xirr_reason",
+          "alpha_pct"
+        ],
+        "title": "PortfolioBenchmarkComparisonResponse"
       },
       "PortfolioMetricsResponse": {
         "properties": {

@@ -61,13 +61,13 @@ from fundlens.db.models import NavHistory, RawTransaction, RealizedGain, Transac
 from fundlens.money import to_paise_strict
 from fundlens.scheme_identity import scheme_key
 
-_CASH_OUTFLOW_TYPES = {
+CASH_OUTFLOW_TYPES = {
     TransactionType.PURCHASE,
     TransactionType.PURCHASE_SIP,
     TransactionType.SWITCH_IN,
     TransactionType.SWITCH_IN_MERGER,
 }
-_CASH_INFLOW_TYPES = {
+CASH_INFLOW_TYPES = {
     TransactionType.REDEMPTION,
     TransactionType.SWITCH_OUT,
     TransactionType.SWITCH_OUT_MERGER,
@@ -161,10 +161,10 @@ def _build_position_cash_flows(
         # classification dictates, rather than trusting the stored sign to
         # already mean "inflow"/"outflow" the way we need it to.
         magnitude = abs(txn.amount_paise)
-        if txn.txn_type in _CASH_OUTFLOW_TYPES:
+        if txn.txn_type in CASH_OUTFLOW_TYPES:
             cash_flows.append(CashFlow(date=txn.txn_date, amount=Decimal(-magnitude) / 100))
             invested_paise += magnitude
-        elif txn.txn_type in _CASH_INFLOW_TYPES:
+        elif txn.txn_type in CASH_INFLOW_TYPES:
             cash_flows.append(CashFlow(date=txn.txn_date, amount=Decimal(magnitude) / 100))
             received_paise += magnitude
 
@@ -198,7 +198,7 @@ def _build_position_cash_flows(
     )
 
 
-def _positions_with_transactions(
+def positions_with_transactions(
     session: Session, positions: set[tuple[str, str]]
 ) -> dict[tuple[str, str], list[RawTransaction]]:
     folios = {folio for folio, _ in positions}
@@ -250,7 +250,7 @@ def compute_holding_metrics(
     else:
         absolute_return_pct = None
 
-    outflow_dates = [t.txn_date for t in transactions if t.txn_type in _CASH_OUTFLOW_TYPES]
+    outflow_dates = [t.txn_date for t in transactions if t.txn_type in CASH_OUTFLOW_TYPES]
     first_investment_date = min(outflow_dates) if outflow_dates else None
     less_than_one_year = bool(
         first_investment_date and (date.today() - first_investment_date).days < 365
@@ -291,7 +291,7 @@ def get_all_holding_metrics(session: Session) -> list[HoldingMetrics]:
         return []
 
     open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
-    txns_by_position = _positions_with_transactions(session, positions)
+    txns_by_position = positions_with_transactions(session, positions)
 
     return [
         compute_holding_metrics(
@@ -318,7 +318,7 @@ def compute_portfolio_metrics(session: Session) -> PortfolioMetrics:
         )
 
     open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
-    txns_by_position = _positions_with_transactions(session, positions)
+    txns_by_position = positions_with_transactions(session, positions)
 
     all_cash_flows: list[CashFlow] = []
     invested_total = 0

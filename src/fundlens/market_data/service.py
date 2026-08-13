@@ -83,7 +83,7 @@ def _insert_new_rows(session: Session, rows: list[NavRow], source: NavSource) ->
     return inserted
 
 
-def _record_freshness(
+def record_freshness(
     session: Session,
     source: NavSource,
     status: FetchStatus,
@@ -107,13 +107,13 @@ def backfill_scheme_via_mfapi(session: Session, amfi_code: str) -> int:
     try:
         payload = fetch_scheme_history(amfi_code)
     except (httpx.HTTPError, ValueError) as exc:
-        _record_freshness(session, NavSource.MFAPI, FetchStatus.FAILED, None, str(exc))
+        record_freshness(session, NavSource.MFAPI, FetchStatus.FAILED, None, str(exc))
         session.commit()
         return 0
 
     rows = parse_scheme_history(amfi_code, payload)
     inserted = _insert_new_rows(session, rows, NavSource.MFAPI)
-    _record_freshness(session, NavSource.MFAPI, FetchStatus.OK, inserted, None)
+    record_freshness(session, NavSource.MFAPI, FetchStatus.OK, inserted, None)
     session.commit()
     return inserted
 
@@ -125,7 +125,7 @@ def refresh_latest_via_amfi(session: Session, held_amfi_codes: set[str]) -> tupl
     try:
         text = fetch_navall_text()
     except httpx.HTTPError as exc:
-        _record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.FAILED, None, str(exc))
+        record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.FAILED, None, str(exc))
         session.commit()
         return 0, str(exc)
 
@@ -139,7 +139,7 @@ def refresh_latest_via_amfi(session: Session, held_amfi_codes: set[str]) -> tupl
     relevant_categories = [r for r in category_rows if r.amfi_code in held_amfi_codes]
     _upsert_scheme_metadata(session, relevant_categories)
 
-    _record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.OK, inserted, None)
+    record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.OK, inserted, None)
     session.commit()
     return inserted, None
 
