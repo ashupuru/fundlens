@@ -1,38 +1,38 @@
 """STCG/LTCG classification per realized gain (PRD FR-10.2, compute-engine.md §3).
 
-Minimal scope for P0.5, per the dev plan: equity/debt LTCG/STCG
-classification only. Full grandfathering (the Jan-31-2018 FMV cost basis for
-pre-2018 equity purchases) and ₹1.25L/FY exemption tracking are P1 — this
-module classifies STCG vs LTCG and reports raw gains, before exemption.
+Thresholds are versioned, editable config (PRD §5.7 assumption registry,
+`fundlens/assumptions/service.py::TaxAssumptions`), not code constants — a
+report generated under one assumption version stays reproducible even
+after the user edits an assumption later.
 
 Rules (current Indian tax law: Finance Act 2023's "specified mutual fund"
 debt-taxation change, effective 1 Apr 2023):
-- EQUITY-oriented: holding period > 12 months => LTCG, else STCG.
-- DEBT-oriented, purchased on/after 1 Apr 2023: no LTCG concept at all —
-  always taxed at slab rate (reported here as STCG, since that's the
-  closest existing bucket; the report should not be read as implying a
-  12-month threshold applies).
-- DEBT-oriented, purchased before 1 Apr 2023 (old regime, grandfathered):
-  holding period > 36 months => LTCG, else STCG.
+- EQUITY-oriented: holding period > `equity_ltcg_threshold_days` => LTCG,
+  else STCG. (Equity LTCG grandfathering — the Jan-31-2018 FMV cost-basis
+  rule — adjusts the *cost basis* used to compute the gain amount, not
+  this STCG/LTCG classification; see compute/capital_gains.py.)
+- DEBT-oriented, purchased on/after `debt_specified_fund_cutoff`: no LTCG
+  concept at all — always taxed at slab rate (reported here as STCG, since
+  that's the closest existing bucket; the report should not be read as
+  implying a holding-period threshold applies).
+- DEBT-oriented, purchased before the cutoff (old regime, grandfathered):
+  holding period > `debt_ltcg_threshold_days` => LTCG, else STCG.
 - NEEDS_REVIEW asset class: the gain is reported but explicitly
   UNCLASSIFIED, never silently defaulted into either bucket — an incorrect
   equity/debt call changes the tax owed.
 
 The 12/36-*month* legal thresholds are approximated here as 365/1095 *days*
-— calendar-month-exact comparison would need month/day arithmetic, and the
-day-count approximation can differ by at most ~1 day in rare leap-year edge
-cases. Documented, not hidden.
+(the assumption registry's defaults) — calendar-month-exact comparison
+would need month/day arithmetic, and the day-count approximation can differ
+by at most ~1 day in rare leap-year edge cases. Documented, not hidden.
 """
 
 import enum
 from dataclasses import dataclass
 from datetime import date
 
+from fundlens.assumptions.service import TaxAssumptions
 from fundlens.tax.asset_class import TaxAssetClass
-
-EQUITY_LTCG_THRESHOLD_DAYS = 365
-DEBT_LTCG_THRESHOLD_DAYS = 3 * 365
-DEBT_SPECIFIED_FUND_CUTOFF = date(2023, 4, 1)
 
 
 class GainType(enum.StrEnum):
@@ -51,6 +51,7 @@ def classify_gain(
     asset_class: TaxAssetClass,
     purchase_date: date,
     holding_period_days: int,
+    assumptions: TaxAssumptions,
 ) -> GainClassification:
     if asset_class == TaxAssetClass.NEEDS_REVIEW:
         return GainClassification(
@@ -59,15 +60,19 @@ def classify_gain(
 
     if asset_class == TaxAssetClass.EQUITY:
         gain_type = (
-            GainType.LTCG if holding_period_days > EQUITY_LTCG_THRESHOLD_DAYS else GainType.STCG
+            GainType.LTCG
+            if holding_period_days > assumptions.equity_ltcg_threshold_days
+            else GainType.STCG
         )
         return GainClassification(gain_type)
 
     # DEBT
-    if purchase_date >= DEBT_SPECIFIED_FUND_CUTOFF:
+    if purchase_date >= assumptions.debt_specified_fund_cutoff:
         return GainClassification(GainType.STCG)
 
     gain_type = (
-        GainType.LTCG if holding_period_days > DEBT_LTCG_THRESHOLD_DAYS else GainType.STCG
+        GainType.LTCG
+        if holding_period_days > assumptions.debt_ltcg_threshold_days
+        else GainType.STCG
     )
     return GainClassification(gain_type)

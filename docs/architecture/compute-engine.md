@@ -133,9 +133,9 @@ XIRR rather than a separate computation:
 
 ## 3. Tax Engine
 
-**Status: §3.1–3.3 shipped in P0.5. §3.4–3.5 are P1, not yet built** — noted inline below so this
-doc doesn't drift back into describing aspirational behavior as current, which happened in an
-earlier draft of this section.
+**Status: §3.1–3.4 shipped (§3.1–3.3 in P0.5, §3.2's grandfathering and §3.4 in P1.2). §3.5 is
+P1, not yet built** — noted inline below so this doc doesn't drift back into describing
+aspirational behavior as current, which happened in an earlier draft of this section.
 
 ### 3.1 Classification (`fundlens/tax/asset_class.py`)
 `classify_category(category_raw) -> TaxAssetClass` (`EQUITY` / `DEBT` / `NEEDS_REVIEW`) runs
@@ -154,36 +154,72 @@ Real-data check (13 open holdings across the user's actual CAS): 8 equity, 1 deb
 needs_review — 0 missing metadata.
 
 ### 3.2 STCG/LTCG rules (`fundlens/tax/classification.py`)
-`classify_gain(asset_class, purchase_date, holding_period_days) -> GainClassification`, per lot at
-redemption:
-- **Equity**: LTCG if holding period > 365 days, else STCG. (Exemption-headroom math, i.e. the
-  ₹1.25L/FY LTCG threshold, is **not yet implemented** — see §3.4.)
-- **Debt, purchased on/after 2023-04-01** ("specified mutual fund" under the Finance Act 2023
-  redefinition): always STCG-equivalent — the LTCG concept doesn't exist for these regardless of
-  holding period.
-- **Debt, purchased before 2023-04-01**: old regime — LTCG if holding period > 3×365 days, else
-  STCG (grandfathered; this is the case the PRD explicitly calls out).
+`classify_gain(asset_class, purchase_date, holding_period_days, assumptions) -> GainClassification`,
+per lot at redemption, thresholds read from the assumption registry (§3.4a) rather than code
+constants:
+- **Equity**: LTCG if holding period > `equity_ltcg_threshold_days` (365 by default), else STCG.
+  This determines the *classification* only — the *gain amount* an equity LTCG line reports uses
+  a grandfathering-adjusted cost basis when the lot predates the cutoff (§3.2a).
+- **Debt, purchased on/after `debt_specified_fund_cutoff`** (2023-04-01 by default —
+  "specified mutual fund" under the Finance Act 2023 redefinition): always STCG-equivalent — the
+  LTCG concept doesn't exist for these regardless of holding period.
+- **Debt, purchased before the cutoff**: old regime — LTCG if holding period >
+  `debt_ltcg_threshold_days` (1095 by default), else STCG (grandfathered; this is the case the
+  PRD explicitly calls out).
 - **`NEEDS_REVIEW` asset class, or purchase predates scheme_metadata coverage**: `GainType.UNCLASSIFIED`
   — never guessed.
 
 Actual tax rates and slab logic are out of scope for this classification step; it labels
 STCG/LTCG/UNCLASSIFIED only.
 
+### 3.2a Equity LTCG grandfathering (shipped P1.2 — Section 112A 4th/5th proviso)
+For equity LTCG lines whose lot was purchased before `equity_grandfather_cutoff` (2018-01-31 by
+default), the cost of acquisition used to compute the *gain amount* (not the STCG/LTCG
+classification itself) is the higher of (a) actual cost and (b) the lower of (i) the scheme's FMV
+as of the cutoff date and (ii) the sale price — reading FMV straight from `nav_history`, which
+P0.2 already backfills a scheme's *full* history into, not just from its first purchase, so no new
+data source was needed. If a lot predates the cutoff but `nav_history` has no row on/before it (a
+backfill gap), grandfathering is **not silently skipped in the tax-favorable direction** — the
+line is flagged `grandfathering_note="grandfathering_data_unavailable"` and falls back to actual
+cost, the conservative (higher-taxable-gain) direction when the true FMV can't be determined.
+Real-data check: 44 and 29 lines (FY2023-24 and FY2024-25 respectively) were actually
+grandfathering-eligible in the user's real portfolio, and FMV was available for all of them — 0
+`grandfathering_data_unavailable` flags.
+
 ### 3.3 Capital gains report (FR-10.2 — `compute/capital_gains.py`, `reports/capital_gains_csv.py`)
 `get_capital_gains_report(session, fy_label)` joins `RealizedGain` (filtered to `sale_date` within
-the FY) with `RawTransaction` (scheme identity) and `SchemeMetadata` (tax classification), scheme-
-and lot-wise. `gain_paise` is **derived** as `sale_value_paise − cost_of_acquisition_paise` in the
-report layer rather than trusted verbatim from the FIFO ledger's independently-rounded
+the FY) with `RawTransaction` (scheme identity, PAN) and `SchemeMetadata` (tax classification),
+scheme- and lot-wise. `gain_paise` is **derived** as `sale_value_paise − cost_of_acquisition_paise`
+in the report layer rather than trusted verbatim from the FIFO ledger's independently-rounded
 `realized_gain_paise`, guaranteeing `sale − cost == gain` holds exactly for every line (verified
-against 3 real financial years of the user's actual redemption history — held for all 384 lines
-across FY2023-24/2024-25/2025-26). Exposed via `GET /reports/capital-gains` (JSON) and
-`GET /reports/capital-gains.csv` (Schedule-112A-adjacent CSV export), both scoped by `?fy=`.
+against 3 real financial years of the user's actual redemption history). Exposed via
+`GET /reports/capital-gains` (JSON) and `GET /reports/capital-gains.csv` (Schedule-112A-adjacent
+CSV export, now including PAN, grandfathering, and exemption columns), both scoped by `?fy=`.
 
-### 3.4 Exemption tracking — **not yet built (P1)**
-Planned: `ltcg_exemption_used_this_fy` computed across all lots realized in the FY, per PAN
-(PRD §12.2 — tax math never crosses PAN boundaries), ordered by `sale_date`, consuming the ₹1.25L
-headroom first-realized-first-consumed. Would feed both the capital-gains report (§3.3) and the
-harvesting action-plan generator (FR-6.3).
+### 3.4 Exemption tracking (shipped P1.2)
+`ltcg_exemption_used_this_fy` is computed across all equity-LTCG lines realized in the FY, **per
+PAN** (PRD §12.2 — tax math never crosses PAN boundaries; the sale transaction's own `pan` field
+scopes each line), ordered by `sale_date`, consuming the `equity_ltcg_exemption_paise_per_fy`
+headroom (₹1.25L by default) first-realized-first-consumed. A line with a gain but no PAN on its
+transaction can't be scoped to any PAN's headroom — flagged
+`exemption_note="no_pan_on_transaction"` and treated as fully taxable (the conservative direction)
+rather than guessed into some PAN's bucket; losses (`gain_paise <= 0`) never consume headroom.
+Real-data check: per-PAN headroom was never exceeded across all 3 FYs checked, and
+`taxable_gain_paise == gain_paise - ltcg_exemption_consumed_paise` held for every line. Feeds the
+capital-gains report (§3.3); the harvesting action-plan generator (FR-6.3) is still unbuilt.
+
+### 3.4a Assumption registry (PRD §5.7, shipped P1.2 — `fundlens/assumptions/`)
+Tax thresholds and the exemption limit are versioned, editable config (`AssumptionVersion` +
+`Assumption` tables, data-model.md), not code constants. Exactly one version is `is_current` at a
+time; `assumptions/service.py::create_version()` clones the current version's values, applies
+overrides, and flips the current flag — it never mutates an existing version, so a report generated
+under one version stays reproducible after the user edits an assumption later (the
+`report.assumption_version_id` field this was built to support, data-model.md `report`). Exposed
+via `GET /assumptions/current`, `GET /assumptions/versions`, `POST /assumptions`. Only the values
+the tax engine actually reads are seeded (`equity_ltcg_threshold_days`,
+`debt_ltcg_threshold_days`, `debt_specified_fund_cutoff`, `equity_grandfather_cutoff`,
+`equity_ltcg_exemption_paise_per_fy`) — inflation % and expected-return assumptions the PRD also
+names belong to goal planning (P2+) and aren't added until something reads them.
 
 ### 3.5 SELL friction statement (FR-6.2) — **not yet built (P1)**
 For any proposed sell/switch, the tax engine computes:

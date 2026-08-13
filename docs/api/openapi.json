@@ -450,6 +450,93 @@
           }
         }
       }
+    },
+    "/assumptions/current": {
+      "get": {
+        "tags": [
+          "assumptions"
+        ],
+        "summary": "Current",
+        "operationId": "current_assumptions_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssumptionVersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assumptions/versions": {
+      "get": {
+        "tags": [
+          "assumptions"
+        ],
+        "summary": "Versions",
+        "operationId": "versions_assumptions_versions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AssumptionVersionResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Versions Assumptions Versions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assumptions": {
+      "post": {
+        "tags": [
+          "assumptions"
+        ],
+        "summary": "Create",
+        "operationId": "create_assumptions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAssumptionVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssumptionVersionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -476,6 +563,42 @@
           "cost_basis_paise"
         ],
         "title": "AmcHoldingResponse"
+      },
+      "AssumptionVersionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "created_at",
+          "is_current",
+          "values"
+        ],
+        "title": "AssumptionVersionResponse"
       },
       "BenchmarkComparisonResponse": {
         "properties": {
@@ -653,6 +776,17 @@
             "type": "string",
             "title": "Folio"
           },
+          "pan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pan"
+          },
           "scheme_name": {
             "type": "string",
             "title": "Scheme Name"
@@ -721,11 +855,46 @@
           "gain_type": {
             "type": "string",
             "title": "Gain Type"
+          },
+          "grandfathering_applied": {
+            "type": "boolean",
+            "title": "Grandfathering Applied"
+          },
+          "grandfathering_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grandfathering Note"
+          },
+          "ltcg_exemption_consumed_paise": {
+            "type": "integer",
+            "title": "Ltcg Exemption Consumed Paise"
+          },
+          "taxable_gain_paise": {
+            "type": "integer",
+            "title": "Taxable Gain Paise"
+          },
+          "exemption_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exemption Note"
           }
         },
         "type": "object",
         "required": [
           "folio",
+          "pan",
           "scheme_name",
           "isin",
           "amfi_code",
@@ -737,7 +906,12 @@
           "sale_value_paise",
           "cost_of_acquisition_paise",
           "gain_paise",
-          "gain_type"
+          "gain_type",
+          "grandfathering_applied",
+          "grandfathering_note",
+          "ltcg_exemption_consumed_paise",
+          "taxable_gain_paise",
+          "exemption_note"
         ],
         "title": "CapitalGainsLineResponse"
       },
@@ -766,6 +940,14 @@
             "type": "integer",
             "title": "Total Unclassified Paise"
           },
+          "total_taxable_gain_paise": {
+            "type": "integer",
+            "title": "Total Taxable Gain Paise"
+          },
+          "total_ltcg_exemption_used_paise": {
+            "type": "integer",
+            "title": "Total Ltcg Exemption Used Paise"
+          },
           "schemes_missing_metadata": {
             "type": "integer",
             "title": "Schemes Missing Metadata"
@@ -778,9 +960,32 @@
           "total_stcg_paise",
           "total_ltcg_paise",
           "total_unclassified_paise",
+          "total_taxable_gain_paise",
+          "total_ltcg_exemption_used_paise",
           "schemes_missing_metadata"
         ],
         "title": "CapitalGainsReportResponse"
+      },
+      "CreateAssumptionVersionRequest": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Overrides",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "CreateAssumptionVersionRequest"
       },
       "DataFreshnessResponse": {
         "properties": {

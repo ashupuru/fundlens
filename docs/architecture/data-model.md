@@ -244,11 +244,22 @@ remains display-only and does not imply a shared profile.
 Name, target amount, inflation assumption (fk → `assumption`), target date, tagged holdings
 (many-to-many across PANs — corpus math is MF-only and cross-PAN per PRD §12.1/§8.1).
 
-### `assumption`
-Named, versioned config values: inflation %, expected-return-by-risk-profile, LTCG exemption
-limit, STCG/LTCG rates and holding-period thresholds, exit-load schedules. Every report
-(`report.assumption_version_id`) pins the assumption set it was generated with, so two reports
-generated months apart remain individually reproducible and comparable (PRD §5.7).
+### `assumption` / `assumption_version` — **infrastructure shipped P1.2, narrower than planned**
+Real shape (`db/models.py`): `assumption_version` (`id`, `label`, `created_at`, `is_current` —
+exactly one row `True` at a time) and `assumption` (`version_id, key` composite PK, `value` text,
+typed at the read site). `assumptions/service.py::create_version()` clones the current version's
+values, applies overrides, and flips `is_current` — never mutates an existing version, so two
+versions stay independently reproducible.
+
+Only the keys the tax engine (§3 compute-engine.md) actually reads are seeded today:
+`equity_ltcg_threshold_days`, `debt_ltcg_threshold_days`, `debt_specified_fund_cutoff`,
+`equity_grandfather_cutoff`, `equity_ltcg_exemption_paise_per_fy`. Inflation %,
+expected-return-by-risk-profile, and exit-load schedules — all PRD §5.7-named — belong to goal
+planning and the recommendation engine (P1.3/P2) and aren't added until something reads them; an
+untyped, unread assumption key is dead config. The `report`/`goal`/`verdict` tables below that
+would reference `assumption_version_id` are themselves not yet built (see their own sections) —
+today only the compute layer reads `get_current_tax_assumptions()` directly, there's no persisted
+report row pinning a version yet.
 
 ### `verdict`
 Per-fund Hold/Sell/Switch output: rubric component scores (each traceable to its metric), overall
