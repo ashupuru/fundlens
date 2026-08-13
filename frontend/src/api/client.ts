@@ -35,6 +35,33 @@ export async function getPortfolioMetrics(): Promise<PortfolioMetricsResponse> {
   return response.json() as Promise<PortfolioMetricsResponse>;
 }
 
+type CategoryBreakdownResponse =
+  operations["breakdown_portfolio_breakdown_get"]["responses"][200]["content"]["application/json"];
+
+export async function getCategoryBreakdown(
+  level: "category" | "sub_category",
+): Promise<CategoryBreakdownResponse> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/breakdown?level=${level}`);
+  if (!response.ok) {
+    throw new Error(`Category breakdown failed: ${response.status}`);
+  }
+  return response.json() as Promise<CategoryBreakdownResponse>;
+}
+
+type AllocationDriftResponse =
+  operations["drift_allocation_drift_get"]["responses"][200]["content"]["application/json"];
+
+export async function getAllocationDrift(): Promise<AllocationDriftResponse | null> {
+  const response = await fetch(`${API_BASE_URL}/allocation/drift`);
+  if (response.status === 404) {
+    return null; // no risk profile set yet -- an expected state, not an error
+  }
+  if (!response.ok) {
+    throw new Error(`Allocation drift failed: ${response.status}`);
+  }
+  return response.json() as Promise<AllocationDriftResponse>;
+}
+
 type PortfolioBenchmarkComparisonResponse =
   operations["portfolio_comparison_benchmarks_comparison_portfolio_get"]["responses"][200]["content"]["application/json"];
 

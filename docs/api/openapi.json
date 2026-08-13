@@ -392,6 +392,57 @@
         }
       }
     },
+    "/portfolio/breakdown": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Breakdown",
+        "operationId": "breakdown_portfolio_breakdown_get",
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "category",
+                "sub_category"
+              ],
+              "type": "string",
+              "default": "category",
+              "title": "Level"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryBreakdownItemResponse"
+                  },
+                  "title": "Response Breakdown Portfolio Breakdown Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reports/capital-gains": {
       "get": {
         "tags": [
@@ -1399,6 +1450,58 @@
           "schemes_missing_metadata"
         ],
         "title": "CapitalGainsReportResponse"
+      },
+      "CategoryBreakdownItemResponse": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "current_value_paise": {
+            "type": "integer",
+            "title": "Current Value Paise"
+          },
+          "allocation_pct": {
+            "type": "number",
+            "title": "Allocation Pct"
+          },
+          "xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr"
+          },
+          "xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr Reason"
+          },
+          "fund_count": {
+            "type": "integer",
+            "title": "Fund Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "current_value_paise",
+          "allocation_pct",
+          "xirr",
+          "xirr_reason",
+          "fund_count"
+        ],
+        "title": "CategoryBreakdownItemResponse"
       },
       "CreateAssumptionVersionRequest": {
         "properties": {
