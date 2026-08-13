@@ -318,12 +318,35 @@ it's mechanical and high-value — no rubric judgment involved, just a lookup an
 
 ## 7. Allocation & Drift
 
-Actual allocation computed by summing current lot value grouped by
-`scheme_metadata.category`-derived buckets (equity/debt/gold/international, and
-large/mid/small within equity). Compared against the active `risk_profile`'s target bands;
-drift = actual% − target%. FR-7.2's "prefer directing new SIP money over selling" is implemented
-as a rebalancing suggestion that solves for the *next N months' SIP allocation* that closes the
-drift gap without generating a sell (a small LP/greedy allocation, not a rubric score).
+**Shipped in P1.4** (`fundlens/allocation/`, `compute/allocation.py`). Actual allocation is
+**current market value**, not cost basis — priced from each currently-open holding's latest
+available NAV (compute/metrics.py `latest_nav`), grouped by `SchemeMetadata.tax_asset_class`:
+EQUITY / DEBT, with everything else (`NEEDS_REVIEW`-classified schemes, or schemes entirely
+missing `scheme_metadata`) bucketed as "other" and reported separately — the PRD's persona table
+(§3) only defines an equity:debt target ratio, so "other" has no target to drift against and isn't
+silently folded into either side. A holding with no NAV data is excluded from the percentage
+totals and counted separately (`value_unavailable_paise`), never substituted with cost basis or
+zero, either of which would misstate the drift numbers.
+
+`equity_drift_pct` / `debt_drift_pct` = actual% − target%, compared against the active
+`risk_profile`'s target bands (persona presets below, or explicit values for `custom`). Equity
+holdings get a further cap-size breakdown (large/mid/small/large-and-mid/other, via the same
+`tax/asset_class.py::equity_cap_size` the P1.1 benchmark engine uses for category-default
+selection) as **informational detail only** — no persona in the PRD defines large/mid/small
+sub-targets, so this breakdown is reported, never drift-scored against an invented target, unlike
+the originally-planned design here which implied a large/mid/small target existed.
+
+Persona presets (PRD §3, `allocation/service.py::PERSONA_TARGETS`): Conservative 30:70,
+Balanced 60:40, Aggressive 80:20, Custom user-defined. The risk profile itself is a **single,
+app-wide singleton** today, not per-PAN as data-model.md originally planned — same reasoning as
+the P1.1 benchmark engine's portfolio-level comparison (§4): the app has no multi-PAN concept
+anywhere else yet, so a partial per-PAN implementation here would be inconsistent with the rest of
+the app. Real-data check: actual/target percentages summed to exactly 100% and the equity cap
+breakdown reconciled exactly to the equity total on the user's real 13-holding portfolio.
+
+FR-7.2's "prefer directing new SIP money over selling" (a rebalancing suggestion that solves for
+the *next N months' SIP allocation* that closes the drift gap without generating a sell) is **not
+yet built**.
 
 ## 8. Alternatives Engine (FR-9.1)
 

@@ -11,7 +11,7 @@ exists yet.
 """
 
 from fundlens.db.models import BenchmarkId
-from fundlens.tax.asset_class import TaxAssetClass
+from fundlens.tax.asset_class import EquityCapSize, TaxAssetClass, equity_cap_size
 
 
 def default_benchmark_for_category(
@@ -20,13 +20,11 @@ def default_benchmark_for_category(
     if tax_asset_class != TaxAssetClass.EQUITY:
         return None
 
-    normalized = category_raw.strip().lower()
-    if "mid cap" in normalized and "large" not in normalized:
+    cap_size = equity_cap_size(category_raw)
+    if cap_size == EquityCapSize.MID:
         return BenchmarkId.NIFTY_MIDCAP150_TRI
-    if "small cap" in normalized:
+    if cap_size == EquityCapSize.SMALL:
         return BenchmarkId.NIFTY_SMALLCAP250_TRI
-    # Large Cap, Large & Mid Cap, Flexi/Multi Cap, ELSS, Focused, Value,
-    # Contra, Dividend Yield, Sectoral/Thematic, and any other equity
-    # category without a crisper cap-size match: PRD §12.3's universal
-    # portfolio-level default.
+    # LARGE, LARGE_AND_MID, OTHER: PRD §12.3's universal portfolio-level
+    # default — no crisper single-cap index fits any of these.
     return BenchmarkId.NIFTY50_TRI

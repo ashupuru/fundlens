@@ -230,15 +230,20 @@ Memoization table: key = `sha256(entity_type, entity_id, txn_set_hash, nav_asof_
 recomputing XIRR for every fund on every page load; invalidated automatically when the hash
 changes (new transaction or new NAV), which is what delivers the <5s incremental-update NFR.
 
-### `risk_profile`
-Persona (`conservative` \| `balanced` \| `aggressive` \| `custom`), target allocation bands
-(equity/debt/gold/international; large/mid/small within equity), onboarding questionnaire
-answers. **Resolved: one risk profile per PAN**, consistent with PAN being the tax and portfolio
-boundary everywhere else in this model (PRD §12.2) — allocation drift, goal feasibility, and
-recommendation tone can legitimately differ across a household's PANs (e.g. a parent's PAN nearer
-retirement vs a working-age spouse's). Onboarding offers a "copy to all PANs" convenience action,
-but each PAN's profile is independently editable afterward. The household rollup view (§12.2)
-remains display-only and does not imply a shared profile.
+### `risk_profile` — **shipped P1.4, single app-wide singleton, not per-PAN**
+Real shape (`db/models.py`): fixed `id=1` row, `persona` (`conservative` \| `balanced` \|
+`aggressive` \| `custom`), `target_equity_pct`/`target_debt_pct` (persona presets, or explicit
+values for `custom`), and onboarding questionnaire answers (`horizon_years`,
+`drawdown_tolerance`, `income_stability`, `has_dependents`). No `gold`/`international` bands or
+large/mid/small sub-targets — the PRD's persona table (§3) only ever defines an equity:debt ratio,
+so only that axis has a real target; equity's cap-size mix is reported (compute-engine.md §7) but
+never drift-scored against a value nothing in the PRD actually specifies.
+
+**Originally planned as one-per-PAN** (PRD §12.2's PAN-boundary consistency) but shipped as a
+single singleton instead: the app has no multi-PAN concept anywhere else yet (same call made for
+the P1.1 benchmark engine's portfolio-level comparison, compute-engine.md §4) — a partial
+per-PAN `risk_profile` would be inconsistent with every other PAN-touching feature in the app
+still being PAN-agnostic. Revisit together whenever multi-PAN support actually gets built.
 
 ### `goal`
 Name, target amount, inflation assumption (fk → `assumption`), target date, tagged holdings
@@ -280,7 +285,7 @@ Scheme *──* nav_history
 Benchmark *──* benchmark_history
 NavSource 1──1 data_freshness
 
-PAN 1──1 risk_profile
+risk_profile (app-wide singleton — not PAN-scoped, see its own section)
 PAN *──* Goal *──* Folio (via tagged holdings)
 
 Verdict *──1 Scheme, *──1 PAN, *──1 assumption (version)

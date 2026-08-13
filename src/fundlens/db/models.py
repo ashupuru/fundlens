@@ -306,3 +306,35 @@ class Assumption(Base):
     )
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[str] = mapped_column(String(255))
+
+
+class Persona(enum.StrEnum):
+    CONSERVATIVE = "conservative"
+    BALANCED = "balanced"
+    AGGRESSIVE = "aggressive"
+    CUSTOM = "custom"
+
+
+class RiskProfile(Base):
+    """PRD §3: persona-driven target allocation + onboarding questionnaire
+    answers. Singleton (fixed `id=1`) — the app has no multi-PAN concept
+    yet (same reasoning as the P1.1 benchmark engine's portfolio-level
+    comparison, compute-engine.md §4), so data-model.md's originally-planned
+    one-per-PAN design is deferred until multi-PAN support exists anywhere
+    else in the app. Current state, not a time series — set once at
+    onboarding, editable after, no history kept.
+    """
+
+    __tablename__ = "risk_profile"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    persona: Mapped[Persona] = mapped_column(Enum(Persona))
+    target_equity_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    target_debt_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    horizon_years: Mapped[int | None] = mapped_column(Integer)
+    drawdown_tolerance: Mapped[str | None] = mapped_column(String(20))
+    income_stability: Mapped[str | None] = mapped_column(String(20))
+    has_dependents: Mapped[bool | None] = mapped_column(Boolean)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )

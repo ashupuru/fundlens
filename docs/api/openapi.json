@@ -537,10 +537,216 @@
           }
         }
       }
+    },
+    "/risk-profile": {
+      "get": {
+        "tags": [
+          "allocation"
+        ],
+        "summary": "Risk Profile",
+        "operationId": "risk_profile_risk_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/RiskProfileResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Risk Profile Risk Profile Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "allocation"
+        ],
+        "summary": "Set Profile",
+        "operationId": "set_profile_risk_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRiskProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/allocation/drift": {
+      "get": {
+        "tags": [
+          "allocation"
+        ],
+        "summary": "Drift",
+        "operationId": "drift_allocation_drift_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationDriftResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AllocationDriftResponse": {
+        "properties": {
+          "persona": {
+            "type": "string",
+            "title": "Persona"
+          },
+          "target_equity_pct": {
+            "type": "number",
+            "title": "Target Equity Pct"
+          },
+          "target_debt_pct": {
+            "type": "number",
+            "title": "Target Debt Pct"
+          },
+          "actual_equity_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Equity Pct"
+          },
+          "actual_debt_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Debt Pct"
+          },
+          "actual_other_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Other Pct"
+          },
+          "equity_drift_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equity Drift Pct"
+          },
+          "debt_drift_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Debt Drift Pct"
+          },
+          "priced_portfolio_value_paise": {
+            "type": "integer",
+            "title": "Priced Portfolio Value Paise"
+          },
+          "equity_value_paise": {
+            "type": "integer",
+            "title": "Equity Value Paise"
+          },
+          "debt_value_paise": {
+            "type": "integer",
+            "title": "Debt Value Paise"
+          },
+          "other_value_paise": {
+            "type": "integer",
+            "title": "Other Value Paise"
+          },
+          "value_unavailable_paise": {
+            "type": "integer",
+            "title": "Value Unavailable Paise"
+          },
+          "equity_cap_breakdown": {
+            "$ref": "#/components/schemas/EquityCapBreakdownResponse"
+          },
+          "schemes_missing_metadata": {
+            "type": "integer",
+            "title": "Schemes Missing Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "persona",
+          "target_equity_pct",
+          "target_debt_pct",
+          "actual_equity_pct",
+          "actual_debt_pct",
+          "actual_other_pct",
+          "equity_drift_pct",
+          "debt_drift_pct",
+          "priced_portfolio_value_paise",
+          "equity_value_paise",
+          "debt_value_paise",
+          "other_value_paise",
+          "value_unavailable_paise",
+          "equity_cap_breakdown",
+          "schemes_missing_metadata"
+        ],
+        "title": "AllocationDriftResponse"
+      },
       "AmcHoldingResponse": {
         "properties": {
           "amc": {
@@ -1094,6 +1300,39 @@
         ],
         "title": "DataQualitySummaryResponse"
       },
+      "EquityCapBreakdownResponse": {
+        "properties": {
+          "large_paise": {
+            "type": "integer",
+            "title": "Large Paise"
+          },
+          "mid_paise": {
+            "type": "integer",
+            "title": "Mid Paise"
+          },
+          "small_paise": {
+            "type": "integer",
+            "title": "Small Paise"
+          },
+          "large_and_mid_paise": {
+            "type": "integer",
+            "title": "Large And Mid Paise"
+          },
+          "other_paise": {
+            "type": "integer",
+            "title": "Other Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "large_paise",
+          "mid_paise",
+          "small_paise",
+          "large_and_mid_paise",
+          "other_paise"
+        ],
+        "title": "EquityCapBreakdownResponse"
+      },
       "FailedXirrPositionResponse": {
         "properties": {
           "folio": {
@@ -1638,6 +1877,82 @@
         ],
         "title": "RefreshResponse"
       },
+      "RiskProfileResponse": {
+        "properties": {
+          "persona": {
+            "type": "string",
+            "title": "Persona"
+          },
+          "target_equity_pct": {
+            "type": "string",
+            "title": "Target Equity Pct"
+          },
+          "target_debt_pct": {
+            "type": "string",
+            "title": "Target Debt Pct"
+          },
+          "horizon_years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Years"
+          },
+          "drawdown_tolerance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawdown Tolerance"
+          },
+          "income_stability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Income Stability"
+          },
+          "has_dependents": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Dependents"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "persona",
+          "target_equity_pct",
+          "target_debt_pct",
+          "horizon_years",
+          "drawdown_tolerance",
+          "income_stability",
+          "has_dependents",
+          "updated_at"
+        ],
+        "title": "RiskProfileResponse"
+      },
       "SchemeRebuildErrorResponse": {
         "properties": {
           "folio": {
@@ -1660,6 +1975,85 @@
           "message"
         ],
         "title": "SchemeRebuildErrorResponse"
+      },
+      "SetRiskProfileRequest": {
+        "properties": {
+          "persona": {
+            "type": "string",
+            "title": "Persona"
+          },
+          "target_equity_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Equity Pct"
+          },
+          "target_debt_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Debt Pct"
+          },
+          "horizon_years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon Years"
+          },
+          "drawdown_tolerance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawdown Tolerance"
+          },
+          "income_stability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Income Stability"
+          },
+          "has_dependents": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Dependents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "persona"
+        ],
+        "title": "SetRiskProfileRequest"
       },
       "UnmatchedSchemeResponse": {
         "properties": {

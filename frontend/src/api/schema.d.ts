@@ -310,10 +310,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/risk-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Risk Profile */
+        get: operations["risk_profile_risk_profile_get"];
+        put?: never;
+        /** Set Profile */
+        post: operations["set_profile_risk_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/allocation/drift": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Drift */
+        get: operations["drift_allocation_drift_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AllocationDriftResponse */
+        AllocationDriftResponse: {
+            /** Persona */
+            persona: string;
+            /** Target Equity Pct */
+            target_equity_pct: number;
+            /** Target Debt Pct */
+            target_debt_pct: number;
+            /** Actual Equity Pct */
+            actual_equity_pct: number | null;
+            /** Actual Debt Pct */
+            actual_debt_pct: number | null;
+            /** Actual Other Pct */
+            actual_other_pct: number | null;
+            /** Equity Drift Pct */
+            equity_drift_pct: number | null;
+            /** Debt Drift Pct */
+            debt_drift_pct: number | null;
+            /** Priced Portfolio Value Paise */
+            priced_portfolio_value_paise: number;
+            /** Equity Value Paise */
+            equity_value_paise: number;
+            /** Debt Value Paise */
+            debt_value_paise: number;
+            /** Other Value Paise */
+            other_value_paise: number;
+            /** Value Unavailable Paise */
+            value_unavailable_paise: number;
+            equity_cap_breakdown: components["schemas"]["EquityCapBreakdownResponse"];
+            /** Schemes Missing Metadata */
+            schemes_missing_metadata: number;
+        };
         /** AmcHoldingResponse */
         AmcHoldingResponse: {
             /** Amc */
@@ -482,6 +549,19 @@ export interface components {
             /** Data Freshness */
             data_freshness: components["schemas"]["DataFreshnessResponse"][];
         };
+        /** EquityCapBreakdownResponse */
+        EquityCapBreakdownResponse: {
+            /** Large Paise */
+            large_paise: number;
+            /** Mid Paise */
+            mid_paise: number;
+            /** Small Paise */
+            small_paise: number;
+            /** Large And Mid Paise */
+            large_and_mid_paise: number;
+            /** Other Paise */
+            other_paise: number;
+        };
         /** FailedXirrPositionResponse */
         FailedXirrPositionResponse: {
             /** Folio */
@@ -642,6 +722,25 @@ export interface components {
             /** Amfi Error */
             amfi_error: string | null;
         };
+        /** RiskProfileResponse */
+        RiskProfileResponse: {
+            /** Persona */
+            persona: string;
+            /** Target Equity Pct */
+            target_equity_pct: string;
+            /** Target Debt Pct */
+            target_debt_pct: string;
+            /** Horizon Years */
+            horizon_years: number | null;
+            /** Drawdown Tolerance */
+            drawdown_tolerance: string | null;
+            /** Income Stability */
+            income_stability: string | null;
+            /** Has Dependents */
+            has_dependents: boolean | null;
+            /** Updated At */
+            updated_at: string;
+        };
         /** SchemeRebuildErrorResponse */
         SchemeRebuildErrorResponse: {
             /** Folio */
@@ -650,6 +749,23 @@ export interface components {
             scheme_key: string;
             /** Message */
             message: string;
+        };
+        /** SetRiskProfileRequest */
+        SetRiskProfileRequest: {
+            /** Persona */
+            persona: string;
+            /** Target Equity Pct */
+            target_equity_pct?: string | null;
+            /** Target Debt Pct */
+            target_debt_pct?: string | null;
+            /** Horizon Years */
+            horizon_years?: number | null;
+            /** Drawdown Tolerance */
+            drawdown_tolerance?: string | null;
+            /** Income Stability */
+            income_stability?: string | null;
+            /** Has Dependents */
+            has_dependents?: boolean | null;
         };
         /** UnmatchedSchemeResponse */
         UnmatchedSchemeResponse: {
@@ -1145,6 +1261,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    risk_profile_risk_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskProfileResponse"] | null;
+                };
+            };
+        };
+    };
+    set_profile_risk_profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRiskProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drift_allocation_drift_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AllocationDriftResponse"];
                 };
             };
         };
