@@ -259,6 +259,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assumptions/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["current_assumptions_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assumptions/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Versions */
+        get: operations["versions_assumptions_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assumptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create */
+        post: operations["create_assumptions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -271,6 +322,21 @@ export interface components {
             scheme_count: number;
             /** Cost Basis Paise */
             cost_basis_paise: number;
+        };
+        /** AssumptionVersionResponse */
+        AssumptionVersionResponse: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Created At */
+            created_at: string;
+            /** Is Current */
+            is_current: boolean;
+            /** Values */
+            values: {
+                [key: string]: string;
+            };
         };
         /** BenchmarkComparisonResponse */
         BenchmarkComparisonResponse: {
@@ -320,6 +386,8 @@ export interface components {
         CapitalGainsLineResponse: {
             /** Folio */
             folio: string;
+            /** Pan */
+            pan: string | null;
             /** Scheme Name */
             scheme_name: string;
             /** Isin */
@@ -344,6 +412,16 @@ export interface components {
             gain_paise: number;
             /** Gain Type */
             gain_type: string;
+            /** Grandfathering Applied */
+            grandfathering_applied: boolean;
+            /** Grandfathering Note */
+            grandfathering_note: string | null;
+            /** Ltcg Exemption Consumed Paise */
+            ltcg_exemption_consumed_paise: number;
+            /** Taxable Gain Paise */
+            taxable_gain_paise: number;
+            /** Exemption Note */
+            exemption_note: string | null;
         };
         /** CapitalGainsReportResponse */
         CapitalGainsReportResponse: {
@@ -357,8 +435,24 @@ export interface components {
             total_ltcg_paise: number;
             /** Total Unclassified Paise */
             total_unclassified_paise: number;
+            /** Total Taxable Gain Paise */
+            total_taxable_gain_paise: number;
+            /** Total Ltcg Exemption Used Paise */
+            total_ltcg_exemption_used_paise: number;
             /** Schemes Missing Metadata */
             schemes_missing_metadata: number;
+        };
+        /** CreateAssumptionVersionRequest */
+        CreateAssumptionVersionRequest: {
+            /** Label */
+            label: string;
+            /**
+             * Overrides
+             * @default {}
+             */
+            overrides: {
+                [key: string]: string;
+            };
         };
         /** DataFreshnessResponse */
         DataFreshnessResponse: {
@@ -969,6 +1063,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioBenchmarkComparisonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    current_assumptions_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssumptionVersionResponse"];
+                };
+            };
+        };
+    };
+    versions_assumptions_versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssumptionVersionResponse"][];
+                };
+            };
+        };
+    };
+    create_assumptions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAssumptionVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssumptionVersionResponse"];
                 };
             };
             /** @description Validation Error */

@@ -14,6 +14,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 class CapitalGainsLineResponse(BaseModel):
     folio: str
+    pan: str | None
     scheme_name: str
     isin: str | None
     amfi_code: str | None
@@ -26,6 +27,11 @@ class CapitalGainsLineResponse(BaseModel):
     cost_of_acquisition_paise: int
     gain_paise: int
     gain_type: str
+    grandfathering_applied: bool
+    grandfathering_note: str | None
+    ltcg_exemption_consumed_paise: int
+    taxable_gain_paise: int
+    exemption_note: str | None
 
 
 class CapitalGainsReportResponse(BaseModel):
@@ -34,6 +40,8 @@ class CapitalGainsReportResponse(BaseModel):
     total_stcg_paise: int
     total_ltcg_paise: int
     total_unclassified_paise: int
+    total_taxable_gain_paise: int
+    total_ltcg_exemption_used_paise: int
     schemes_missing_metadata: int
 
 
@@ -57,6 +65,7 @@ def capital_gains(
         lines=[
             CapitalGainsLineResponse(
                 folio=line.folio,
+                pan=line.pan,
                 scheme_name=line.scheme_name,
                 isin=line.isin,
                 amfi_code=line.amfi_code,
@@ -69,12 +78,19 @@ def capital_gains(
                 cost_of_acquisition_paise=line.cost_of_acquisition_paise,
                 gain_paise=line.gain_paise,
                 gain_type=line.gain_type.value,
+                grandfathering_applied=line.grandfathering_applied,
+                grandfathering_note=line.grandfathering_note,
+                ltcg_exemption_consumed_paise=line.ltcg_exemption_consumed_paise,
+                taxable_gain_paise=line.taxable_gain_paise,
+                exemption_note=line.exemption_note,
             )
             for line in report.lines
         ],
         total_stcg_paise=report.total_stcg_paise,
         total_ltcg_paise=report.total_ltcg_paise,
         total_unclassified_paise=report.total_unclassified_paise,
+        total_taxable_gain_paise=report.total_taxable_gain_paise,
+        total_ltcg_exemption_used_paise=report.total_ltcg_exemption_used_paise,
         schemes_missing_metadata=report.schemes_missing_metadata,
     )
 

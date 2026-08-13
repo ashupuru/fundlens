@@ -1,11 +1,8 @@
 """CSV export for the capital gains report (PRD FR-10.2).
 
 Structured close to ITR's Schedule 112A shape (scheme-wise, per-transaction
-gains) but not a literal field-for-field match: Schedule 112A specifically
-covers LTCG on equity with FMV-as-on-31-Jan-2018 grandfathering, which is
-explicitly P1 scope (compute/capital_gains.py's module docstring). This
-export covers STCG and LTCG for both equity and debt, without the
-grandfathered cost basis — labeled as a capital gains summary, not
+gains, PAN, grandfathered cost basis, exemption consumption) but not a
+literal field-for-field match — labeled as a capital gains summary, not
 represented as a ready-to-file Schedule 112A form.
 """
 
@@ -16,6 +13,7 @@ from fundlens.compute.capital_gains import CapitalGainsReport
 
 _HEADER = [
     "Folio",
+    "PAN",
     "Scheme Name",
     "ISIN",
     "AMFI Code",
@@ -28,6 +26,9 @@ _HEADER = [
     "Cost of Acquisition (Rs.)",
     "Gain (Rs.)",
     "Gain Type",
+    "Grandfathering Applied",
+    "LTCG Exemption Consumed (Rs.)",
+    "Taxable Gain (Rs.)",
 ]
 
 
@@ -45,6 +46,7 @@ def render_capital_gains_csv(report: CapitalGainsReport) -> str:
         writer.writerow(
             [
                 line.folio,
+                line.pan or "",
                 line.scheme_name,
                 line.isin or "",
                 line.amfi_code or "",
@@ -57,6 +59,9 @@ def render_capital_gains_csv(report: CapitalGainsReport) -> str:
                 _paise_to_rupees_str(line.cost_of_acquisition_paise),
                 _paise_to_rupees_str(line.gain_paise),
                 line.gain_type.value,
+                "yes" if line.grandfathering_applied else "no",
+                _paise_to_rupees_str(line.ltcg_exemption_consumed_paise),
+                _paise_to_rupees_str(line.taxable_gain_paise),
             ]
         )
 
@@ -68,5 +73,7 @@ def render_capital_gains_csv(report: CapitalGainsReport) -> str:
     writer.writerow(_total_row("Total STCG", report.total_stcg_paise))
     writer.writerow(_total_row("Total LTCG", report.total_ltcg_paise))
     writer.writerow(_total_row("Total Unclassified", report.total_unclassified_paise))
+    writer.writerow(_total_row("Total LTCG Exemption Used", report.total_ltcg_exemption_used_paise))
+    writer.writerow(_total_row("Total Taxable Gain", report.total_taxable_gain_paise))
 
     return buffer.getvalue()

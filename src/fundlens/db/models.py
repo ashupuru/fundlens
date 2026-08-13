@@ -268,3 +268,41 @@ class RealizedGain(Base):
     sale_price_per_unit: Mapped[Decimal] = mapped_column(Numeric(20, 4))
     realized_gain_paise: Mapped[int] = mapped_column(Integer)
     holding_period_days: Mapped[int] = mapped_column(Integer)
+
+
+class AssumptionVersion(Base):
+    """PRD §5.7: tax thresholds, exemption limits, etc. as versioned,
+    editable config rather than code constants — a report generated under
+    one version stays reproducible even after the user edits an assumption
+    later (report.assumption_version_id, data-model.md `report`).
+
+    Exactly one row has `is_current=True` at a time — the version new
+    reports use unless a specific historical version is requested.
+    Creating a new version never mutates an existing one (assumption/service.py
+    clones the current version's values, applies overrides, and flips the
+    `is_current` flag) — old versions stay byte-for-byte reproducible.
+    """
+
+    __tablename__ = "assumption_version"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    label: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Assumption(Base):
+    """One (key, value) row per assumption per version. `value` is always
+    text — typed parsing happens at the read site (assumption/service.py),
+    since the set of keys/types is small and known, not worth a polymorphic
+    column scheme for a single-user local app."""
+
+    __tablename__ = "assumption"
+
+    version_id: Mapped[str] = mapped_column(
+        ForeignKey("assumption_version.id"), primary_key=True
+    )
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(String(255))
