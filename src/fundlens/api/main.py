@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,12 +16,19 @@ from fundlens.api.routers import (
     reports,
     verdict,
 )
+from fundlens.db.migrate import run_migrations
 from fundlens.settings import get_settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    run_migrations()
+    yield
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="FundLens API")
+    app = FastAPI(title="FundLens API", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
