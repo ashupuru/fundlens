@@ -1,4 +1,4 @@
-import type { operations } from "./schema";
+import type { components, operations } from "./schema";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -81,43 +81,53 @@ export async function getDirectVsRegularAudit(): Promise<DirectVsRegularAuditRes
 
 async function detailOrStatus(response: Response): Promise<string> {
   try {
-    const body: unknown = await response.json();
-    if (body && typeof body === "object" && "detail" in body) {
-      const detail = (body as { detail: unknown }).detail;
-      if (typeof detail === "string") return detail;
-    }
+    const body = (await response.json()) as { detail?: string };
+    if (body.detail) return body.detail;
   } catch {
-    // response body wasn't JSON — fall through to the status-based message
+    // response body wasn't JSON -- fall through to the status code
   }
-  return `request failed: ${response.status}`;
+  return `HTTP ${response.status}`;
 }
 
-export interface DezervMatchCandidate {
-  amfi_code: string;
-  scheme_name: string;
-  isin: string | null;
-  score: number;
+type IngestResponse =
+  operations["ingest_cas_ingest_cas_post"]["responses"][200]["content"]["application/json"];
+
+export async function postIngestCas(file: File, password: string): Promise<IngestResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("password", password);
+  const response = await fetch(`${API_BASE_URL}/ingest/cas`, { method: "POST", body: formData });
+  if (!response.ok) {
+    throw new Error(`Failed to ingest CAS: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<IngestResponse>;
 }
 
-export interface DezervSchemePreview {
-  security_name: string;
-  symbol_code: string;
-  txn_count: number;
-  matched_amfi_code: string | null;
-  matched_scheme_name: string | null;
-  matched_isin: string | null;
-  match_score: number | null;
-  reason: string | null;
-  suggestions: DezervMatchCandidate[];
+export async function postIngestCsv(file: File): Promise<IngestResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/ingest/csv`, { method: "POST", body: formData });
+  if (!response.ok) {
+    throw new Error(`Failed to ingest CSV: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<IngestResponse>;
 }
 
-export interface DezervPreview {
-  schemes: DezervSchemePreview[];
-  unrecognized_transaction_descriptions: string[];
-  total_mfdemat_rows: number;
-  date_range_start: string | null;
-  date_range_end: string | null;
+type RebuildResponse =
+  operations["rebuild_lots_portfolio_rebuild_lots_post"]["responses"][200]["content"]["application/json"];
+
+export async function postRebuildLots(): Promise<RebuildResponse> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/rebuild-lots`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Failed to rebuild lots: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RebuildResponse>;
 }
+
+export type DezervPreview = components["schemas"]["DezervPreviewResponse"];
+export type DezervSchemePreview = components["schemas"]["DezervSchemePreviewResponse"];
+export type DezervMatchCandidate = components["schemas"]["MatchCandidateResponse"];
+export type DezervCommitResult = components["schemas"]["DezervCommitResponse"];
 
 export async function postDezervPreview(file: File): Promise<DezervPreview> {
   const formData = new FormData();
@@ -130,14 +140,6 @@ export async function postDezervPreview(file: File): Promise<DezervPreview> {
     throw new Error(`Dezerv preview failed: ${await detailOrStatus(response)}`);
   }
   return response.json() as Promise<DezervPreview>;
-}
-
-export interface DezervCommitResult {
-  upload_id: string;
-  inserted_count: number;
-  duplicate_count: number;
-  skipped_count: number;
-  skipped_reasons: Record<string, number>;
 }
 
 export async function postDezervCommit(
@@ -155,26 +157,4 @@ export async function postDezervCommit(
     throw new Error(`Dezerv commit failed: ${await detailOrStatus(response)}`);
   }
   return response.json() as Promise<DezervCommitResult>;
-}
-
-export interface SchemeRebuildError {
-  folio: string;
-  scheme_key: string;
-  message: string;
-}
-
-export interface RebuildLotsResult {
-  folios_processed: number;
-  schemes_processed: number;
-  lots_created: number;
-  realized_gains_created: number;
-  errors: SchemeRebuildError[];
-}
-
-export async function postRebuildLots(): Promise<RebuildLotsResult> {
-  const response = await fetch(`${API_BASE_URL}/portfolio/rebuild-lots`, { method: "POST" });
-  if (!response.ok) {
-    throw new Error(`Rebuild lots failed: ${await detailOrStatus(response)}`);
-  }
-  return response.json() as Promise<RebuildLotsResult>;
 }

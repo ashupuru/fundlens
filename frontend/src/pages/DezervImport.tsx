@@ -5,8 +5,10 @@ import {
   postRebuildLots,
   type DezervCommitResult,
   type DezervPreview,
-  type RebuildLotsResult,
 } from "../api/client";
+import type { components } from "../api/schema";
+
+type RebuildLotsResult = components["schemas"]["RebuildResponse"];
 
 type Mapping = Record<string, string>; // security_name -> amfi_code, "" means skip
 
