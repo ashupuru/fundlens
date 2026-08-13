@@ -407,7 +407,8 @@
             "schema": {
               "enum": [
                 "category",
-                "sub_category"
+                "sub_category",
+                "amc"
               ],
               "type": "string",
               "default": "category",
@@ -436,6 +437,31 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/value-history": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Value History",
+        "operationId": "value_history_portfolio_value_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ValuePointResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Value History Portfolio Value History Get"
                 }
               }
             }
@@ -3435,6 +3461,34 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ValuePointResponse": {
+        "properties": {
+          "as_of_date": {
+            "type": "string",
+            "title": "As Of Date"
+          },
+          "value_paise": {
+            "type": "integer",
+            "title": "Value Paise"
+          },
+          "invested_paise": {
+            "type": "integer",
+            "title": "Invested Paise"
+          },
+          "positions_missing_nav": {
+            "type": "integer",
+            "title": "Positions Missing Nav"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of_date",
+          "value_paise",
+          "invested_paise",
+          "positions_missing_nav"
+        ],
+        "title": "ValuePointResponse"
       },
       "VerdictResponse": {
         "properties": {

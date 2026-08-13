@@ -48,6 +48,7 @@ opposite on (about) the same date, so they net to ~zero automatically once
 aggregated — no special inter-fund netting logic needed.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -429,49 +430,25 @@ class CategoryGroupMetrics:
     fund_count: int
 
 
-def compute_category_breakdown(
-    session: Session, level: Literal["category", "sub_category"]
+def _compute_grouped_breakdown(
+    session: Session,
+    holdings: list[HoldingView],
+    label_for: Callable[[HoldingView], str],
 ) -> list[CategoryGroupMetrics]:
-    """Groups currently-open positions by Groww's fund category or
-    sub-category (market_data/groww_service.py's groww_fund_metadata),
-    blending each group's cash flows into one XIRR the same way
-    compute_portfolio_metrics/compute_fund_metrics do (concatenate, call
-    compute_xirr once) -- a new grouping key over the same pattern, not
-    new math.
-
-    Scoped to currently-open positions only (get_current_holdings()),
-    deliberately excluding fully-exited ones -- same reasoning as the
-    Funds-page consistency fix: allocation % is inherently a snapshot of
-    what's held *now*, so blending in an exited position's historical
-    cash flows would conflate "how is my current Equity slice doing"
-    with "how did that Equity fund I already sold do".
-
-    A position whose scheme has no amfi_code, or an amfi_code Groww's
-    screener doesn't cover, lands in "Uncategorized" -- real-data-verified
-    coverage gap (data-model.md's groww_fund_metadata section), never
-    dropped silently.
-    """
-    holdings = get_current_holdings(session)
-    if not holdings:
-        return []
-
-    amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
-    metadata_by_code = {
-        m.amfi_code: m
-        for m in session.scalars(
-            select(GrowwFundMetadata).where(GrowwFundMetadata.amfi_code.in_(amfi_codes))
-        )
-    }
-
+    """Shared shape behind compute_category_breakdown and
+    compute_amc_breakdown: bucket currently-open positions by whatever
+    label_for extracts, blend each bucket's cash flows into one XIRR the
+    same way compute_portfolio_metrics/compute_fund_metrics do (concatenate,
+    call compute_xirr once), and report each bucket's current value as a
+    percentage of the whole. The grouping key is the only thing that
+    differs between callers -- not new math."""
     positions = {(h.folio, h.scheme_key) for h in holdings}
     open_holdings = {(h.folio, h.scheme_key): h for h in holdings}
     txns_by_position = positions_with_transactions(session, positions)
 
     members_by_label: dict[str, list[tuple[str, str]]] = {}
     for h in holdings:
-        metadata = metadata_by_code.get(h.amfi_code) if h.amfi_code else None
-        label = getattr(metadata, level) if metadata is not None else None
-        members_by_label.setdefault(label or "Uncategorized", []).append((h.folio, h.scheme_key))
+        members_by_label.setdefault(label_for(h), []).append((h.folio, h.scheme_key))
 
     value_by_label: dict[str, int] = {}
     xirr_by_label: dict[str, tuple[float | None, str | None]] = {}
@@ -506,3 +483,53 @@ def compute_category_breakdown(
     ]
 
     return sorted(results, key=lambda r: r.current_value_paise, reverse=True)
+
+
+def compute_category_breakdown(
+    session: Session, level: Literal["category", "sub_category"]
+) -> list[CategoryGroupMetrics]:
+    """Groups currently-open positions by Groww's fund category or
+    sub-category (market_data/groww_service.py's groww_fund_metadata).
+
+    Scoped to currently-open positions only (get_current_holdings()),
+    deliberately excluding fully-exited ones -- same reasoning as the
+    Funds-page consistency fix: allocation % is inherently a snapshot of
+    what's held *now*, so blending in an exited position's historical
+    cash flows would conflate "how is my current Equity slice doing"
+    with "how did that Equity fund I already sold do".
+
+    A position whose scheme has no amfi_code, or an amfi_code Groww's
+    screener doesn't cover, lands in "Uncategorized" -- real-data-verified
+    coverage gap (data-model.md's groww_fund_metadata section), never
+    dropped silently.
+    """
+    holdings = get_current_holdings(session)
+    if not holdings:
+        return []
+
+    amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
+    metadata_by_code = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(GrowwFundMetadata).where(GrowwFundMetadata.amfi_code.in_(amfi_codes))
+        )
+    }
+
+    def label_for(h: HoldingView) -> str:
+        metadata = metadata_by_code.get(h.amfi_code) if h.amfi_code else None
+        label = getattr(metadata, level) if metadata is not None else None
+        return label or "Uncategorized"
+
+    return _compute_grouped_breakdown(session, holdings, label_for)
+
+
+def compute_amc_breakdown(session: Session) -> list[CategoryGroupMetrics]:
+    """Same shape as compute_category_breakdown, grouped by AMC (fund
+    house) instead of Groww category -- every holding always has an amc
+    (RawTransaction.amc is non-nullable), so no "Uncategorized" bucket is
+    needed here."""
+    holdings = get_current_holdings(session)
+    if not holdings:
+        return []
+
+    return _compute_grouped_breakdown(session, holdings, label_for=lambda h: h.amc)

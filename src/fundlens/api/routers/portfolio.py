@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from fundlens.api.deps import get_session
 from fundlens.compute import metrics, service
 from fundlens.compute.holdings import get_current_holdings, get_holdings_by_amc
+from fundlens.compute.valuation_history import compute_portfolio_value_history
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -164,9 +165,14 @@ class CategoryBreakdownItemResponse(BaseModel):
 
 @router.get("/breakdown", response_model=list[CategoryBreakdownItemResponse])
 def breakdown(
-    level: Literal["category", "sub_category"] = "category",
+    level: Literal["category", "sub_category", "amc"] = "category",
     session: Session = Depends(get_session),
 ) -> list[CategoryBreakdownItemResponse]:
+    groups = (
+        metrics.compute_amc_breakdown(session)
+        if level == "amc"
+        else metrics.compute_category_breakdown(session, level)
+    )
     return [
         CategoryBreakdownItemResponse(
             label=g.label,
@@ -176,5 +182,25 @@ def breakdown(
             xirr_reason=g.xirr_reason,
             fund_count=g.fund_count,
         )
-        for g in metrics.compute_category_breakdown(session, level)
+        for g in groups
+    ]
+
+
+class ValuePointResponse(BaseModel):
+    as_of_date: str
+    value_paise: int
+    invested_paise: int
+    positions_missing_nav: int
+
+
+@router.get("/value-history", response_model=list[ValuePointResponse])
+def value_history(session: Session = Depends(get_session)) -> list[ValuePointResponse]:
+    return [
+        ValuePointResponse(
+            as_of_date=p.as_of_date.isoformat(),
+            value_paise=p.value_paise,
+            invested_paise=p.invested_paise,
+            positions_missing_nav=p.positions_missing_nav,
+        )
+        for p in compute_portfolio_value_history(session)
     ]

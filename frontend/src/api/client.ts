@@ -39,13 +39,24 @@ type CategoryBreakdownResponse =
   operations["breakdown_portfolio_breakdown_get"]["responses"][200]["content"]["application/json"];
 
 export async function getCategoryBreakdown(
-  level: "category" | "sub_category",
+  level: "category" | "sub_category" | "amc",
 ): Promise<CategoryBreakdownResponse> {
   const response = await fetch(`${API_BASE_URL}/portfolio/breakdown?level=${level}`);
   if (!response.ok) {
     throw new Error(`Category breakdown failed: ${response.status}`);
   }
   return response.json() as Promise<CategoryBreakdownResponse>;
+}
+
+type PortfolioValueHistoryResponse =
+  operations["value_history_portfolio_value_history_get"]["responses"][200]["content"]["application/json"];
+
+export async function getPortfolioValueHistory(): Promise<PortfolioValueHistoryResponse> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/value-history`);
+  if (!response.ok) {
+    throw new Error(`Portfolio value history failed: ${response.status}`);
+  }
+  return response.json() as Promise<PortfolioValueHistoryResponse>;
 }
 
 type AllocationDriftResponse =
