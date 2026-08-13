@@ -78,3 +78,48 @@ export async function getDirectVsRegularAudit(): Promise<DirectVsRegularAuditRes
   }
   return response.json() as Promise<DirectVsRegularAuditResponse>;
 }
+
+async function detailOrStatus(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: string };
+    if (body.detail) return body.detail;
+  } catch {
+    // response body wasn't JSON -- fall through to the status code
+  }
+  return `HTTP ${response.status}`;
+}
+
+type IngestResponse =
+  operations["ingest_cas_ingest_cas_post"]["responses"][200]["content"]["application/json"];
+
+export async function postIngestCas(file: File, password: string): Promise<IngestResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("password", password);
+  const response = await fetch(`${API_BASE_URL}/ingest/cas`, { method: "POST", body: formData });
+  if (!response.ok) {
+    throw new Error(`Failed to ingest CAS: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<IngestResponse>;
+}
+
+export async function postIngestCsv(file: File): Promise<IngestResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/ingest/csv`, { method: "POST", body: formData });
+  if (!response.ok) {
+    throw new Error(`Failed to ingest CSV: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<IngestResponse>;
+}
+
+type RebuildResponse =
+  operations["rebuild_lots_portfolio_rebuild_lots_post"]["responses"][200]["content"]["application/json"];
+
+export async function postRebuildLots(): Promise<RebuildResponse> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/rebuild-lots`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Failed to rebuild lots: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RebuildResponse>;
+}
