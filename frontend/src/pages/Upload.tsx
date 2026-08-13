@@ -1,9 +1,23 @@
 import { useState } from "react";
-import { postIngestCas, postIngestCsv, postRebuildLots } from "../api/client";
+import { postImportTri, postIngestCas, postIngestCsv, postRebuildLots } from "../api/client";
 import type { components } from "../api/schema";
 
 type IngestResult = components["schemas"]["IngestResponse"];
 type RebuildResult = components["schemas"]["RebuildResponse"];
+type TRIImportResult = components["schemas"]["TRIImportResponse"];
+
+const BENCHMARK_IDS = [
+  "NIFTY50_TRI",
+  "BSE100_TRI",
+  "NIFTY_MIDCAP150_TRI",
+  "NIFTY_SMALLCAP250_TRI",
+] as const;
+
+type TRIStatus =
+  | { state: "idle" }
+  | { state: "working" }
+  | { state: "error"; message: string }
+  | { state: "done"; result: TRIImportResult };
 
 type Status =
   | { state: "idle" }
@@ -72,6 +86,12 @@ export default function Upload() {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvStatus, setCsvStatus] = useState<Status>({ state: "idle" });
 
+  const [triFile, setTriFile] = useState<File | null>(null);
+  const [triBenchmarkId, setTriBenchmarkId] = useState<(typeof BENCHMARK_IDS)[number]>(
+    BENCHMARK_IDS[0],
+  );
+  const [triStatus, setTriStatus] = useState<TRIStatus>({ state: "idle" });
+
   async function submitCas(e: React.FormEvent) {
     e.preventDefault();
     if (!casFile || !casPassword) return;
@@ -101,6 +121,22 @@ export default function Upload() {
       setCsvFile(null);
     } catch (err) {
       setCsvStatus({
+        state: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  async function submitTri(e: React.FormEvent) {
+    e.preventDefault();
+    if (!triFile) return;
+    setTriStatus({ state: "working" });
+    try {
+      const result = await postImportTri(triBenchmarkId, triFile);
+      setTriStatus({ state: "done", result });
+      setTriFile(null);
+    } catch (err) {
+      setTriStatus({
         state: "error",
         message: err instanceof Error ? err.message : "Unknown error",
       });
@@ -170,6 +206,49 @@ export default function Upload() {
         )}
         {csvStatus.state === "done" && (
           <IngestSummary ingest={csvStatus.ingest} rebuild={csvStatus.rebuild} />
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Import benchmark TRI data (CSV)</h2>
+        <p className="muted" style={{ marginBottom: 12 }}>
+          FundLens's own two-column format — columns: date, value. Use this to upgrade a
+          benchmark's history from a proxy (an index fund's NAV standing in for its TRI) to real
+          TRI data you've downloaded and reformatted by hand. Existing proxy rows for the dates
+          you import are overwritten; other dates are untouched.
+        </p>
+        <form onSubmit={(e) => void submitTri(e)}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={triBenchmarkId}
+              onChange={(e) => setTriBenchmarkId(e.target.value as (typeof BENCHMARK_IDS)[number])}
+              disabled={triStatus.state === "working"}
+            >
+              {BENCHMARK_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {id}
+                </option>
+              ))}
+            </select>
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => setTriFile(e.target.files?.[0] ?? null)}
+              disabled={triStatus.state === "working"}
+            />
+            <button type="submit" disabled={!triFile || triStatus.state === "working"}>
+              {triStatus.state === "working" ? "Uploading…" : "Upload"}
+            </button>
+          </div>
+        </form>
+        {triStatus.state === "error" && (
+          <p style={{ color: "var(--negative)", marginTop: 8 }}>{triStatus.message}</p>
+        )}
+        {triStatus.state === "done" && (
+          <p className="muted" style={{ marginTop: 8 }}>
+            Wrote {triStatus.result.rows_written} row
+            {triStatus.result.rows_written === 1 ? "" : "s"} for {triStatus.result.benchmark_id}.
+          </p>
         )}
       </div>
     </div>

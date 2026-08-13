@@ -115,7 +115,7 @@ class PortfolioMetrics:
 
 
 @dataclass(frozen=True)
-class _PositionCashFlows:
+class PositionCashFlows:
     cash_flows: list[CashFlow]
     invested_paise: int
     received_paise: int
@@ -151,11 +151,11 @@ def _realized_gain_paise(session: Session, folio: str, key: str) -> int:
     return sum(total, 0)
 
 
-def _build_position_cash_flows(
+def build_position_cash_flows(
     session: Session,
     transactions: list[RawTransaction],
     open_holding: HoldingView | None,
-) -> _PositionCashFlows:
+) -> PositionCashFlows:
     cash_flows: list[CashFlow] = []
     invested_paise = 0
     received_paise = 0
@@ -195,7 +195,7 @@ def _build_position_cash_flows(
             current_value_paise = None
             xirr_reason = "nav_unavailable"
 
-    return _PositionCashFlows(
+    return PositionCashFlows(
         cash_flows=cash_flows,
         invested_paise=invested_paise,
         received_paise=received_paise,
@@ -229,7 +229,7 @@ def compute_holding_metrics(
     scheme_name = transactions[0].scheme_name if transactions else key
     amc = transactions[0].amc if transactions else ""
 
-    pos = _build_position_cash_flows(session, transactions, open_holding)
+    pos = build_position_cash_flows(session, transactions, open_holding)
 
     if pos.xirr_reason is None:
         xirr_result = compute_xirr(pos.cash_flows)
@@ -334,7 +334,7 @@ def compute_portfolio_metrics(session: Session) -> PortfolioMetrics:
     missing_nav_count = 0
 
     for folio, key in positions:
-        pos = _build_position_cash_flows(
+        pos = build_position_cash_flows(
             session, txns_by_position.get((folio, key), []), open_holdings.get((folio, key))
         )
         all_cash_flows.extend(pos.cash_flows)
@@ -396,7 +396,7 @@ def compute_fund_metrics(session: Session, amfi_code: str) -> PortfolioMetrics |
     missing_nav_count = 0
 
     for folio, key in fund_positions:
-        pos = _build_position_cash_flows(
+        pos = build_position_cash_flows(
             session, txns_by_position.get((folio, key), []), open_holdings.get((folio, key))
         )
         all_cash_flows.extend(pos.cash_flows)
@@ -479,7 +479,7 @@ def compute_category_breakdown(
         cash_flows: list[CashFlow] = []
         value_paise = 0
         for folio, key in members:
-            pos = _build_position_cash_flows(
+            pos = build_position_cash_flows(
                 session, txns_by_position.get((folio, key), []), open_holdings.get((folio, key))
             )
             cash_flows.extend(pos.cash_flows)

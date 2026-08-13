@@ -2,11 +2,16 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from sqlalchemy.orm import Session
 
+from fundlens.compute import service
 from fundlens.compute.benchmark import (
+    _real_value_source,
     _simulate_benchmark_cash_flows,
+    build_blended_series,
     compute_portfolio_benchmark_comparison,
+    compute_portfolio_equity_blended_benchmark_comparison,
     compute_position_benchmark_comparison,
     get_all_benchmark_comparisons,
 )
@@ -14,6 +19,8 @@ from fundlens.compute.holdings import HoldingView
 from fundlens.db.models import (
     BenchmarkHistory,
     BenchmarkId,
+    NavHistory,
+    NavSource,
     RawCASUpload,
     RawTransaction,
     SchemeMetadata,
@@ -188,7 +195,7 @@ def test_partial_redemption_liquidates_only_the_sold_fraction(session: Session) 
     session.commit()
 
     flows, reason = _simulate_benchmark_cash_flows(
-        session, [buy, sell], _open_holding("50"), BenchmarkId.NIFTY50_TRI
+        [buy, sell], _open_holding("50"), _real_value_source(session, BenchmarkId.NIFTY50_TRI)
     )
 
     assert reason is None
@@ -212,7 +219,7 @@ def test_dividend_payout_excluded_from_benchmark_timeline(session: Session) -> N
     session.commit()
 
     flows, reason = _simulate_benchmark_cash_flows(
-        session, [buy, dividend], _open_holding("100"), BenchmarkId.NIFTY50_TRI
+        [buy, dividend], _open_holding("100"), _real_value_source(session, BenchmarkId.NIFTY50_TRI)
     )
 
     assert reason is None
@@ -336,3 +343,210 @@ def test_portfolio_comparison_empty_portfolio(session: Session) -> None:
     result = compute_portfolio_benchmark_comparison(session)
     assert result.portfolio_xirr is None
     assert result.benchmark_id == BenchmarkId.NIFTY50_TRI
+
+
+# ---------- build_blended_series ----------
+
+
+def test_build_blended_series_combines_weighted_daily_returns(session: Session) -> None:
+    # Component A (weight 60): +10% on 2023-01-02. Component B (weight 40): -5%.
+    # Hand calc: blended return = 0.6*0.10 + 0.4*(-0.05) = 0.04 -> level 1000*1.04 = 1040.
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 1, 2), "110")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_MIDCAP150_TRI, date(2023, 1, 1), "200")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_MIDCAP150_TRI, date(2023, 1, 2), "190")
+    session.commit()
+
+    blended = build_blended_series(
+        session,
+        {BenchmarkId.NIFTY50_TRI: Decimal("60"), BenchmarkId.NIFTY_MIDCAP150_TRI: Decimal("40")},
+    )
+
+    assert blended.start_date == date(2023, 1, 2)
+    assert len(blended.values) == 1
+    d, value = blended.values[0]
+    assert d == date(2023, 1, 2)
+    assert value == Decimal("1000") * Decimal("1.04")
+    assert blended.excluded_components == []
+
+
+def test_build_blended_series_excludes_zero_weight_components(session: Session) -> None:
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 1, 2), "110")
+    session.commit()
+
+    blended = build_blended_series(
+        session,
+        {BenchmarkId.NIFTY50_TRI: Decimal("100"), BenchmarkId.NIFTY_SMALLCAP250_TRI: Decimal("0")},
+    )
+
+    assert blended.excluded_components == [BenchmarkId.NIFTY_SMALLCAP250_TRI]
+    assert blended.start_date == date(2023, 1, 2)
+
+
+def test_build_blended_series_starts_at_latest_common_date(session: Session) -> None:
+    # Nifty50-style long history vs a Smallcap-style proxy that starts later
+    # (real-data-verified pattern: proxy_config.py's own documented gap).
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2019, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 6, 1), "150")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2024, 1, 1), "160")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_SMALLCAP250_TRI, date(2023, 6, 1), "50")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_SMALLCAP250_TRI, date(2024, 1, 1), "55")
+    session.commit()
+
+    blended = build_blended_series(
+        session,
+        {BenchmarkId.NIFTY50_TRI: Decimal("50"), BenchmarkId.NIFTY_SMALLCAP250_TRI: Decimal("50")},
+    )
+
+    # Smallcap's first return is on 2024-01-01 (its first point, 2023-06-01,
+    # has no prior value to compute a return from) -- that's the only common
+    # return date, even though Nifty50 alone has a return on 2023-06-01 too.
+    assert blended.start_date == date(2024, 1, 1)
+
+
+def test_build_blended_series_empty_when_no_overlap(session: Session) -> None:
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2019, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2019, 1, 2), "101")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_SMALLCAP250_TRI, date(2023, 1, 1), "50")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_SMALLCAP250_TRI, date(2023, 1, 2), "51")
+    session.commit()
+
+    blended = build_blended_series(
+        session,
+        {BenchmarkId.NIFTY50_TRI: Decimal("50"), BenchmarkId.NIFTY_SMALLCAP250_TRI: Decimal("50")},
+    )
+
+    assert blended.values == []
+    assert blended.start_date is None
+
+
+def test_build_blended_series_all_zero_weight_is_empty(session: Session) -> None:
+    blended = build_blended_series(session, {BenchmarkId.NIFTY50_TRI: Decimal("0")})
+
+    assert blended.values == []
+    assert blended.start_date is None
+    assert blended.excluded_components == [BenchmarkId.NIFTY50_TRI]
+
+
+# ---------- compute_portfolio_equity_blended_benchmark_comparison ----------
+
+
+def _add_large_cap_metadata(session: Session, amfi_code: str) -> None:
+    session.add(
+        SchemeMetadata(
+            amfi_code=amfi_code,
+            category_raw="Open Ended Schemes(Equity Scheme - Large Cap Fund)",
+            tax_asset_class=TaxAssetClass.EQUITY,
+        )
+    )
+
+
+def _add_mid_cap_metadata(session: Session, amfi_code: str) -> None:
+    session.add(
+        SchemeMetadata(
+            amfi_code=amfi_code,
+            category_raw="Open Ended Schemes(Equity Scheme - Mid Cap Fund)",
+            tax_asset_class=TaxAssetClass.EQUITY,
+        )
+    )
+
+
+def test_equity_blended_comparison_no_equity_holdings(session: Session) -> None:
+    result = compute_portfolio_equity_blended_benchmark_comparison(session)
+
+    assert result.xirr_reason == "no_equity_holdings"
+    assert result.benchmark_xirr_reason == "no_equity_holdings"
+    assert result.large_weight_pct == 0.0
+    assert result.blended_series_start_date is None
+
+
+def test_equity_blended_comparison_single_component_matches_flat_benchmark(
+    session: Session,
+) -> None:
+    # All-large-cap portfolio: the blend degenerates to Nifty50 alone (its
+    # weight normalizes to 1.0), so the blended-benchmark XIRR must be
+    # mathematically identical to a plain single-benchmark comparison --
+    # XIRR is scale-invariant, so rebasing to 1000 vs Nifty50's own raw
+    # levels changes nothing about the computed rate. Strong correctness
+    # check: this isn't just "runs without crashing", it's "produces the
+    # exact same number as the already-trusted single-benchmark path".
+    upload = _make_upload(session)
+    _add_large_cap_metadata(session, "111")
+    _add_txn(
+        session, upload.id, amfi_code="111", isin="ISIN111",
+        txn_type=TransactionType.PURCHASE, txn_date=date(2023, 1, 1),
+        units=Decimal("100"), amount_paise=1_000_000,
+    )
+    # An earlier point so NIFTY50_TRI already has a *return* (not just a raw
+    # value) as of 2023-01-01 -- build_blended_series's series starts at the
+    # first return date, one point later than the raw series' first date,
+    # so the blend needs to cover the purchase date itself.
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2022, 6, 1), "90")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 6, 1), "110")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2024, 1, 1), "120")
+    # The scheme's own NAV (distinct from the benchmark's value above) --
+    # compute_portfolio_valuation needs this to price the holding at all.
+    session.add(
+        NavHistory(
+            amfi_code="111", nav_date=date(2024, 1, 1), nav=Decimal("105"),
+            source=NavSource.MANUAL,
+        )
+    )
+    session.commit()
+    service.rebuild_all_lots(session)
+
+    flat = compute_portfolio_benchmark_comparison(session, BenchmarkId.NIFTY50_TRI)
+    blended = compute_portfolio_equity_blended_benchmark_comparison(session)
+
+    assert blended.large_weight_pct == pytest.approx(100.0)
+    assert blended.mid_weight_pct == 0.0
+    assert blended.small_weight_pct == 0.0
+    assert blended.benchmark_xirr is not None
+    assert flat.benchmark_xirr is not None
+    assert blended.benchmark_xirr == pytest.approx(flat.benchmark_xirr, rel=1e-9)
+    assert blended.xirr == pytest.approx(flat.portfolio_xirr, rel=1e-9)
+
+
+def test_equity_blended_comparison_weights_proportional_to_cap_value(session: Session) -> None:
+    upload = _make_upload(session)
+    _add_large_cap_metadata(session, "111")
+    _add_mid_cap_metadata(session, "222")
+    _add_txn(
+        session, upload.id, folio="F1", amfi_code="111", isin="ISIN111",
+        scheme_name="Large Fund", txn_type=TransactionType.PURCHASE,
+        txn_date=date(2023, 1, 1), units=Decimal("100"), amount_paise=1_000_000,
+    )
+    _add_txn(
+        session, upload.id, folio="F1", amfi_code="222", isin="ISIN222",
+        scheme_name="Mid Fund", txn_type=TransactionType.PURCHASE,
+        txn_date=date(2023, 1, 1), units=Decimal("50"), amount_paise=500_000,
+    )
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2024, 1, 1), "120")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_MIDCAP150_TRI, date(2023, 1, 1), "100")
+    _add_benchmark_value(session, BenchmarkId.NIFTY_MIDCAP150_TRI, date(2024, 1, 1), "130")
+    # NAV so compute_portfolio_valuation can price both open holdings --
+    # equal NAV=cost (100/unit) for both keeps the value split at the same
+    # 2:1 ratio as the original purchase amounts (10,000 vs 5,000).
+    session.add(
+        NavHistory(
+            amfi_code="111", nav_date=date(2024, 1, 1), nav=Decimal("100"),
+            source=NavSource.MANUAL,
+        )
+    )
+    session.add(
+        NavHistory(
+            amfi_code="222", nav_date=date(2024, 1, 1), nav=Decimal("100"),
+            source=NavSource.MANUAL,
+        )
+    )
+    session.commit()
+    service.rebuild_all_lots(session)
+
+    result = compute_portfolio_equity_blended_benchmark_comparison(session)
+
+    assert result.large_weight_pct == pytest.approx(200 / 3)  # 10,000 / 15,000
+    assert result.mid_weight_pct == pytest.approx(100 / 3)  # 5,000 / 15,000
+    assert result.small_weight_pct == 0.0

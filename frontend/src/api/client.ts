@@ -84,6 +84,17 @@ export async function getBenchmarkComparisons(): Promise<BenchmarkComparisonResp
   return response.json() as Promise<BenchmarkComparisonResponse>;
 }
 
+type EquityBlendedBenchmarkComparisonResponse =
+  operations["equity_blended_comparison_benchmarks_comparison_equity_blended_get"]["responses"][200]["content"]["application/json"];
+
+export async function getEquityBlendedBenchmark(): Promise<EquityBlendedBenchmarkComparisonResponse> {
+  const response = await fetch(`${API_BASE_URL}/benchmarks/comparison/equity-blended`);
+  if (!response.ok) {
+    throw new Error(`Equity blended benchmark comparison failed: ${response.status}`);
+  }
+  return response.json() as Promise<EquityBlendedBenchmarkComparisonResponse>;
+}
+
 type VerdictsResponse =
   operations["verdicts_verdicts_get"]["responses"][200]["content"]["application/json"];
 
@@ -217,6 +228,23 @@ export async function getFundDetail(amfiCode: string): Promise<FundDetail> {
     throw new Error(`Fund detail failed: ${await detailOrStatus(response)}`);
   }
   return response.json() as Promise<FundDetail>;
+}
+
+type TRIImportResponse =
+  operations["import_tri_benchmarks_import_tri_post"]["responses"][200]["content"]["application/json"];
+
+export async function postImportTri(benchmarkId: string, file: File): Promise<TRIImportResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("benchmark_id", benchmarkId);
+  const response = await fetch(`${API_BASE_URL}/benchmarks/import-tri`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to import TRI data: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<TRIImportResponse>;
 }
 
 type GrowwRefreshResponse =

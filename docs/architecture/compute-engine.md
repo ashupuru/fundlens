@@ -301,6 +301,43 @@ PRD's own documented fallback, used as the primary (only working) data source, n
   computation exists on top of the above. **Category-appropriate debt indices** (also FR-1.4-named)
   remain unbuilt — no debt `BenchmarkId` exists; debt/hybrid schemes get no benchmark comparison.
 
+**Equity blended benchmark** (`build_blended_series`/
+`compute_portfolio_equity_blended_benchmark_comparison` in `compute/benchmark.py`): a single
+reference index is less defensible than one matching the portfolio's actual cap-size mix, so this
+composites Nifty50/Midcap150/Smallcap250 TRI weighted by the equity slice's actual large/mid/small
+value split (`compute/allocation.py::compute_portfolio_valuation`'s cap breakdown, reused as-is —
+no separate valuation logic). **Combines each component's own daily percentage return, weighted by
+allocation, then compounds into a synthetic series from a base value of 1000** — never averages
+raw index levels across components, since they're on unrelated scales. Coverage starts on the
+*latest* first-return date among all non-zero-weighted components (an intersection, not a union):
+Nifty50's proxy history goes back to 2013, but Midcap150/Smallcap250 proxies only to 2019-09-11
+(`benchmark/proxy_config.py`), so a large+mid blend's series can't validly start before the later
+of the two — never silently reweighted or backward-extrapolated to paper over the gap. Deliberately
+**equity-only**: no debt/gold `BenchmarkId` exists (same gap noted above), so a "portfolio-wide"
+blend would have to either ignore that weight or fabricate a benchmark for it — both wrong. Scoped
+to equity positions' own cash flows (`tax_asset_class == EQUITY`), reported as `xirr`/
+`benchmark_xirr`/`alpha_pct` alongside the large/mid/small weights actually used, so the blend is
+legible rather than a black box. Mirrors the existing single-benchmark comparison's asymmetric
+cash-flow inclusion (all fund-side positions included; benchmark-side restricted to whatever the
+blended series' coverage start date actually reaches) rather than inventing a stricter symmetric
+rule.
+
+**Manual TRI CSV import** (`benchmark/tri_csv_import.py`, `benchmark/service.py::
+upsert_manual_tri_rows`, `POST /benchmarks/import-tri`): every `benchmark_history` row is currently
+a proxy (no free true-TRI source exists, per above) — this is the escape hatch for upgrading
+specific dates to real data the user has downloaded and reformatted by hand. Defines FundLens's own
+simple two-column format (`date`, `value`) rather than attempting to parse any vendor's native
+export shape — no real sample of NSE Indices' actual CSV was ever obtained (live-investigated: its
+historical-data page is an ASP.NET WebForms app with no stable discoverable public API), so
+guessing that format sight-unseen was rejected in favor of a format this app controls. Unlike the
+proxy auto-refresh (`_insert_new_benchmark_rows`, insert-if-absent — never overwrites), this
+function **overwrites**: a row for a date already present is replaced (`value`, `proxy=False`,
+`proxy_note=None`, fresh `fetched_at`), since real data should supersede the proxy default for the
+dates it covers. No separate upload-provenance table: `benchmark_history`'s own composite primary
+key (`benchmark_id`, `nav_date`) already is the dedupe key. A manually-imported real row is
+permanently protected from later being clobbered back to proxy, since the auto-refresh path only
+ever inserts absent dates.
+
 ## 5. Recommendation Rubric Engine
 
 **Shipped in P1.3** (`compute/verdict.py`), **narrowed from the original 5-component design to

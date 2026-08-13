@@ -45,6 +45,8 @@ benchmark/proxy_config.py's proxy rationale), not a theoretical TRI value.
 No separate counterfactual computation is needed on top of this.
 """
 
+import bisect
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -54,10 +56,12 @@ from sqlalchemy.orm import Session
 
 from fundlens.benchmark.category_mapping import default_benchmark_for_category
 from fundlens.benchmark.proxy_config import PROXY_NOTE_BY_BENCHMARK
+from fundlens.compute.allocation import compute_portfolio_valuation
 from fundlens.compute.holdings import HoldingView, get_current_holdings
 from fundlens.compute.metrics import (
     CASH_INFLOW_TYPES,
     CASH_OUTFLOW_TYPES,
+    build_position_cash_flows,
     compute_portfolio_metrics,
     get_all_holding_metrics,
     get_all_positions,
@@ -65,6 +69,7 @@ from fundlens.compute.metrics import (
 )
 from fundlens.compute.xirr import CashFlow, compute_xirr
 from fundlens.db.models import BenchmarkHistory, BenchmarkId, RawTransaction, SchemeMetadata
+from fundlens.tax.asset_class import TaxAssetClass
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,19 @@ class BenchmarkComparison:
     benchmark_xirr: float | None
     benchmark_xirr_reason: str | None
     alpha_pct: float | None
+
+
+@dataclass(frozen=True)
+class BenchmarkValueSource:
+    """Abstracts "what was this benchmark worth on/before date X" away from
+    where the values come from — a real BenchmarkHistory row per
+    benchmark_id (_real_value_source, unchanged behavior from before this
+    was extracted), or a synthetic in-memory blended series
+    (_synthetic_value_source, build_blended_series below). Everything in
+    _simulate_benchmark_cash_flows is indifferent to which."""
+
+    value_on_or_before: Callable[[date], Decimal | None]
+    latest_value: Callable[[], tuple[Decimal, date] | None]
 
 
 def _benchmark_value_on_or_before(
@@ -105,11 +123,34 @@ def _latest_benchmark_value(
     return (row.value, row.nav_date) if row is not None else None
 
 
+def _real_value_source(session: Session, benchmark_id: BenchmarkId) -> BenchmarkValueSource:
+    return BenchmarkValueSource(
+        value_on_or_before=lambda on_date: _benchmark_value_on_or_before(
+            session, benchmark_id, on_date
+        ),
+        latest_value=lambda: _latest_benchmark_value(session, benchmark_id),
+    )
+
+
+def _synthetic_value_source(series: list[tuple[date, Decimal]]) -> BenchmarkValueSource:
+    """series must be sorted ascending by date (build_blended_series's
+    output already is)."""
+    dates = [d for d, _ in series]
+
+    def value_on_or_before(on_date: date) -> Decimal | None:
+        idx = bisect.bisect_right(dates, on_date) - 1
+        return series[idx][1] if idx >= 0 else None
+
+    def latest_value() -> tuple[Decimal, date] | None:
+        return (series[-1][1], series[-1][0]) if series else None
+
+    return BenchmarkValueSource(value_on_or_before=value_on_or_before, latest_value=latest_value)
+
+
 def _simulate_benchmark_cash_flows(
-    session: Session,
     transactions: list[RawTransaction],
     open_holding: HoldingView | None,
-    benchmark_id: BenchmarkId,
+    value_source: BenchmarkValueSource,
 ) -> tuple[list[CashFlow], str | None]:
     benchmark_units = Decimal("0")
     fund_units_held = Decimal("0")
@@ -122,7 +163,7 @@ def _simulate_benchmark_cash_flows(
         if txn.txn_type not in CASH_OUTFLOW_TYPES and txn.txn_type not in CASH_INFLOW_TYPES:
             continue
 
-        value = _benchmark_value_on_or_before(session, benchmark_id, txn.txn_date)
+        value = value_source.value_on_or_before(txn.txn_date)
         if value is None or value == 0:
             return [], "benchmark_history_unavailable"
 
@@ -150,7 +191,7 @@ def _simulate_benchmark_cash_flows(
 
     units_remaining = open_holding.units_remaining if open_holding else Decimal("0")
     if units_remaining != 0:
-        latest = _latest_benchmark_value(session, benchmark_id)
+        latest = value_source.latest_value()
         if latest is None:
             return [], "benchmark_history_unavailable"
         value, as_of = latest
@@ -197,7 +238,7 @@ def compute_position_benchmark_comparison(
         )
 
     benchmark_flows, reason = _simulate_benchmark_cash_flows(
-        session, transactions, open_holding, benchmark_id
+        transactions, open_holding, _real_value_source(session, benchmark_id)
     )
     if reason is None:
         benchmark_result = compute_xirr(benchmark_flows)
@@ -286,15 +327,15 @@ def compute_portfolio_benchmark_comparison(
 
     open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
     txns_by_position = positions_with_transactions(session, positions)
+    value_source = _real_value_source(session, benchmark_id)
 
     all_benchmark_flows: list[CashFlow] = []
     unavailable = False
     for folio, key in positions:
         flows, reason = _simulate_benchmark_cash_flows(
-            session,
             txns_by_position.get((folio, key), []),
             open_holdings.get((folio, key)),
-            benchmark_id,
+            value_source,
         )
         if reason is not None:
             unavailable = True
@@ -325,4 +366,250 @@ def compute_portfolio_benchmark_comparison(
         benchmark_xirr=benchmark_xirr,
         benchmark_xirr_reason=benchmark_xirr_reason,
         alpha_pct=alpha_pct,
+    )
+
+
+def _fetch_benchmark_series(
+    session: Session, benchmark_id: BenchmarkId
+) -> list[tuple[date, Decimal]]:
+    rows = session.execute(
+        select(BenchmarkHistory.nav_date, BenchmarkHistory.value)
+        .where(BenchmarkHistory.benchmark_id == benchmark_id)
+        .order_by(BenchmarkHistory.nav_date)
+    ).all()
+    return [(r.nav_date, r.value) for r in rows]
+
+
+def _daily_returns(series: list[tuple[date, Decimal]]) -> dict[date, Decimal]:
+    """(date -> return) for every date after the series' first, skipping any
+    zero-value point (can't divide by it -- a genuine data anomaly, not
+    something to guess a return for)."""
+    returns: dict[date, Decimal] = {}
+    for i in range(1, len(series)):
+        prev_value = series[i - 1][1]
+        cur_date, cur_value = series[i]
+        if prev_value == 0:
+            continue
+        returns[cur_date] = cur_value / prev_value - 1
+    return returns
+
+
+@dataclass(frozen=True)
+class BlendedSeries:
+    values: list[tuple[date, Decimal]]  # sorted ascending by date
+    start_date: date | None  # None only if there's no usable overlap at all
+    excluded_components: list[BenchmarkId]  # zero/absent-weight components
+
+
+def build_blended_series(
+    session: Session, weights: dict[BenchmarkId, Decimal]
+) -> BlendedSeries:
+    """Combines each weighted benchmark's *daily returns* (never raw index
+    levels — averaging levels across differently-scaled indices is
+    dimensionally wrong) into one synthetic series, compounded from a base
+    value of 1000. Starts on the first date *every* weighted component has
+    a computable return (intersection, not union) -- real data-availability
+    mismatch, confirmed live: the Nifty50 proxy's history goes back to
+    2013, but the Midcap150/Smallcap250 proxies only to 2019-09-11
+    (benchmark/proxy_config.py). A component with zero (or no) weight is
+    dropped from the blend and reported via `excluded_components`, never
+    silently included at some assumed weight.
+    """
+    active_weights = {bid: w for bid, w in weights.items() if w > 0}
+    excluded = [bid for bid in weights if bid not in active_weights]
+
+    if not active_weights:
+        return BlendedSeries(values=[], start_date=None, excluded_components=excluded)
+
+    returns_by_component = {
+        bid: _daily_returns(_fetch_benchmark_series(session, bid)) for bid in active_weights
+    }
+
+    common_dates: set[date] | None = None
+    for bid in active_weights:
+        dates = set(returns_by_component[bid].keys())
+        common_dates = dates if common_dates is None else common_dates & dates
+    sorted_dates = sorted(common_dates or set())
+
+    if not sorted_dates:
+        return BlendedSeries(values=[], start_date=None, excluded_components=excluded)
+
+    total_weight = sum(active_weights.values())
+    values: list[tuple[date, Decimal]] = []
+    level = Decimal("1000")
+    for d in sorted_dates:
+        blended_return = sum(
+            (active_weights[bid] / total_weight) * returns_by_component[bid][d]
+            for bid in active_weights
+        )
+        level = level * (1 + blended_return)
+        values.append((d, level))
+
+    return BlendedSeries(values=values, start_date=sorted_dates[0], excluded_components=excluded)
+
+
+@dataclass(frozen=True)
+class PortfolioEquityBlendedComparison:
+    xirr: float | None
+    xirr_reason: str | None
+    benchmark_xirr: float | None
+    benchmark_xirr_reason: str | None
+    alpha_pct: float | None
+    large_weight_pct: float
+    mid_weight_pct: float
+    small_weight_pct: float
+    blended_series_start_date: date | None
+    note: str
+
+
+_EQUITY_BLEND_NOTE = (
+    "Blended equity benchmark: your portfolio's actual large/mid/small-cap weighting "
+    "(from currently-open equity holdings), compounded from each Nifty index proxy's daily "
+    "returns -- not a raw average of index levels. Equity-only: debt/gold holdings are excluded "
+    "from both sides, since no benchmark exists for them yet. A position with cash flows before "
+    "the blended series' coverage start date is entirely excluded from the benchmark side "
+    "(never partially reconstructed), same as the single-benchmark comparison above."
+)
+
+
+def compute_portfolio_equity_blended_benchmark_comparison(
+    session: Session,
+) -> PortfolioEquityBlendedComparison:
+    """FR-4.2 extension: the doc-recommended "blend matching the portfolio's
+    real mix" alternative to always comparing against a flat Nifty50 TRI.
+    Weights come from compute_portfolio_valuation's cap-size breakdown
+    (currently-open holdings only -- allocation is inherently a snapshot,
+    same reasoning as compute_category_breakdown); LARGE/LARGE_AND_MID/OTHER
+    all fall back to Nifty50, mirroring
+    benchmark/category_mapping.py::default_benchmark_for_category's own
+    fallback (no crisper single-cap index fits those buckets).
+    """
+    valuation = compute_portfolio_valuation(session)
+    cap = valuation.equity_cap_breakdown
+    large_paise = cap.large_paise + cap.large_and_mid_paise + cap.other_paise
+    mid_paise = cap.mid_paise
+    small_paise = cap.small_paise
+    total_equity_paise = large_paise + mid_paise + small_paise
+
+    if total_equity_paise == 0:
+        return PortfolioEquityBlendedComparison(
+            xirr=None,
+            xirr_reason="no_equity_holdings",
+            benchmark_xirr=None,
+            benchmark_xirr_reason="no_equity_holdings",
+            alpha_pct=None,
+            large_weight_pct=0.0,
+            mid_weight_pct=0.0,
+            small_weight_pct=0.0,
+            blended_series_start_date=None,
+            note=_EQUITY_BLEND_NOTE,
+        )
+
+    large_weight_pct = large_paise / total_equity_paise * 100
+    mid_weight_pct = mid_paise / total_equity_paise * 100
+    small_weight_pct = small_paise / total_equity_paise * 100
+
+    blended = build_blended_series(
+        session,
+        {
+            BenchmarkId.NIFTY50_TRI: Decimal(large_paise),
+            BenchmarkId.NIFTY_MIDCAP150_TRI: Decimal(mid_paise),
+            BenchmarkId.NIFTY_SMALLCAP250_TRI: Decimal(small_paise),
+        },
+    )
+
+    positions = get_all_positions(session)
+    open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
+    txns_by_position = positions_with_transactions(session, positions)
+
+    amfi_code_by_position: dict[tuple[str, str], str | None] = {}
+    for folio, key in positions:
+        holding = open_holdings.get((folio, key))
+        amfi_code = holding.amfi_code if holding else None
+        if amfi_code is None:
+            txns = txns_by_position.get((folio, key), [])
+            amfi_code = txns[0].amfi_code if txns else None
+        amfi_code_by_position[(folio, key)] = amfi_code
+
+    amfi_codes = {c for c in amfi_code_by_position.values() if c}
+    metadata_by_code = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(SchemeMetadata).where(SchemeMetadata.amfi_code.in_(amfi_codes))
+        )
+    }
+    equity_positions = {
+        pos
+        for pos, amfi_code in amfi_code_by_position.items()
+        if amfi_code
+        and metadata_by_code.get(amfi_code) is not None
+        and metadata_by_code[amfi_code].tax_asset_class == TaxAssetClass.EQUITY
+    }
+
+    if blended.start_date is None:
+        fund_cash_flows: list[CashFlow] = []
+        for folio, key in equity_positions:
+            pos = build_position_cash_flows(
+                session, txns_by_position.get((folio, key), []), open_holdings.get((folio, key))
+            )
+            fund_cash_flows.extend(pos.cash_flows)
+        fund_result = compute_xirr(fund_cash_flows)
+        return PortfolioEquityBlendedComparison(
+            xirr=fund_result.rate,
+            xirr_reason=fund_result.reason,
+            benchmark_xirr=None,
+            benchmark_xirr_reason="blended_series_unavailable",
+            alpha_pct=None,
+            large_weight_pct=large_weight_pct,
+            mid_weight_pct=mid_weight_pct,
+            small_weight_pct=small_weight_pct,
+            blended_series_start_date=None,
+            note=_EQUITY_BLEND_NOTE,
+        )
+
+    value_source = _synthetic_value_source(blended.values)
+    fund_cash_flows = []
+    benchmark_cash_flows: list[CashFlow] = []
+    any_unavailable = False
+    for folio, key in equity_positions:
+        txns = txns_by_position.get((folio, key), [])
+        holding = open_holdings.get((folio, key))
+        pos = build_position_cash_flows(session, txns, holding)
+        fund_cash_flows.extend(pos.cash_flows)
+
+        flows, reason = _simulate_benchmark_cash_flows(txns, holding, value_source)
+        if reason is not None:
+            any_unavailable = True
+            continue
+        benchmark_cash_flows.extend(flows)
+
+    fund_result = compute_xirr(fund_cash_flows)
+
+    benchmark_xirr: float | None
+    benchmark_xirr_reason: str | None
+    if any_unavailable and not benchmark_cash_flows:
+        benchmark_xirr = None
+        benchmark_xirr_reason = "benchmark_history_unavailable"
+    else:
+        benchmark_result = compute_xirr(benchmark_cash_flows)
+        benchmark_xirr = benchmark_result.rate
+        benchmark_xirr_reason = benchmark_result.reason
+
+    alpha_pct = (
+        (fund_result.rate - benchmark_xirr) * 100
+        if fund_result.rate is not None and benchmark_xirr is not None
+        else None
+    )
+
+    return PortfolioEquityBlendedComparison(
+        xirr=fund_result.rate,
+        xirr_reason=fund_result.reason,
+        benchmark_xirr=benchmark_xirr,
+        benchmark_xirr_reason=benchmark_xirr_reason,
+        alpha_pct=alpha_pct,
+        large_weight_pct=large_weight_pct,
+        mid_weight_pct=mid_weight_pct,
+        small_weight_pct=small_weight_pct,
+        blended_series_start_date=blended.start_date,
+        note=_EQUITY_BLEND_NOTE,
     )

@@ -46,6 +46,25 @@ class EquityCapBreakdown:
 
 
 @dataclass(frozen=True)
+class PortfolioValuation:
+    """Current-holdings value, bucketed by tax_asset_class (+ equity cap
+    size) — the target-independent part of allocation drift. No
+    RiskProfile needed: this is just "what do I hold and where does its
+    value sit today," reused by compute_allocation_drift (which layers
+    target-vs-actual % on top) and by the equity blended benchmark
+    (compute/benchmark.py), which only needs the cap-size split to derive
+    blend weights.
+    """
+
+    equity_paise: int
+    debt_paise: int
+    other_paise: int
+    unavailable_paise: int
+    missing_metadata: int
+    equity_cap_breakdown: EquityCapBreakdown
+
+
+@dataclass(frozen=True)
 class AllocationDrift:
     persona: Persona
     target_equity_pct: float
@@ -73,7 +92,7 @@ _CAP_SIZE_FIELD = {
 }
 
 
-def compute_allocation_drift(session: Session, profile: RiskProfile) -> AllocationDrift:
+def compute_portfolio_valuation(session: Session) -> PortfolioValuation:
     holdings = get_current_holdings(session)
     amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
     metadata_by_code = {
@@ -112,6 +131,27 @@ def compute_allocation_drift(session: Session, profile: RiskProfile) -> Allocati
         else:
             other_paise += value_paise
 
+    return PortfolioValuation(
+        equity_paise=equity_paise,
+        debt_paise=debt_paise,
+        other_paise=other_paise,
+        unavailable_paise=unavailable_paise,
+        missing_metadata=missing_metadata,
+        equity_cap_breakdown=EquityCapBreakdown(
+            large_paise=cap_paise[EquityCapSize.LARGE],
+            mid_paise=cap_paise[EquityCapSize.MID],
+            small_paise=cap_paise[EquityCapSize.SMALL],
+            large_and_mid_paise=cap_paise[EquityCapSize.LARGE_AND_MID],
+            other_paise=cap_paise[EquityCapSize.OTHER],
+        ),
+    )
+
+
+def compute_allocation_drift(session: Session, profile: RiskProfile) -> AllocationDrift:
+    valuation = compute_portfolio_valuation(session)
+    equity_paise = valuation.equity_paise
+    debt_paise = valuation.debt_paise
+    other_paise = valuation.other_paise
     priced_total = equity_paise + debt_paise + other_paise
 
     actual_equity_pct: float | None = None
@@ -139,15 +179,9 @@ def compute_allocation_drift(session: Session, profile: RiskProfile) -> Allocati
         equity_value_paise=equity_paise,
         debt_value_paise=debt_paise,
         other_value_paise=other_paise,
-        value_unavailable_paise=unavailable_paise,
-        equity_cap_breakdown=EquityCapBreakdown(
-            large_paise=cap_paise[EquityCapSize.LARGE],
-            mid_paise=cap_paise[EquityCapSize.MID],
-            small_paise=cap_paise[EquityCapSize.SMALL],
-            large_and_mid_paise=cap_paise[EquityCapSize.LARGE_AND_MID],
-            other_paise=cap_paise[EquityCapSize.OTHER],
-        ),
-        schemes_missing_metadata=missing_metadata,
+        value_unavailable_paise=valuation.unavailable_paise,
+        equity_cap_breakdown=valuation.equity_cap_breakdown,
+        schemes_missing_metadata=valuation.missing_metadata,
     )
 
 

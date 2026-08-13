@@ -344,6 +344,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/benchmarks/comparison/equity-blended": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Equity Blended Comparison */
+        get: operations["equity_blended_comparison_benchmarks_comparison_equity_blended_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/benchmarks/import-tri": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Tri */
+        post: operations["import_tri_benchmarks_import_tri_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assumptions/current": {
         parameters: {
             query?: never;
@@ -562,6 +596,13 @@ export interface components {
             file: string;
             /** Mapping */
             mapping: string;
+        };
+        /** Body_import_tri_benchmarks_import_tri_post */
+        Body_import_tri_benchmarks_import_tri_post: {
+            /** File */
+            file: string;
+            /** Benchmark Id */
+            benchmark_id: string;
         };
         /** Body_ingest_cas_ingest_cas_post */
         Body_ingest_cas_ingest_cas_post: {
@@ -983,6 +1024,29 @@ export interface components {
             /** Alpha Pct */
             alpha_pct: number | null;
         };
+        /** PortfolioEquityBlendedComparisonResponse */
+        PortfolioEquityBlendedComparisonResponse: {
+            /** Xirr */
+            xirr: number | null;
+            /** Xirr Reason */
+            xirr_reason: string | null;
+            /** Benchmark Xirr */
+            benchmark_xirr: number | null;
+            /** Benchmark Xirr Reason */
+            benchmark_xirr_reason: string | null;
+            /** Alpha Pct */
+            alpha_pct: number | null;
+            /** Large Weight Pct */
+            large_weight_pct: number;
+            /** Mid Weight Pct */
+            mid_weight_pct: number;
+            /** Small Weight Pct */
+            small_weight_pct: number;
+            /** Blended Series Start Date */
+            blended_series_start_date: string | null;
+            /** Note */
+            note: string;
+        };
         /** PortfolioMetricsResponse */
         PortfolioMetricsResponse: {
             /** Xirr */
@@ -1092,6 +1156,13 @@ export interface components {
             aum: string | null;
             /** Return 3Y */
             return_3y: string | null;
+        };
+        /** TRIImportResponse */
+        TRIImportResponse: {
+            /** Benchmark Id */
+            benchmark_id: string;
+            /** Rows Written */
+            rows_written: number;
         };
         /** TaxImpactResponse */
         TaxImpactResponse: {
@@ -1702,6 +1773,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioBenchmarkComparisonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    equity_blended_comparison_benchmarks_comparison_equity_blended_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioEquityBlendedComparisonResponse"];
+                };
+            };
+        };
+    };
+    import_tri_benchmarks_import_tri_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_tri_benchmarks_import_tri_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TRIImportResponse"];
                 };
             };
             /** @description Validation Error */

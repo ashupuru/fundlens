@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fundlens.benchmark.proxy_config import PROXY_NOTE_BY_BENCHMARK, PROXY_SCHEME_BY_BENCHMARK
+from fundlens.benchmark.tri_csv_import import TRIRow
 from fundlens.db.models import BenchmarkHistory, BenchmarkId, FetchStatus, NavSource
 from fundlens.market_data.mfapi_client import fetch_scheme_history, parse_scheme_history
 from fundlens.market_data.records import NavRow
@@ -81,3 +82,47 @@ def backfill_benchmark_history(
 
 def refresh_all_benchmarks(session: Session) -> list[BenchmarkRefreshResult]:
     return [backfill_benchmark_history(session, benchmark_id) for benchmark_id in BenchmarkId]
+
+
+def upsert_manual_tri_rows(session: Session, benchmark_id: BenchmarkId, rows: list[TRIRow]) -> int:
+    """Unlike _insert_new_benchmark_rows (insert-if-absent, since a proxy
+    refresh should never clobber a proxy row that's simply already there),
+    this **overwrites**: real TRI data deliberately replaces the proxy
+    default for the dates it covers. A later automatic proxy refresh is
+    still safe afterwards -- _insert_new_benchmark_rows only ever inserts
+    absent dates, so it can never re-clobber a date this function has
+    already written.
+    """
+    if not rows:
+        return 0
+
+    existing = {
+        h.nav_date: h
+        for h in session.scalars(
+            select(BenchmarkHistory).where(BenchmarkHistory.benchmark_id == benchmark_id)
+        )
+    }
+
+    fetched_at = datetime.now(UTC).replace(tzinfo=None)
+    written = 0
+    for row in rows:
+        history = existing.get(row.nav_date)
+        if history is None:
+            session.add(
+                BenchmarkHistory(
+                    benchmark_id=benchmark_id,
+                    nav_date=row.nav_date,
+                    value=row.value,
+                    proxy=False,
+                    proxy_note=None,
+                    fetched_at=fetched_at,
+                )
+            )
+        else:
+            history.value = row.value
+            history.proxy = False
+            history.proxy_note = None
+            history.fetched_at = fetched_at
+        written += 1
+
+    return written

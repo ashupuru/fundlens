@@ -647,6 +647,68 @@
         }
       }
     },
+    "/benchmarks/comparison/equity-blended": {
+      "get": {
+        "tags": [
+          "benchmarks"
+        ],
+        "summary": "Equity Blended Comparison",
+        "operationId": "equity_blended_comparison_benchmarks_comparison_equity_blended_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioEquityBlendedComparisonResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/benchmarks/import-tri": {
+      "post": {
+        "tags": [
+          "benchmarks"
+        ],
+        "summary": "Import Tri",
+        "operationId": "import_tri_benchmarks_import_tri_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_tri_benchmarks_import_tri_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TRIImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/assumptions/current": {
       "get": {
         "tags": [
@@ -1207,6 +1269,25 @@
           "mapping"
         ],
         "title": "Body_commit_ingest_dezerv_commit_post"
+      },
+      "Body_import_tri_benchmarks_import_tri_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "benchmark_id"
+        ],
+        "title": "Body_import_tri_benchmarks_import_tri_post"
       },
       "Body_ingest_cas_ingest_cas_post": {
         "properties": {
@@ -2683,6 +2764,106 @@
         ],
         "title": "PortfolioBenchmarkComparisonResponse"
       },
+      "PortfolioEquityBlendedComparisonResponse": {
+        "properties": {
+          "xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr"
+          },
+          "xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr Reason"
+          },
+          "benchmark_xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr"
+          },
+          "benchmark_xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr Reason"
+          },
+          "alpha_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Pct"
+          },
+          "large_weight_pct": {
+            "type": "number",
+            "title": "Large Weight Pct"
+          },
+          "mid_weight_pct": {
+            "type": "number",
+            "title": "Mid Weight Pct"
+          },
+          "small_weight_pct": {
+            "type": "number",
+            "title": "Small Weight Pct"
+          },
+          "blended_series_start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blended Series Start Date"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "xirr",
+          "xirr_reason",
+          "benchmark_xirr",
+          "benchmark_xirr_reason",
+          "alpha_pct",
+          "large_weight_pct",
+          "mid_weight_pct",
+          "small_weight_pct",
+          "blended_series_start_date",
+          "note"
+        ],
+        "title": "PortfolioEquityBlendedComparisonResponse"
+      },
       "PortfolioMetricsResponse": {
         "properties": {
           "xirr": {
@@ -3084,6 +3265,24 @@
           "return_3y"
         ],
         "title": "SimilarFundResponse"
+      },
+      "TRIImportResponse": {
+        "properties": {
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id"
+          },
+          "rows_written": {
+            "type": "integer",
+            "title": "Rows Written"
+          }
+        },
+        "type": "object",
+        "required": [
+          "benchmark_id",
+          "rows_written"
+        ],
+        "title": "TRIImportResponse"
       },
       "TaxImpactResponse": {
         "properties": {
