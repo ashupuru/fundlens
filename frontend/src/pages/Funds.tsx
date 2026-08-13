@@ -96,54 +96,67 @@ export default function Funds() {
 
   if (error) {
     return (
-      <main>
+      <div>
         <h1>Funds</h1>
-        <p>Failed to load: {error}</p>
-      </main>
+        <div className="card">
+          <p>Failed to load: {error}</p>
+        </div>
+      </div>
     );
   }
 
   if (rows === null) {
     return (
-      <main>
+      <div>
         <h1>Funds</h1>
-        <p>Loading…</p>
-      </main>
+        <p className="muted">Loading…</p>
+      </div>
     );
   }
 
   return (
-    <main style={{ textAlign: "left", padding: "0 24px" }}>
+    <div>
       <h1>Funds</h1>
-      {rows.length === 0 && <p>No holdings found.</p>}
+      {rows.length === 0 && (
+        <div className="card">
+          <p className="muted">No holdings found.</p>
+        </div>
+      )}
       {rows.map((row) => {
         const k = key(row.folio, row.schemeName);
         const isOpen = expanded.has(k);
         return (
-          <div
-            key={k}
-            style={{ border: "1px solid #ccc", borderRadius: 8, padding: 12, marginBottom: 12 }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div key={k} className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
-                <strong>{row.schemeName}</strong> ({row.folio})
+                <strong>{row.schemeName}</strong>
+                <span className="muted"> ({row.folio})</span>
                 {row.planType && (
-                  <span style={{ marginLeft: 8, fontSize: 12 }}>
-                    [{row.planType === "regular" ? "REGULAR PLAN" : row.planType.toUpperCase()}]
+                  <span
+                    className={`badge ${row.planType === "regular" ? "badge-regular" : row.planType === "direct" ? "badge-direct" : "badge-neutral"}`}
+                    style={{ marginLeft: 8 }}
+                  >
+                    {row.planType}
                   </span>
                 )}
               </div>
               {row.verdict && (
-                <span style={{ fontWeight: "bold" }}>
-                  {row.verdict.verdict_type.toUpperCase()}
-                  {row.verdict.overall_score !== null &&
-                    ` (${row.verdict.overall_score.toFixed(0)}/100, confidence ${row.verdict.confidence_pct.toFixed(0)}%)`}
-                </span>
+                <div>
+                  <span className={`badge ${row.verdict.verdict_type === "sell" ? "badge-sell" : "badge-hold"}`}>
+                    {row.verdict.verdict_type}
+                  </span>
+                  {row.verdict.overall_score !== null && (
+                    <span className="muted" style={{ marginLeft: 8 }}>
+                      {row.verdict.overall_score.toFixed(0)}/100 · confidence{" "}
+                      {row.verdict.confidence_pct.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
             {row.comparison && (
-              <p style={{ margin: "8px 0" }}>
+              <p className="muted" style={{ margin: "10px 0" }}>
                 Fund XIRR: {formatXirr(row.comparison.fund_xirr, row.comparison.fund_xirr_reason)}
                 {" — "}
                 Benchmark ({row.comparison.benchmark_id ?? "n/a"}):{" "}
@@ -159,11 +172,11 @@ export default function Funds() {
                   {isOpen ? "Hide" : "Show"} rubric details
                 </button>
                 {isOpen && (
-                  <div style={{ marginTop: 8 }}>
+                  <div style={{ marginTop: 12 }}>
                     <p>{row.verdict.reasoning}</p>
-                    {row.verdict.counterfactual && <p>{row.verdict.counterfactual}</p>}
+                    {row.verdict.counterfactual && <p className="muted">{row.verdict.counterfactual}</p>}
                     {row.verdict.blocked_reason && (
-                      <p>Blocked: {row.verdict.blocked_reason}</p>
+                      <p className="muted">Blocked: {row.verdict.blocked_reason}</p>
                     )}
                     <table>
                       <thead>
@@ -185,14 +198,14 @@ export default function Funds() {
                         ))}
                       </tbody>
                     </table>
-                    <p style={{ fontSize: 12 }}>
+                    <p className="muted" style={{ marginTop: 8 }}>
                       Not scored (no data source): {row.verdict.omitted_components.join(", ")}
                     </p>
                     {row.verdict.tax_impact && (
-                      <div>
+                      <div style={{ marginTop: 12 }}>
                         <h3>Tax impact of selling today</h3>
                         <p>Tax owed: {formatPaise(row.verdict.tax_impact.tax_owed_paise)}</p>
-                        <p>{row.verdict.tax_impact.breakeven_note}</p>
+                        <p className="muted">{row.verdict.tax_impact.breakeven_note}</p>
                       </div>
                     )}
                   </div>
@@ -202,6 +215,6 @@ export default function Funds() {
           </div>
         );
       })}
-    </main>
+    </div>
   );
 }
