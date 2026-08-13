@@ -103,6 +103,50 @@ CONFLICT (natural_key) DO NOTHING`. This is intentionally a set-union, not a dif
 corrupted re-upload can never silently delete history — deletions only happen via explicit user
 action on a specific transaction, logged separately.
 
+### Third-party CSV import formats (escape hatch)
+
+Besides CAS PDFs, `raw_cas_upload`/`raw_transaction` are also the target of two CSV-based
+importers that skip `casparser` entirely — both still go through the same natural-key merge and
+`file_hash` dedupe path above, just with a different `parser_version` tag and their own
+row-shaping logic upstream of it:
+
+- **Generic CSV** (`ingestion/csv_import.py`, `parser_version="csv-v1"`) — a fixed-column escape
+  hatch (`folio,amc,scheme_name,txn_type,txn_date,amount,units,isin`) for any source the user can
+  massage into that shape by hand.
+- **Dezerv "BANK BOOK" export** (`ingestion/dezerv_csv.py` / `dezerv_matching.py` /
+  `dezerv_service.py`, `parser_version="dezerv-csv-v1"`) — imports Dezerv's real, unmodified CSV
+  export directly (`POST /ingest/dezerv/preview`, `POST /ingest/dezerv/commit`). Two design
+  decisions here are real-data-driven and worth calling out:
+
+  1. **No units column at all.** Dezerv's export gives only a rupee amount per Buy/Sell row, never
+     units. Units are back-computed as `amount_paise / nav_on_or_before(txn_date)`, reusing
+     `tax/grandfathering.py::fmv_per_unit_on_or_before` against the same `nav_history` table P0.2
+     already backfills — not a new mechanism. A row whose scheme has no NAV on or before its date
+     is **skipped and reported**, never given a fabricated unit count.
+  2. **Scheme names are Dezerv's own abbreviations** (e.g. "Mirae Asset Midcap Direct-G"), not
+     AMFI's official scheme names, and no ISIN/AMFI code is present in the source at all. Blindly
+     fuzzy-matching these against the live AMFI feed risks resolving to the *wrong* real scheme
+     (verified live: several AMC families have genuinely distinct schemes whose names are near-
+     supersets of each other, e.g. "Mirae Asset Midcap Fund" vs "Mirae Asset Large & Midcap
+     Fund") — a wrong match would silently corrupt that scheme's entire cost-basis/tax history.
+     Chosen mitigation, explicitly over full automation or fully manual entry: **auto-match with a
+     mandatory preview step** — `dezerv_matching.py::resolve_security` proposes a scheme via
+     Jaccard similarity over normalized name tokens (with plan/option vocabulary such as
+     "direct"/"growth"/"dividend" stripped only for scoring, not for the growth-vs-IDCW eligibility
+     filter — stripping it is what disambiguates the Mirae Asset case above), but nothing is
+     written to the database until the caller (the `Import Dezerv CSV` frontend page) shows the
+     full proposed mapping and the user confirms or corrects it row by row. A security with no
+     confident single match (ties, low score, or zero candidates) is never guessed — it's reported
+     with its reason (`ambiguous` / `low_confidence` / `no_candidates`) and top suggestions for
+     manual resolution.
+
+  Known limitations: only the "-G" (Direct Growth) suffix is recognized in Dezerv's `Security`
+  column — any other suffix is flagged `unrecognized_plan_suffix` rather than guessed at, since no
+  other suffix has been observed in real data. `pan` is always null for this source (not present
+  in the export). The upload's dedupe hash is `sha256(file_bytes + confirmed_mapping_json)` rather
+  than file bytes alone, since the same file can legitimately be re-committed with a corrected
+  mapping after the first commit skipped some rows.
+
 ### `nav_history`
 | column | type | notes |
 |---|---|---|

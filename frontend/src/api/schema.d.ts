@@ -55,6 +55,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ingest/dezerv/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_ingest_dezerv_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ingest/dezerv/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Commit */
+        post: operations["commit_ingest_dezerv_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market-data/refresh": {
         parameters: {
             query?: never;
@@ -471,6 +505,13 @@ export interface components {
             /** Error */
             error: string | null;
         };
+        /** Body_commit_ingest_dezerv_commit_post */
+        Body_commit_ingest_dezerv_commit_post: {
+            /** File */
+            file: string;
+            /** Mapping */
+            mapping: string;
+        };
         /** Body_ingest_cas_ingest_cas_post */
         Body_ingest_cas_ingest_cas_post: {
             /** File */
@@ -480,6 +521,11 @@ export interface components {
         };
         /** Body_ingest_csv_ingest_csv_post */
         Body_ingest_csv_ingest_csv_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_preview_ingest_dezerv_preview_post */
+        Body_preview_ingest_dezerv_preview_post: {
             /** File */
             file: string;
         };
@@ -582,6 +628,55 @@ export interface components {
             failed_xirr_positions: components["schemas"]["FailedXirrPositionResponse"][];
             /** Data Freshness */
             data_freshness: components["schemas"]["DataFreshnessResponse"][];
+        };
+        /** DezervCommitResponse */
+        DezervCommitResponse: {
+            /** Upload Id */
+            upload_id: string;
+            /** Inserted Count */
+            inserted_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Skipped Reasons */
+            skipped_reasons: {
+                [key: string]: number;
+            };
+        };
+        /** DezervPreviewResponse */
+        DezervPreviewResponse: {
+            /** Schemes */
+            schemes: components["schemas"]["DezervSchemePreviewResponse"][];
+            /** Unrecognized Transaction Descriptions */
+            unrecognized_transaction_descriptions: string[];
+            /** Total Mfdemat Rows */
+            total_mfdemat_rows: number;
+            /** Date Range Start */
+            date_range_start: string | null;
+            /** Date Range End */
+            date_range_end: string | null;
+        };
+        /** DezervSchemePreviewResponse */
+        DezervSchemePreviewResponse: {
+            /** Security Name */
+            security_name: string;
+            /** Symbol Code */
+            symbol_code: string;
+            /** Txn Count */
+            txn_count: number;
+            /** Matched Amfi Code */
+            matched_amfi_code: string | null;
+            /** Matched Scheme Name */
+            matched_scheme_name: string | null;
+            /** Matched Isin */
+            matched_isin: string | null;
+            /** Match Score */
+            match_score: number | null;
+            /** Reason */
+            reason: string | null;
+            /** Suggestions */
+            suggestions: components["schemas"]["MatchCandidateResponse"][];
         };
         /** DirectVsRegularFlagResponse */
         DirectVsRegularFlagResponse: {
@@ -708,6 +803,17 @@ export interface components {
             duplicate_count: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["fundlens__api__routers__ingestion__CoverageGapResponse"][];
+        };
+        /** MatchCandidateResponse */
+        MatchCandidateResponse: {
+            /** Amfi Code */
+            amfi_code: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Isin */
+            isin: string | null;
+            /** Score */
+            score: number;
         };
         /** PortfolioBenchmarkComparisonResponse */
         PortfolioBenchmarkComparisonResponse: {
@@ -1008,6 +1114,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IngestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_ingest_dezerv_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_ingest_dezerv_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DezervPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_ingest_dezerv_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_commit_ingest_dezerv_commit_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DezervCommitResponse"];
                 };
             };
             /** @description Validation Error */

@@ -18,3 +18,15 @@ class SchemeCategoryRow:
     # Verbatim AMFI section header, e.g.
     # "Open Ended Schemes(Equity Scheme - Large Cap Fund)"
     category_raw: str
+
+
+@dataclass(frozen=True)
+class SchemeMasterRow:
+    """Scheme identity from the same NAVAll feed — amfi_code, name, and
+    ISIN together, for resolving a scheme referenced by name only (e.g. a
+    third-party CSV export) to a real, current AMFI-listed scheme."""
+
+    amfi_code: str
+    scheme_name: str
+    isin_growth: str | None
+    isin_div_reinvestment: str | None

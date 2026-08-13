@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import DataQuality from "./pages/DataQuality";
+import DezervImport from "./pages/DezervImport";
 import Funds from "./pages/Funds";
 import Upload from "./pages/Upload";
 
@@ -64,6 +65,7 @@ const links = [
   { to: "/funds", label: "Funds", icon: FundsIcon, end: false },
   { to: "/upload", label: "Upload", icon: UploadIcon, end: false },
   { to: "/data-quality", label: "Data Quality", icon: DataQualityIcon, end: false },
+  { to: "/import/dezerv", label: "Import Dezerv CSV", icon: UploadIcon, end: false },
 ];
 
 function App() {
@@ -89,6 +91,7 @@ function App() {
           <Route path="/funds" element={<Funds />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/data-quality" element={<DataQuality />} />
+          <Route path="/import/dezerv" element={<DezervImport />} />
         </Routes>
       </div>
     </div>

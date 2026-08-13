@@ -24,7 +24,7 @@ class IngestResult:
     coverage_gaps: list[CoverageGap]
 
 
-def _find_existing_parsed_upload(session: Session, file_hash: str) -> RawCASUpload | None:
+def find_existing_parsed_upload(session: Session, file_hash: str) -> RawCASUpload | None:
     return (
         session.query(RawCASUpload)
         .filter_by(file_hash=file_hash, status=UploadStatus.PARSED)
@@ -37,7 +37,7 @@ def ingest_cas_pdf(
 ) -> IngestResult:
     file_hash = hashlib.sha256(path.read_bytes()).hexdigest()
 
-    existing = _find_existing_parsed_upload(session, file_hash)
+    existing = find_existing_parsed_upload(session, file_hash)
     if existing is not None:
         # Byte-identical file already ingested — skip re-parsing entirely.
         return IngestResult(
@@ -97,7 +97,7 @@ def ingest_transactions_csv(
 ) -> IngestResult:
     file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
 
-    existing = _find_existing_parsed_upload(session, file_hash)
+    existing = find_existing_parsed_upload(session, file_hash)
     if existing is not None:
         # Byte-identical CSV content already ingested — its transactions are
         # necessarily already merged too, since parsing is deterministic.

@@ -1,4 +1,4 @@
-import type { operations } from "./schema";
+import type { components, operations } from "./schema";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -122,4 +122,39 @@ export async function postRebuildLots(): Promise<RebuildResponse> {
     throw new Error(`Failed to rebuild lots: ${await detailOrStatus(response)}`);
   }
   return response.json() as Promise<RebuildResponse>;
+}
+
+export type DezervPreview = components["schemas"]["DezervPreviewResponse"];
+export type DezervSchemePreview = components["schemas"]["DezervSchemePreviewResponse"];
+export type DezervMatchCandidate = components["schemas"]["MatchCandidateResponse"];
+export type DezervCommitResult = components["schemas"]["DezervCommitResponse"];
+
+export async function postDezervPreview(file: File): Promise<DezervPreview> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/ingest/dezerv/preview`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Dezerv preview failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<DezervPreview>;
+}
+
+export async function postDezervCommit(
+  file: File,
+  mapping: Record<string, string | null>,
+): Promise<DezervCommitResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mapping", JSON.stringify(mapping));
+  const response = await fetch(`${API_BASE_URL}/ingest/dezerv/commit`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Dezerv commit failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<DezervCommitResult>;
 }

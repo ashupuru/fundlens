@@ -28,7 +28,7 @@ from decimal import Decimal, InvalidOperation
 import httpx
 from dateutil import parser as date_parser
 
-from fundlens.market_data.records import NavRow, SchemeCategoryRow
+from fundlens.market_data.records import NavRow, SchemeCategoryRow, SchemeMasterRow
 
 NAVALL_URL = "https://portal.amfiindia.com/spages/NAVAll.txt"
 
@@ -98,6 +98,44 @@ def parse_navall_categories(text: str) -> list[SchemeCategoryRow]:
             continue  # defensive: a data row before any header is seen
 
         rows.append(SchemeCategoryRow(amfi_code=amfi_code, category_raw=current_category))
+
+    return rows
+
+
+def parse_navall_scheme_master(text: str) -> list[SchemeMasterRow]:
+    """Scheme identity (name + ISINs) alongside `parse_navall`'s NAV
+    extraction, from the same already-fetched text — used to resolve a
+    scheme referenced only by name (e.g. a third-party CSV export) against
+    the real, current AMFI-listed universe (ingestion/dezerv_matching.py)."""
+    rows: list[SchemeMasterRow] = []
+    for line in text.splitlines():
+        fields = line.split(";")
+        if len(fields) != 6:
+            continue
+
+        amfi_code = fields[0].strip()
+        if not amfi_code.isdigit():
+            continue
+
+        scheme_name = fields[3].strip()
+        if not scheme_name:
+            continue
+
+        isin_growth = fields[1].strip() or None
+        isin_div_reinvestment = fields[2].strip() or None
+        if isin_growth == "-":
+            isin_growth = None
+        if isin_div_reinvestment == "-":
+            isin_div_reinvestment = None
+
+        rows.append(
+            SchemeMasterRow(
+                amfi_code=amfi_code,
+                scheme_name=scheme_name,
+                isin_growth=isin_growth,
+                isin_div_reinvestment=isin_div_reinvestment,
+            )
+        )
 
     return rows
 
