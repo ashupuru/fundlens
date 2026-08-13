@@ -1,0 +1,232 @@
+"""Orchestrates a Dezerv BANK BOOK import in two steps, matching the
+"auto-match with a preview step" design chosen for this format's scheme-
+resolution risk (dezerv_matching.py's docstring has the real-data cases
+that make blind auto-matching unsafe):
+
+1. `preview_dezerv_csv` — parses the file and proposes a scheme mapping,
+   writing nothing to the database. The caller (API/UI) shows this to the
+   user for approval or correction.
+2. `commit_dezerv_csv` — takes the same file plus a *confirmed* mapping
+   (security name -> amfi_code, or None to skip that scheme's rows
+   entirely) and actually ingests: backfills NAV history for every
+   resolved scheme via mfapi.in (same mechanism P0.2 uses for any other
+   scheme), back-computes units from each transaction's rupee amount and
+   that scheme's NAV on the transaction date (nearest available trading
+   day on/before it — this format has no units column at all), and merges
+   through the same idempotent natural-key path every other ingestion
+   route uses.
+
+A scheme resolvable in the mapping but whose NAV backfill fails (network
+error) or has no NAV on/before a given transaction's date degrades that
+row to skipped-and-reported, never a fabricated unit count.
+"""
+
+import hashlib
+import json
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy.orm import Session
+
+from fundlens.db.models import RawCASUpload, TransactionType, UploadStatus
+from fundlens.ingestion.dezerv_csv import DezervRow, parse_dezerv_csv
+from fundlens.ingestion.dezerv_matching import MatchCandidate, resolve_security
+from fundlens.ingestion.merge import merge_transactions
+from fundlens.ingestion.natural_key import compute_natural_key
+from fundlens.ingestion.records import TransactionRecord
+from fundlens.ingestion.service import find_existing_parsed_upload
+from fundlens.market_data.amfi_client import fetch_navall_text, parse_navall_scheme_master
+from fundlens.market_data.mfapi_client import fetch_scheme_history
+from fundlens.market_data.service import backfill_scheme_via_mfapi
+from fundlens.tax.grandfathering import fmv_per_unit_on_or_before as _nav_on_or_before
+
+PARSER_VERSION = "dezerv-csv-v1"
+
+
+@dataclass(frozen=True)
+class DezervSchemePreview:
+    security_name: str
+    symbol_code: str
+    txn_count: int
+    matched: MatchCandidate | None
+    reason: str | None
+    suggestions: list[MatchCandidate]
+
+
+@dataclass(frozen=True)
+class DezervPreview:
+    schemes: list[DezervSchemePreview]
+    unrecognized_transaction_descriptions: list[str]
+    total_mfdemat_rows: int
+    date_range: tuple[date, date] | None
+
+
+def preview_dezerv_csv(content: str) -> DezervPreview:
+    parsed = parse_dezerv_csv(content)
+
+    amfi_text = fetch_navall_text()
+    schemes_master = parse_navall_scheme_master(amfi_text)
+
+    by_security: dict[str, list[DezervRow]] = {}
+    for row in parsed.rows:
+        by_security.setdefault(row.security, []).append(row)
+
+    scheme_previews = [
+        DezervSchemePreview(
+            security_name=security_name,
+            symbol_code=rows[0].symbol_code,
+            txn_count=len(rows),
+            matched=(result := resolve_security(security_name, schemes_master)).matched,
+            reason=result.reason,
+            suggestions=result.suggestions,
+        )
+        for security_name, rows in by_security.items()
+    ]
+
+    dates = [r.txn_date for r in parsed.rows]
+    return DezervPreview(
+        schemes=scheme_previews,
+        unrecognized_transaction_descriptions=sorted(parsed.unrecognized_transaction_descriptions),
+        total_mfdemat_rows=len(parsed.rows),
+        date_range=(min(dates), max(dates)) if dates else None,
+    )
+
+
+@dataclass(frozen=True)
+class DezervCommitResult:
+    upload_id: str
+    inserted_count: int
+    duplicate_count: int
+    skipped_count: int
+    skipped_reasons: dict[str, int]  # security_name -> row count skipped for it
+
+
+def _resolve_amc_names(session: Session, amfi_codes: set[str]) -> dict[str, str]:
+    amc_by_code: dict[str, str] = {}
+    for amfi_code in amfi_codes:
+        backfill_scheme_via_mfapi(session, amfi_code)  # idempotent NAV insert
+        try:
+            payload = fetch_scheme_history(amfi_code)
+        except Exception:  # noqa: BLE001 - degrade to a generic AMC label, never crash the commit
+            amc_by_code[amfi_code] = "Unknown AMC"
+            continue
+        amc_by_code[amfi_code] = payload.get("meta", {}).get("fund_house", "Unknown AMC")
+    return amc_by_code
+
+
+def commit_dezerv_csv(
+    session: Session,
+    content: str,
+    mapping: dict[str, str | None],
+    source_filename: str | None = None,
+) -> DezervCommitResult:
+    hash_input = content + json.dumps(mapping, sort_keys=True)
+    file_hash = hashlib.sha256(hash_input.encode("utf-8")).hexdigest()
+
+    existing = find_existing_parsed_upload(session, file_hash)
+    if existing is not None:
+        return DezervCommitResult(
+            upload_id=existing.id, inserted_count=0, duplicate_count=0, skipped_count=0,
+            skipped_reasons={},
+        )
+
+    parsed = parse_dezerv_csv(content)
+
+    amfi_text = fetch_navall_text()
+    schemes_master = {s.amfi_code: s for s in parse_navall_scheme_master(amfi_text)}
+
+    resolved_codes = {code for code in mapping.values() if code}
+    valid_codes = resolved_codes & set(schemes_master)
+    amc_by_code = _resolve_amc_names(session, valid_codes)
+
+    skipped_reasons: dict[str, int] = {}
+    records: list[TransactionRecord] = []
+    ordinal_counts: dict[tuple, int] = {}
+    sequence_counts: dict[tuple[str, str], int] = {}
+
+    for row in sorted(parsed.rows, key=lambda r: (r.security, r.txn_date)):
+        amfi_code = mapping.get(row.security)
+        scheme = schemes_master.get(amfi_code) if amfi_code else None
+        if scheme is None:
+            skipped_reasons[row.security] = skipped_reasons.get(row.security, 0) + 1
+            continue
+
+        nav = _nav_on_or_before(session, scheme.amfi_code, row.txn_date)
+        if nav is None or nav == 0:
+            skipped_reasons[row.security] = skipped_reasons.get(row.security, 0) + 1
+            continue
+
+        units = (Decimal(row.amount_paise) / 100) / nav
+        is_buy = row.transaction_description == "Buy"
+        txn_type = TransactionType.PURCHASE if is_buy else TransactionType.REDEMPTION
+        signed_units = units if is_buy else -units
+        signed_amount_paise = row.amount_paise if is_buy else -row.amount_paise
+
+        scheme_identifier = scheme.isin_growth or scheme.amfi_code
+        tie_key = (
+            row.custodian_account,
+            scheme_identifier,
+            row.txn_date,
+            txn_type.value,
+            signed_amount_paise,
+            signed_units,
+            None,
+        )
+        ordinal = ordinal_counts.get(tie_key, 0)
+        ordinal_counts[tie_key] = ordinal + 1
+
+        scheme_group = (row.custodian_account, scheme_identifier)
+        sequence = sequence_counts.get(scheme_group, 0)
+        sequence_counts[scheme_group] = sequence + 1
+
+        records.append(
+            TransactionRecord(
+                pan=None,
+                folio=row.custodian_account,
+                amc=amc_by_code.get(scheme.amfi_code, "Unknown AMC"),
+                scheme_name=scheme.scheme_name,
+                isin=scheme.isin_growth,
+                amfi_code=scheme.amfi_code,
+                txn_type=txn_type,
+                txn_date=row.txn_date,
+                sequence=sequence,
+                description=f"Dezerv: {row.transaction_description}",
+                units=signed_units,
+                nav=nav,
+                amount_paise=signed_amount_paise,
+                balance_after=None,
+                dividend_rate=None,
+                gift_folio=None,
+                natural_key=compute_natural_key(
+                    folio=row.custodian_account,
+                    scheme_identifier=scheme_identifier,
+                    txn_date=row.txn_date,
+                    txn_type=txn_type.value,
+                    amount_paise=signed_amount_paise,
+                    units=signed_units,
+                    balance_after=None,
+                    ordinal=ordinal,
+                ),
+            )
+        )
+
+    upload = RawCASUpload(
+        file_hash=file_hash,
+        source_filename=source_filename,
+        parser_version=PARSER_VERSION,
+        status=UploadStatus.PARSED,
+    )
+    session.add(upload)
+    session.flush()
+
+    merge_result = merge_transactions(session, upload.id, records)
+    session.commit()
+
+    return DezervCommitResult(
+        upload_id=upload.id,
+        inserted_count=merge_result.inserted_count,
+        duplicate_count=merge_result.duplicate_count,
+        skipped_count=sum(skipped_reasons.values()),
+        skipped_reasons=skipped_reasons,
+    )

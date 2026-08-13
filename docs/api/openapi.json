@@ -109,6 +109,88 @@
         }
       }
     },
+    "/ingest/dezerv/preview": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Preview",
+        "operationId": "preview_ingest_dezerv_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_ingest_dezerv_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DezervPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/dezerv/commit": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Commit",
+        "operationId": "commit_ingest_dezerv_commit_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_commit_ingest_dezerv_commit_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DezervCommitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/market-data/refresh": {
       "post": {
         "tags": [
@@ -993,6 +1075,25 @@
         ],
         "title": "BenchmarkRefreshResultResponse"
       },
+      "Body_commit_ingest_dezerv_commit_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "mapping": {
+            "type": "string",
+            "title": "Mapping"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "mapping"
+        ],
+        "title": "Body_commit_ingest_dezerv_commit_post"
+      },
       "Body_ingest_cas_ingest_cas_post": {
         "properties": {
           "file": {
@@ -1025,6 +1126,20 @@
           "file"
         ],
         "title": "Body_ingest_csv_ingest_csv_post"
+      },
+      "Body_preview_ingest_dezerv_preview_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_ingest_dezerv_preview_post"
       },
       "CapitalGainsLineResponse": {
         "properties": {
@@ -1349,6 +1464,186 @@
           "data_freshness"
         ],
         "title": "DataQualitySummaryResponse"
+      },
+      "DezervCommitResponse": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "inserted_count": {
+            "type": "integer",
+            "title": "Inserted Count"
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "title": "Duplicate Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "skipped_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Skipped Reasons"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_id",
+          "inserted_count",
+          "duplicate_count",
+          "skipped_count",
+          "skipped_reasons"
+        ],
+        "title": "DezervCommitResponse"
+      },
+      "DezervPreviewResponse": {
+        "properties": {
+          "schemes": {
+            "items": {
+              "$ref": "#/components/schemas/DezervSchemePreviewResponse"
+            },
+            "type": "array",
+            "title": "Schemes"
+          },
+          "unrecognized_transaction_descriptions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unrecognized Transaction Descriptions"
+          },
+          "total_mfdemat_rows": {
+            "type": "integer",
+            "title": "Total Mfdemat Rows"
+          },
+          "date_range_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Range Start"
+          },
+          "date_range_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Range End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schemes",
+          "unrecognized_transaction_descriptions",
+          "total_mfdemat_rows",
+          "date_range_start",
+          "date_range_end"
+        ],
+        "title": "DezervPreviewResponse"
+      },
+      "DezervSchemePreviewResponse": {
+        "properties": {
+          "security_name": {
+            "type": "string",
+            "title": "Security Name"
+          },
+          "symbol_code": {
+            "type": "string",
+            "title": "Symbol Code"
+          },
+          "txn_count": {
+            "type": "integer",
+            "title": "Txn Count"
+          },
+          "matched_amfi_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Amfi Code"
+          },
+          "matched_scheme_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Scheme Name"
+          },
+          "matched_isin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Isin"
+          },
+          "match_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Score"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/MatchCandidateResponse"
+            },
+            "type": "array",
+            "title": "Suggestions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "security_name",
+          "symbol_code",
+          "txn_count",
+          "matched_amfi_code",
+          "matched_scheme_name",
+          "matched_isin",
+          "match_score",
+          "reason",
+          "suggestions"
+        ],
+        "title": "DezervSchemePreviewResponse"
       },
       "DirectVsRegularFlagResponse": {
         "properties": {
@@ -1748,6 +2043,41 @@
           "coverage_gaps"
         ],
         "title": "IngestResponse"
+      },
+      "MatchCandidateResponse": {
+        "properties": {
+          "amfi_code": {
+            "type": "string",
+            "title": "Amfi Code"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "isin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isin"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amfi_code",
+          "scheme_name",
+          "isin",
+          "score"
+        ],
+        "title": "MatchCandidateResponse"
       },
       "PortfolioBenchmarkComparisonResponse": {
         "properties": {

@@ -288,6 +288,21 @@ tr:last-child td {
   color: var(--text-muted);
 }
 
+/* ---------- Form fields ---------- */
+
+input[type="password"],
+input[type="text"],
+input[type="file"],
+select {
+  font-family: var(--sans);
+  font-size: 14px;
+  color: var(--text);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+}
+
 /* ---------- Buttons ---------- */
 
 button {
@@ -306,6 +321,16 @@ button {
 button:hover {
   background: var(--brand-light);
   color: #fff;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  background: var(--brand-bg);
+  color: var(--brand);
 }
 
 /* ---------- Utility ---------- */

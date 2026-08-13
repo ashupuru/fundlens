@@ -78,3 +78,103 @@ export async function getDirectVsRegularAudit(): Promise<DirectVsRegularAuditRes
   }
   return response.json() as Promise<DirectVsRegularAuditResponse>;
 }
+
+async function detailOrStatus(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === "object" && "detail" in body) {
+      const detail = (body as { detail: unknown }).detail;
+      if (typeof detail === "string") return detail;
+    }
+  } catch {
+    // response body wasn't JSON — fall through to the status-based message
+  }
+  return `request failed: ${response.status}`;
+}
+
+export interface DezervMatchCandidate {
+  amfi_code: string;
+  scheme_name: string;
+  isin: string | null;
+  score: number;
+}
+
+export interface DezervSchemePreview {
+  security_name: string;
+  symbol_code: string;
+  txn_count: number;
+  matched_amfi_code: string | null;
+  matched_scheme_name: string | null;
+  matched_isin: string | null;
+  match_score: number | null;
+  reason: string | null;
+  suggestions: DezervMatchCandidate[];
+}
+
+export interface DezervPreview {
+  schemes: DezervSchemePreview[];
+  unrecognized_transaction_descriptions: string[];
+  total_mfdemat_rows: number;
+  date_range_start: string | null;
+  date_range_end: string | null;
+}
+
+export async function postDezervPreview(file: File): Promise<DezervPreview> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/ingest/dezerv/preview`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Dezerv preview failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<DezervPreview>;
+}
+
+export interface DezervCommitResult {
+  upload_id: string;
+  inserted_count: number;
+  duplicate_count: number;
+  skipped_count: number;
+  skipped_reasons: Record<string, number>;
+}
+
+export async function postDezervCommit(
+  file: File,
+  mapping: Record<string, string | null>,
+): Promise<DezervCommitResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mapping", JSON.stringify(mapping));
+  const response = await fetch(`${API_BASE_URL}/ingest/dezerv/commit`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Dezerv commit failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<DezervCommitResult>;
+}
+
+export interface SchemeRebuildError {
+  folio: string;
+  scheme_key: string;
+  message: string;
+}
+
+export interface RebuildLotsResult {
+  folios_processed: number;
+  schemes_processed: number;
+  lots_created: number;
+  realized_gains_created: number;
+  errors: SchemeRebuildError[];
+}
+
+export async function postRebuildLots(): Promise<RebuildLotsResult> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/rebuild-lots`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Rebuild lots failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RebuildLotsResult>;
+}

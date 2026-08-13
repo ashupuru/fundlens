@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import DataQuality from "./pages/DataQuality";
+import DezervImport from "./pages/DezervImport";
 import Funds from "./pages/Funds";
 
 function DashboardIcon() {
@@ -37,10 +38,26 @@ function DataQualityIcon() {
   );
 }
 
+function UploadIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M8 10.5V2.5M8 2.5 4.5 6M8 2.5 11.5 6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M2.5 11v1.5a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const links = [
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/funds", label: "Funds", icon: FundsIcon, end: false },
   { to: "/data-quality", label: "Data Quality", icon: DataQualityIcon, end: false },
+  { to: "/import/dezerv", label: "Import Dezerv CSV", icon: UploadIcon, end: false },
 ];
 
 function App() {
@@ -65,6 +82,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/funds" element={<Funds />} />
           <Route path="/data-quality" element={<DataQuality />} />
+          <Route path="/import/dezerv" element={<DezervImport />} />
         </Routes>
       </div>
     </div>
