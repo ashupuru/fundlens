@@ -51,13 +51,20 @@ aggregated — no special inter-fund netting logic needed.
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fundlens.compute.holdings import HoldingView, get_current_holdings
 from fundlens.compute.xirr import CashFlow, compute_xirr
-from fundlens.db.models import NavHistory, RawTransaction, RealizedGain, TransactionType
+from fundlens.db.models import (
+    GrowwFundMetadata,
+    NavHistory,
+    RawTransaction,
+    RealizedGain,
+    TransactionType,
+)
 from fundlens.money import to_paise_strict
 from fundlens.scheme_identity import scheme_key
 
@@ -410,3 +417,92 @@ def compute_fund_metrics(session: Session, amfi_code: str) -> PortfolioMetrics |
         current_value_paise=current_value_total,
         positions_missing_nav=missing_nav_count,
     )
+
+
+@dataclass(frozen=True)
+class CategoryGroupMetrics:
+    label: str
+    current_value_paise: int
+    allocation_pct: float
+    xirr: float | None
+    xirr_reason: str | None
+    fund_count: int
+
+
+def compute_category_breakdown(
+    session: Session, level: Literal["category", "sub_category"]
+) -> list[CategoryGroupMetrics]:
+    """Groups currently-open positions by Groww's fund category or
+    sub-category (market_data/groww_service.py's groww_fund_metadata),
+    blending each group's cash flows into one XIRR the same way
+    compute_portfolio_metrics/compute_fund_metrics do (concatenate, call
+    compute_xirr once) -- a new grouping key over the same pattern, not
+    new math.
+
+    Scoped to currently-open positions only (get_current_holdings()),
+    deliberately excluding fully-exited ones -- same reasoning as the
+    Funds-page consistency fix: allocation % is inherently a snapshot of
+    what's held *now*, so blending in an exited position's historical
+    cash flows would conflate "how is my current Equity slice doing"
+    with "how did that Equity fund I already sold do".
+
+    A position whose scheme has no amfi_code, or an amfi_code Groww's
+    screener doesn't cover, lands in "Uncategorized" -- real-data-verified
+    coverage gap (data-model.md's groww_fund_metadata section), never
+    dropped silently.
+    """
+    holdings = get_current_holdings(session)
+    if not holdings:
+        return []
+
+    amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
+    metadata_by_code = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(GrowwFundMetadata).where(GrowwFundMetadata.amfi_code.in_(amfi_codes))
+        )
+    }
+
+    positions = {(h.folio, h.scheme_key) for h in holdings}
+    open_holdings = {(h.folio, h.scheme_key): h for h in holdings}
+    txns_by_position = positions_with_transactions(session, positions)
+
+    members_by_label: dict[str, list[tuple[str, str]]] = {}
+    for h in holdings:
+        metadata = metadata_by_code.get(h.amfi_code) if h.amfi_code else None
+        label = getattr(metadata, level) if metadata is not None else None
+        members_by_label.setdefault(label or "Uncategorized", []).append((h.folio, h.scheme_key))
+
+    value_by_label: dict[str, int] = {}
+    xirr_by_label: dict[str, tuple[float | None, str | None]] = {}
+    for label, members in members_by_label.items():
+        cash_flows: list[CashFlow] = []
+        value_paise = 0
+        for folio, key in members:
+            pos = _build_position_cash_flows(
+                session, txns_by_position.get((folio, key), []), open_holdings.get((folio, key))
+            )
+            cash_flows.extend(pos.cash_flows)
+            if pos.current_value_paise is not None:
+                value_paise += pos.current_value_paise
+        xirr_result = compute_xirr(cash_flows)
+        value_by_label[label] = value_paise
+        xirr_by_label[label] = (xirr_result.rate, xirr_result.reason)
+
+    total_value = sum(value_by_label.values())
+
+    results = [
+        CategoryGroupMetrics(
+            label=label,
+            current_value_paise=value_by_label[label],
+            allocation_pct=(
+                value_by_label[label] / total_value * 100 if total_value > 0 else 0.0
+            ),
+            xirr=xirr_by_label[label][0],
+            xirr_reason=xirr_by_label[label][1],
+            fund_count=len({key for _, key in members}),
+        )
+        for label, members in members_by_label.items()
+    ]
+
+    return sorted(results, key=lambda r: r.current_value_paise, reverse=True)

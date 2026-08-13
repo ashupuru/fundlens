@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from fundlens.compute import metrics, service
 from fundlens.db.models import (
+    GrowwFundMetadata,
     NavHistory,
     NavSource,
     RawCASUpload,
@@ -14,6 +15,19 @@ from fundlens.db.models import (
     TransactionType,
     UploadStatus,
 )
+
+
+def _add_groww_metadata(
+    session: Session, amfi_code: str, *, category: str, sub_category: str
+) -> None:
+    session.add(
+        GrowwFundMetadata(
+            amfi_code=amfi_code,
+            scheme_name=f"Fund {amfi_code}",
+            category=category,
+            sub_category=sub_category,
+        )
+    )
 
 
 def _make_upload(session: Session) -> RawCASUpload:
@@ -372,3 +386,87 @@ def test_compute_fund_metrics_returns_none_for_a_fund_never_held(session: Sessio
     service.rebuild_lots_for_folio(session, "F1")
 
     assert metrics.compute_fund_metrics(session, "does-not-exist") is None
+
+
+def test_compute_category_breakdown_blends_two_funds_in_the_same_category(
+    session: Session,
+) -> None:
+    upload = _make_upload(session)
+    purchase_date = date.today() - timedelta(days=730)
+    _add_txn(
+        session, upload.id, scheme_name="Fund A", amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("100"), nav=Decimal("50"), amount_paise=500_000,
+    )
+    _add_txn(
+        session, upload.id, scheme_name="Fund B", amfi_code="222",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("10"), nav=Decimal("200"), amount_paise=2_000_000,
+    )
+    _add_groww_metadata(session, "111", category="Equity", sub_category="Large Cap")
+    _add_groww_metadata(session, "222", category="Equity", sub_category="Mid Cap")
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "111", date.today(), Decimal("75"))
+    _add_nav(session, "222", date.today(), Decimal("250"))
+    session.commit()
+
+    by_category = metrics.compute_category_breakdown(session, "category")
+    assert len(by_category) == 1
+    group = by_category[0]
+    assert group.label == "Equity"
+    assert group.current_value_paise == 750_000 + 250_000  # 100*75 + 10*250 rupees, in paise
+    assert group.allocation_pct == pytest.approx(100.0)
+    assert group.xirr is not None
+    assert group.fund_count == 2
+
+    by_sub_category = metrics.compute_category_breakdown(session, "sub_category")
+    labels = {g.label for g in by_sub_category}
+    assert labels == {"Large Cap", "Mid Cap"}
+    total_pct = sum(g.allocation_pct for g in by_sub_category)
+    assert total_pct == pytest.approx(100.0)
+
+
+def test_compute_category_breakdown_uncategorized_bucket_for_missing_groww_data(
+    session: Session,
+) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="999", txn_type=TransactionType.PURCHASE,
+        txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("100"), amount_paise=1_000_000,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "999", date.today(), Decimal("110"))
+    session.commit()
+
+    result = metrics.compute_category_breakdown(session, "category")
+
+    assert len(result) == 1
+    assert result[0].label == "Uncategorized"
+    assert result[0].current_value_paise == 110_000  # 10 units * 110 rupees, in paise
+
+
+def test_compute_category_breakdown_excludes_fully_exited_positions(session: Session) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="111", sequence=0, txn_type=TransactionType.PURCHASE,
+        txn_date=date(2021, 1, 1), units=Decimal("100"), nav=Decimal("50"), amount_paise=500_000,
+    )
+    _add_txn(
+        session, upload.id, amfi_code="111", sequence=0, txn_type=TransactionType.REDEMPTION,
+        txn_date=date(2021, 6, 1), units=Decimal("-100"), nav=Decimal("60"), amount_paise=-600_000,
+    )
+    _add_groww_metadata(session, "111", category="Equity", sub_category="Large Cap")
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    session.commit()
+
+    result = metrics.compute_category_breakdown(session, "category")
+
+    assert result == []
+
+
+def test_compute_category_breakdown_empty_portfolio(session: Session) -> None:
+    assert metrics.compute_category_breakdown(session, "category") == []

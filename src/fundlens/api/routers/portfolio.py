@@ -1,6 +1,8 @@
 """FR-2.1/2.2/3.1/3.2: rebuild FIFO lots, view current holdings, and return
 metrics (XIRR, CAGR, absolute return, realized/unrealized P&L)."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -149,3 +151,30 @@ def portfolio_metrics(session: Session = Depends(get_session)) -> PortfolioMetri
         current_value_paise=m.current_value_paise,
         positions_missing_nav=m.positions_missing_nav,
     )
+
+
+class CategoryBreakdownItemResponse(BaseModel):
+    label: str
+    current_value_paise: int
+    allocation_pct: float
+    xirr: float | None
+    xirr_reason: str | None
+    fund_count: int
+
+
+@router.get("/breakdown", response_model=list[CategoryBreakdownItemResponse])
+def breakdown(
+    level: Literal["category", "sub_category"] = "category",
+    session: Session = Depends(get_session),
+) -> list[CategoryBreakdownItemResponse]:
+    return [
+        CategoryBreakdownItemResponse(
+            label=g.label,
+            current_value_paise=g.current_value_paise,
+            allocation_pct=g.allocation_pct,
+            xirr=g.xirr,
+            xirr_reason=g.xirr_reason,
+            fund_count=g.fund_count,
+        )
+        for g in metrics.compute_category_breakdown(session, level)
+    ]
