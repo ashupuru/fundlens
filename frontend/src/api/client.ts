@@ -158,3 +158,47 @@ export async function postDezervCommit(
   }
   return response.json() as Promise<DezervCommitResult>;
 }
+
+type HoldingsResponse =
+  operations["holdings_portfolio_holdings_get"]["responses"][200]["content"]["application/json"];
+
+export async function getHoldings(): Promise<HoldingsResponse> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/holdings`);
+  if (!response.ok) {
+    throw new Error(`Holdings failed: ${response.status}`);
+  }
+  return response.json() as Promise<HoldingsResponse>;
+}
+
+type HoldingMetricsResponse =
+  operations["holding_metrics_portfolio_metrics_get"]["responses"][200]["content"]["application/json"];
+
+export async function getHoldingMetrics(): Promise<HoldingMetricsResponse> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/metrics`);
+  if (!response.ok) {
+    throw new Error(`Holding metrics failed: ${response.status}`);
+  }
+  return response.json() as Promise<HoldingMetricsResponse>;
+}
+
+export type FundDetail =
+  operations["fund_detail_funds__amfi_code__get"]["responses"][200]["content"]["application/json"];
+
+export async function getFundDetail(amfiCode: string): Promise<FundDetail> {
+  const response = await fetch(`${API_BASE_URL}/funds/${encodeURIComponent(amfiCode)}`);
+  if (!response.ok) {
+    throw new Error(`Fund detail failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<FundDetail>;
+}
+
+type GrowwRefreshResponse =
+  operations["refresh_groww_market_data_refresh_groww_post"]["responses"][200]["content"]["application/json"];
+
+export async function postRefreshGroww(): Promise<GrowwRefreshResponse> {
+  const response = await fetch(`${API_BASE_URL}/market-data/refresh-groww`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Failed to refresh fund metadata: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<GrowwRefreshResponse>;
+}

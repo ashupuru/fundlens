@@ -85,6 +85,13 @@ class AmcHoldingView:
     cost_basis_paise: int
 
 
+def get_holdings_for_scheme(session: Session, amfi_code: str) -> list[HoldingView]:
+    """Every currently-open (folio, scheme) position for one fund, across
+    every folio that holds it — the per-folio breakdown behind the fund
+    detail page's "your position" section (api/routers/funds.py)."""
+    return [h for h in get_current_holdings(session) if h.amfi_code == amfi_code]
+
+
 def get_holdings_by_amc(session: Session) -> list[AmcHoldingView]:
     holdings = get_current_holdings(session)
 

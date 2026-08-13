@@ -191,6 +191,48 @@
         }
       }
     },
+    "/funds/{amfi_code}": {
+      "get": {
+        "tags": [
+          "funds"
+        ],
+        "summary": "Fund Detail",
+        "operationId": "fund_detail_funds__amfi_code__get",
+        "parameters": [
+          {
+            "name": "amfi_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Amfi Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/market-data/refresh": {
       "post": {
         "tags": [
@@ -205,6 +247,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/market-data/refresh-groww": {
+      "post": {
+        "tags": [
+          "market-data"
+        ],
+        "summary": "Refresh Groww",
+        "operationId": "refresh_groww_market_data_refresh_groww_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GrowwRefreshResponse"
                 }
               }
             }
@@ -1814,6 +1877,353 @@
         ],
         "title": "FolioSummaryResponse"
       },
+      "FundDetailResponse": {
+        "properties": {
+          "amfi_code": {
+            "type": "string",
+            "title": "Amfi Code"
+          },
+          "scheme_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheme Name"
+          },
+          "fund_house": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fund House"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "sub_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Category"
+          },
+          "plan_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Type"
+          },
+          "aum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aum"
+          },
+          "groww_rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groww Rating"
+          },
+          "risk_rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Rating"
+          },
+          "expense_ratio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expense Ratio"
+          },
+          "fund_manager": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fund Manager"
+          },
+          "exit_load": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Load"
+          },
+          "return_1y": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return 1Y"
+          },
+          "return_3y": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return 3Y"
+          },
+          "return_5y": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return 5Y"
+          },
+          "return_10y": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return 10Y"
+          },
+          "tax_asset_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tax Asset Class"
+          },
+          "metadata_available": {
+            "type": "boolean",
+            "title": "Metadata Available"
+          },
+          "your_position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundPositionResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/FundHoldingResponse"
+            },
+            "type": "array",
+            "title": "Holdings"
+          },
+          "similar_funds": {
+            "items": {
+              "$ref": "#/components/schemas/SimilarFundResponse"
+            },
+            "type": "array",
+            "title": "Similar Funds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amfi_code",
+          "scheme_name",
+          "fund_house",
+          "category",
+          "sub_category",
+          "plan_type",
+          "aum",
+          "groww_rating",
+          "risk_rating",
+          "expense_ratio",
+          "fund_manager",
+          "exit_load",
+          "return_1y",
+          "return_3y",
+          "return_5y",
+          "return_10y",
+          "tax_asset_class",
+          "metadata_available",
+          "your_position",
+          "holdings",
+          "similar_funds"
+        ],
+        "title": "FundDetailResponse"
+      },
+      "FundHoldingResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "units_remaining": {
+            "type": "string",
+            "title": "Units Remaining"
+          },
+          "cost_basis_paise": {
+            "type": "integer",
+            "title": "Cost Basis Paise"
+          },
+          "average_cost_per_unit": {
+            "type": "string",
+            "title": "Average Cost Per Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "units_remaining",
+          "cost_basis_paise",
+          "average_cost_per_unit"
+        ],
+        "title": "FundHoldingResponse"
+      },
+      "FundPositionResponse": {
+        "properties": {
+          "xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr"
+          },
+          "xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr Reason"
+          },
+          "invested_paise": {
+            "type": "integer",
+            "title": "Invested Paise"
+          },
+          "received_paise": {
+            "type": "integer",
+            "title": "Received Paise"
+          },
+          "current_value_paise": {
+            "type": "integer",
+            "title": "Current Value Paise"
+          },
+          "positions_missing_nav": {
+            "type": "integer",
+            "title": "Positions Missing Nav"
+          }
+        },
+        "type": "object",
+        "required": [
+          "xirr",
+          "xirr_reason",
+          "invested_paise",
+          "received_paise",
+          "current_value_paise",
+          "positions_missing_nav"
+        ],
+        "title": "FundPositionResponse"
+      },
+      "GrowwRefreshResponse": {
+        "properties": {
+          "rows_upserted": {
+            "type": "integer",
+            "title": "Rows Upserted"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows_upserted",
+          "ok",
+          "error"
+        ],
+        "title": "GrowwRefreshResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2517,6 +2927,60 @@
           "persona"
         ],
         "title": "SetRiskProfileRequest"
+      },
+      "SimilarFundResponse": {
+        "properties": {
+          "amfi_code": {
+            "type": "string",
+            "title": "Amfi Code"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "groww_rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groww Rating"
+          },
+          "aum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aum"
+          },
+          "return_3y": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return 3Y"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amfi_code",
+          "scheme_name",
+          "groww_rating",
+          "aum",
+          "return_3y"
+        ],
+        "title": "SimilarFundResponse"
       },
       "TaxImpactResponse": {
         "properties": {

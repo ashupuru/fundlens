@@ -307,3 +307,68 @@ def test_switch_between_two_funds_cancels_exactly_in_portfolio_xirr(session: Ses
     days = (today - purchase_date).days
     expected_rate = (current_value_paise / 500_000) ** (365 / days) - 1
     assert result.xirr == pytest.approx(expected_rate, rel=1e-9)
+
+
+def test_compute_fund_metrics_aggregates_across_folios(session: Session) -> None:
+    upload = _make_upload(session)
+    purchase_date = date.today() - timedelta(days=730)
+    _add_txn(
+        session, upload.id, folio="F1", amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("100"), nav=Decimal("50"), amount_paise=500_000,
+    )
+    _add_txn(
+        session, upload.id, folio="F2", amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("40"), nav=Decimal("50"), amount_paise=200_000,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    service.rebuild_lots_for_folio(session, "F2")
+    _add_nav(session, "111", date.today(), Decimal("75"))
+    session.commit()
+
+    result = metrics.compute_fund_metrics(session, "111")
+
+    assert result is not None
+    assert result.invested_paise == 700_000  # 500,000 + 200,000 across both folios
+    assert result.current_value_paise == 1_050_000  # (100+40) units * 75 rupees, in paise
+    assert result.xirr is not None
+    assert result.positions_missing_nav == 0
+
+
+def test_compute_fund_metrics_ignores_other_funds_in_the_same_folio(session: Session) -> None:
+    upload = _make_upload(session)
+    purchase_date = date.today() - timedelta(days=730)
+    _add_txn(
+        session, upload.id, folio="F1", scheme_name="Fund A", amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("100"), nav=Decimal("50"), amount_paise=500_000,
+    )
+    _add_txn(
+        session, upload.id, folio="F1", scheme_name="Fund B", amfi_code="222",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("10"), nav=Decimal("200"), amount_paise=2_000_000,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "111", date.today(), Decimal("75"))
+    session.commit()
+
+    result = metrics.compute_fund_metrics(session, "111")
+
+    assert result is not None
+    assert result.invested_paise == 500_000  # only Fund A, not Fund B's 2,000,000
+
+
+def test_compute_fund_metrics_returns_none_for_a_fund_never_held(session: Session) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("50"), amount_paise=50_000,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+
+    assert metrics.compute_fund_metrics(session, "does-not-exist") is None

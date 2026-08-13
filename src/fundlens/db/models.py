@@ -106,6 +106,11 @@ class NavSource(enum.StrEnum):
     AMFI_NAVALL = "amfi_navall"
     MFAPI = "mfapi"
     MANUAL = "manual"
+    # Not actually a NAV source -- reuses this enum (and DataFreshness, which
+    # is already documented generically as "one row per market-data source")
+    # for the Groww fund-metadata scrape's freshness tracking rather than
+    # introducing a parallel enum/table for one extra source.
+    GROWW_METADATA = "groww_metadata"
 
 
 class NavHistory(Base):
@@ -193,6 +198,47 @@ class SchemeMetadata(Base):
     amfi_code: Mapped[str] = mapped_column(String(20), primary_key=True)
     category_raw: Mapped[str] = mapped_column(String(255))
     tax_asset_class: Mapped[TaxAssetClass] = mapped_column(Enum(TaxAssetClass))
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+
+
+class GrowwFundMetadata(Base):
+    """Best-effort third-party fund metadata (AUM, star rating, expense
+    ratio, trailing returns) scraped from Groww's public mutual-fund
+    screener (market_data/groww_service.py), keyed by amfi_code -- verified
+    live that Groww's own `scheme_code` field *is* the AMFI code, so this
+    joins directly with no fuzzy matching (unlike the Dezerv scheme-name
+    matching problem).
+
+    Deliberately a separate table from `scheme_metadata` (which is derived
+    from AMFI's own always-available feed): a scheme absent from Groww's
+    listing simply has no row here, never blocking anything else. Current-
+    state snapshot, not a time series -- upserted wholesale on refresh.
+    """
+
+    __tablename__ = "groww_fund_metadata"
+
+    amfi_code: Mapped[str] = mapped_column(String(20), primary_key=True)
+    scheme_name: Mapped[str] = mapped_column(String(255))
+    fund_house: Mapped[str | None] = mapped_column(String(255))
+    category: Mapped[str | None] = mapped_column(String(100))
+    sub_category: Mapped[str | None] = mapped_column(String(100))
+    plan_type: Mapped[str | None] = mapped_column(String(50))
+    aum: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    groww_rating: Mapped[int | None] = mapped_column()
+    risk_rating: Mapped[int | None] = mapped_column()
+    expense_ratio: Mapped[Decimal | None] = mapped_column(Numeric(6, 4))
+    fund_manager: Mapped[str | None] = mapped_column(String(255))
+    exit_load: Mapped[str | None] = mapped_column(String(500))
+    return_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    return_3y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    return_5y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    return_10y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    sip_return_1y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    sip_return_3y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    sip_return_5y: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    launch_date: Mapped[date | None] = mapped_column(Date)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )

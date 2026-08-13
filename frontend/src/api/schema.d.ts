@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/funds/{amfi_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fund Detail */
+        get: operations["fund_detail_funds__amfi_code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market-data/refresh": {
         parameters: {
             query?: never;
@@ -100,6 +117,23 @@ export interface paths {
         put?: never;
         /** Refresh */
         post: operations["refresh_market_data_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/market-data/refresh-groww": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Groww */
+        post: operations["refresh_groww_market_data_refresh_groww_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -740,6 +774,85 @@ export interface components {
             /** Last Txn Date */
             last_txn_date: string;
         };
+        /** FundDetailResponse */
+        FundDetailResponse: {
+            /** Amfi Code */
+            amfi_code: string;
+            /** Scheme Name */
+            scheme_name: string | null;
+            /** Fund House */
+            fund_house: string | null;
+            /** Category */
+            category: string | null;
+            /** Sub Category */
+            sub_category: string | null;
+            /** Plan Type */
+            plan_type: string | null;
+            /** Aum */
+            aum: string | null;
+            /** Groww Rating */
+            groww_rating: number | null;
+            /** Risk Rating */
+            risk_rating: number | null;
+            /** Expense Ratio */
+            expense_ratio: string | null;
+            /** Fund Manager */
+            fund_manager: string | null;
+            /** Exit Load */
+            exit_load: string | null;
+            /** Return 1Y */
+            return_1y: string | null;
+            /** Return 3Y */
+            return_3y: string | null;
+            /** Return 5Y */
+            return_5y: string | null;
+            /** Return 10Y */
+            return_10y: string | null;
+            /** Tax Asset Class */
+            tax_asset_class: string | null;
+            /** Metadata Available */
+            metadata_available: boolean;
+            your_position: components["schemas"]["FundPositionResponse"] | null;
+            /** Holdings */
+            holdings: components["schemas"]["FundHoldingResponse"][];
+            /** Similar Funds */
+            similar_funds: components["schemas"]["SimilarFundResponse"][];
+        };
+        /** FundHoldingResponse */
+        FundHoldingResponse: {
+            /** Folio */
+            folio: string;
+            /** Units Remaining */
+            units_remaining: string;
+            /** Cost Basis Paise */
+            cost_basis_paise: number;
+            /** Average Cost Per Unit */
+            average_cost_per_unit: string;
+        };
+        /** FundPositionResponse */
+        FundPositionResponse: {
+            /** Xirr */
+            xirr: number | null;
+            /** Xirr Reason */
+            xirr_reason: string | null;
+            /** Invested Paise */
+            invested_paise: number;
+            /** Received Paise */
+            received_paise: number;
+            /** Current Value Paise */
+            current_value_paise: number;
+            /** Positions Missing Nav */
+            positions_missing_nav: number;
+        };
+        /** GrowwRefreshResponse */
+        GrowwRefreshResponse: {
+            /** Rows Upserted */
+            rows_upserted: number;
+            /** Ok */
+            ok: boolean;
+            /** Error */
+            error: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -934,6 +1047,19 @@ export interface components {
             income_stability?: string | null;
             /** Has Dependents */
             has_dependents?: boolean | null;
+        };
+        /** SimilarFundResponse */
+        SimilarFundResponse: {
+            /** Amfi Code */
+            amfi_code: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Groww Rating */
+            groww_rating: number | null;
+            /** Aum */
+            aum: string | null;
+            /** Return 3Y */
+            return_3y: string | null;
         };
         /** TaxImpactResponse */
         TaxImpactResponse: {
@@ -1199,6 +1325,37 @@ export interface operations {
             };
         };
     };
+    fund_detail_funds__amfi_code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                amfi_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     refresh_market_data_refresh_post: {
         parameters: {
             query?: never;
@@ -1215,6 +1372,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefreshResponse"];
+                };
+            };
+        };
+    };
+    refresh_groww_market_data_refresh_groww_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrowwRefreshResponse"];
                 };
             };
         };

@@ -218,9 +218,51 @@ fetch, no extra network call — `market_data/amfi_client.py::parse_navall_categ
 on the same cadence as NAV, scoped to currently-held schemes only. Upserted (current state, not a
 time series).
 
-Expense ratio, AUM, fund manager, AMC-declared benchmark, and plan type (`direct` \| `regular`)
-are **not sourced yet** — AMFI's NAVAll feed doesn't carry them; these need a separate AMC-
-disclosure or RTA data source and are deferred to a later phase.
+AMC-declared benchmark is still not sourced. Expense ratio, AUM, fund manager, and trailing
+returns are now available, best-effort, from `groww_fund_metadata` below — a separate table, not
+folded into this one, since it's third-party and optional rather than AMFI-authoritative.
+
+### `groww_fund_metadata`
+Best-effort fund metadata (AUM, Groww's own star rating, risk rating, expense ratio, fund
+manager, exit load, trailing 1y/3y/5y/10y and SIP returns, launch date) scraped from Groww's
+public mutual-fund screener (`market_data/groww_client.py` / `groww_service.py`), keyed by
+`amfi_code` (PK) — verified live that Groww's own `scheme_code` field *is* the AMFI code, so this
+joins directly with no fuzzy matching, unlike the Dezerv scheme-name matching problem. Upserted
+(current state, not a time series), refreshed via `POST /market-data/refresh-groww` (manually
+triggered from the Data Quality page — there's no automatic schedule for this source), tracked
+through the same `data_freshness` mechanism as NAV (`NavSource.GROWW_METADATA`, despite the enum's
+name — not worth a parallel table/enum for one more source).
+
+Deliberately a separate table from `scheme_metadata`: a scheme absent from Groww's listing simply
+has no row here, never blocking anything else that reads `scheme_metadata`.
+
+**The real endpoint isn't the one the screener page's URL suggests.** `docs/groww.py` (a scraper
+the user already had) paginated `https://groww.in/mutual-funds/filter?...&pageNo=N`, scraping the
+page's server-rendered `__NEXT_DATA__` JSON. Live-verified two things wrong with that approach:
+the JSON shape has changed since that script was written, and — more importantly — `pageNo` is
+inert; every value returns the same first 10 records, because pagination happens client-side
+against a JSON API the page's own JS bundle calls, never reflected in the URL. Found by
+downloading and grepping that bundle for its actual fetch calls:
+`GET https://groww.in/v1/api/search/v3/query/filter_derived_data/st_filter?page=0&size=N&q=&sortBy=0`
+— unauthenticated, and `size` is honored *past* the real universe size (verified live: `size=5000`
+against ~3,400 total funds returns all of them, capped at the true count rather than erroring).
+The refresh is therefore a **single HTTP request** for the entire fund universe (~2 seconds in
+practice), not a paginated crawl — an earlier design here, based on the wrong (page-render)
+endpoint, assumed ~170 sequential requests and built a whole partial-failure-tolerant multi-page
+loop with a rate-limiting delay for that; none of that complexity was needed once the real
+endpoint was found, and it was removed. (A sibling `mf_prime_screener/st_prime` endpoint also
+referenced in the bundle appears to be Groww's paid "Prime" tier — verified live that it returns
+an empty result set unauthenticated — and isn't used.)
+
+**Real-data-verified duplicate `scheme_code`s.** A single fetch of the full universe contains the
+same `amfi_code` more than once (252 of 3,414 records in one live fetch) — e.g. the same
+underlying scheme listed under both an old and current display name. The upsert dedupes *within*
+a batch, not just against what's already persisted, with the last record in the batch winning;
+without that, a second `INSERT` for the same primary key would fail outright.
+
+Similar-fund suggestions (`GET /funds/{amfi_code}`, api/routers/funds.py) query this table for
+other schemes sharing `sub_category`, ordered by `groww_rating` then `aum`, excluding the fund
+itself.
 
 ### `scheme_identity` (missing-ISIN handling) — **not yet built**
 Some CAS rows carry only an AMFI scheme code, no ISIN. The original plan was a deterministic

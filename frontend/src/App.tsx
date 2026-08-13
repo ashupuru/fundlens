@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import DataQuality from "./pages/DataQuality";
 import DezervImport from "./pages/DezervImport";
+import FundDetail from "./pages/FundDetail";
 import Funds from "./pages/Funds";
 import Upload from "./pages/Upload";
 
@@ -89,6 +90,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/funds" element={<Funds />} />
+          <Route path="/funds/:amfiCode" element={<FundDetail />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/data-quality" element={<DataQuality />} />
           <Route path="/import/dezerv" element={<DezervImport />} />
