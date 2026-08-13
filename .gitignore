@@ -32,3 +32,6 @@ exports/
 .vscode/*
 !.vscode/settings.json
 *.swp
+
+# scripts/start.sh runtime state (PID files, logs)
+.run/
