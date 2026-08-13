@@ -221,16 +221,36 @@ the tax engine actually reads are seeded (`equity_ltcg_threshold_days`,
 `equity_ltcg_exemption_paise_per_fy`) — inflation % and expected-return assumptions the PRD also
 names belong to goal planning (P2+) and aren't added until something reads them.
 
-### 3.5 SELL friction statement (FR-6.2) — **not yet built (P1)**
-For any proposed sell/switch, the tax engine computes:
-```
-tax_impact = Σ per-lot (STCG or LTCG tax owed, net of remaining exemption headroom)
-exit_load = per scheme's exit-load schedule, if within the load period
-net_of_tax_breakeven = (tax_impact + exit_load) / proposed_switch_amount
-                        → expressed as "new fund must outperform by X%/yr over N years to recoup"
-```
-This structured output is what the recommendation engine (§5) and AI layer consume — the
-breakeven number itself is compute-engine output, never LLM-generated (PRD FR-5.2).
+### 3.5 SELL friction statement (FR-6.2, shipped P1.3 — `tax/friction.py`)
+For a currently-held position, `compute_tax_friction(session, folio, scheme_key)` computes the
+real rupee tax cost of selling **today**: per open lot (not per position — a position built from
+multiple purchases can have both STCG- and LTCG-eligible lots simultaneously), it replays the same
+classification (§3.2) and grandfathering (§3.2a, `tax/grandfathering.py` — factored out as a
+shared module once this became its second caller) logic the realized-gains report uses, applied to
+a hypothetical sale instead of a past one. Exemption headroom is netted against what the same
+PAN has *already* consumed this FY (queries the current FY's own capital-gains report), so the
+friction statement never double-counts headroom another already-realized sale already used.
+
+**Two real data gaps, both handled by flagging rather than guessing**:
+- **Debt tax rate**: debt gains are taxed at the investor's marginal income-tax slab, which
+  nothing in this app captures (unlike equity's fixed, publicly-known STCG/LTCG rates, seeded into
+  the assumption registry as `equity_stcg_rate_pct`/`equity_ltcg_rate_pct`). Requires
+  `debt_marginal_tax_rate_pct` to be set via `POST /assumptions` first — deliberately **not** in
+  the seeded defaults (unlike every other assumption key), since defaulting a tax-rate guess to
+  any number would present it as the user's real rate. Until set, `computable=False,
+  reason="debt_marginal_tax_rate_not_configured"`.
+- **Exit load**: no free data source exists for exit-load schedules (same category of gap as
+  expense ratio, §6). `exit_load_modeled` is always `False`; the breakeven figure is tax-only,
+  never silently presented as tax-plus-exit-load. Real-data check: `exit_load_modeled` was `False`
+  for all 13 of the user's real holdings, as designed.
+
+Old-regime debt LTCG (pre-2023 purchases, >36mo) is taxed identically to debt STCG here
+(`debt_marginal_tax_rate_pct`) rather than modeling indexation, which would need historical Cost
+Inflation Index data this app doesn't have — a documented simplification, not a hidden one.
+
+This structured output is what the recommendation engine (§5) consumes — schema-enforced
+(`tax_impact` non-null on every `SELL` verdict, §5) rather than merely UI-enforced. An AI
+narrative layer (PRD FR-5.1/5.2) that would also consume this is not yet built.
 
 ## 4. Benchmark Simulation Engine
 
@@ -283,38 +303,66 @@ PRD's own documented fallback, used as the primary (only working) data source, n
 
 ## 5. Recommendation Rubric Engine
 
-**Design goal (PRD FR-6.1, §5.6): transparent and tunable, not a black-box score.** Each fund
-gets a `verdict` (§data-model.md) built from independently-computed, independently-displayed
-component scores:
+**Shipped in P1.3** (`compute/verdict.py`), **narrowed from the original 5-component design to
+4** — agreed before building, not discovered partway through. Real data only supports 4 of the 5
+originally-specified components:
 
-| Component | Computation | Weight (default, tunable) |
-|---|---|---|
-| 3yr/5yr rolling alpha | mean(rolling-window fund XIRR − benchmark XIRR) via §4's engine | 30% |
-| Consistency | % of rolling windows where fund beat benchmark | 20% |
-| Cost | expense ratio percentile vs category peers; direct-vs-regular flag (§6) | 20% |
-| Overlap/redundancy | pairwise holding overlap vs rest of portfolio (FR-5.3) | 15% |
-| Category fit | actual-vs-target allocation drift contribution (§7) | 15% |
+| Component | Original design | What shipped | Weight (default, tunable) |
+|---|---|---|---|
+| Rolling alpha | mean(rolling-window fund XIRR − benchmark XIRR) via §4 | scheme-level 3yr/5yr point-to-point NAV CAGR vs benchmark CAGR (`compute/rolling_returns.py`) — see below for why | 30 |
+| Consistency | % of rolling windows where fund beat benchmark | fraction of the (at most 2) available 3yr/5yr windows beaten | 20 |
+| Category fit | actual-vs-target allocation drift contribution (§7) | unchanged — needs P1.4's drift, which is why P1.4 was built first | 15 |
+| Cost | expense ratio percentile vs category peers; direct-vs-regular flag | **narrowed to the binary direct-vs-regular flag alone** (§6) — inherits cost's original weight | 20 |
+| Overlap/redundancy | pairwise holding overlap vs rest of portfolio (FR-5.3) | **omitted entirely** — needs monthly AMC portfolio disclosures, a data source this app doesn't integrate | — |
 
-Weights live in the `assumption` table, not code, so they're user-tunable and versioned per PRD
-§5.7. The verdict output is deliberately not just `HOLD`/`SELL`/`SWITCH` — it carries the
-component scores, a generated reasoning string built from a template over those scores (not an
-LLM call — this stays in the deterministic layer so a verdict is reproducible without network
-access), a confidence measure (based on data completeness — e.g. a fund held < 3yr has capped
-confidence since 3yr/5yr components are unavailable), and a "what would change this verdict"
-counterfactual (e.g. "would flip to HOLD if expense ratio dropped below 1.1% via a direct-plan
-switch").
+**Why NAV-based CAGR, not XIRR, for rolling alpha**: this is scheme-level performance (how has
+the fund itself done over the trailing window), not investor-position performance (which would
+conflate the fund's skill with the specific investor's entry-timing luck) — the same number a
+fund fact sheet reports as "3Y/5Y returns." A true moving-window methodology (many overlapping
+windows, not one snapshot per length) is deferred; this computes a single window ending today for
+each of 3yr/5yr, so "consistency" is a simplified 2-point proxy, not a real rolling win-rate.
 
-Any `SELL`/`SWITCH` verdict is required (FR-6.2) to attach the §3.5 tax-friction statement before
-it can be surfaced in the UI — enforced by the verdict schema making `tax_impact` non-nullable
-when `verdict_type != HOLD`.
+Weights (and the SELL threshold) live in the `assumption` table (`assumptions/service.py::RubricWeights`),
+not code — user-tunable and versioned per PRD §5.7 — and are **renormalized per-verdict** across
+whichever components are actually computable for that specific fund, so a fund held <3yr (both
+rolling components unavailable) gets a confidence-capped verdict from the remaining components,
+never a score silently computed as if the missing ones were zero. `confidence_pct` is exactly
+"how many of the 4 components were computable," which is what makes the <3yr case self-explanatory
+without special-casing it.
+
+**Verdict space is `HOLD`/`SELL` only, not `HOLD`/`SELL`/`SWITCH`**: a `SWITCH` verdict needs a
+specific alternative fund to switch to, which requires the Alternatives Engine (FR-9.1, §8) — not
+built. The reasoning string and "what would change this verdict" counterfactual are both
+template-generated from the component scores (never an LLM call — this stays in the deterministic
+layer so a verdict is reproducible without network access).
+
+Any `SELL` verdict is required (FR-6.2) to attach the §3.5 tax-friction statement — enforced by
+construction, not just validated after the fact: `tax_impact` is `None` for every `HOLD` and a
+*computable* `TaxFrictionStatement` for every `SELL`. If the rubric score alone would indicate
+SELL but the tax-friction statement reports `computable=False` (e.g. a debt fund with no
+configured marginal tax rate, §3.5), the verdict is **downgraded to `HOLD`** with `blocked_reason`
+set — recommending an action whose real-world cost can't be quantified would violate the same
+flag-don't-guess discipline used everywhere else in this app, just applied to the action itself
+rather than a data field. Real-data check: 0/13 of the user's real verdicts needed this downgrade
+(none scored low enough to reach the SELL threshold), and the schema invariant (`tax_impact`
+non-null iff non-`HOLD`) held for all 13.
 
 ## 6. Direct-vs-Regular Audit
 
-Flagged at the scheme level (`scheme_metadata.plan_type == regular`). Commission drag is
-estimated as the expense-ratio delta between the held regular plan and its direct-plan twin
-(matched by AMC + scheme family), applied to the fund's average AUM-weighted holding value over
-the holding period, expressed in ₹/year (PRD §5.3). This is a P0 requirement precisely because
-it's mechanical and high-value — no rubric judgment involved, just a lookup and a multiplication.
+**Shipped in P1.3, narrower than originally planned** (`compute/plan_audit.py`,
+`GET /audit/direct-vs-regular`). Flagged by parsing the scheme name — AMFI scheme names reliably
+embed "Direct Plan"/"Regular Plan" (real-data-verified against the live AMFI feed), not from a
+`scheme_metadata.plan_type` column, which doesn't exist (scheme_metadata's real shape is
+documented in data-model.md — no plan-type field was ever added, since the original design's own
+premise, a stored plan_type, was never populated).
+
+**No ₹/year commission-drag figure**: the original design estimated commission drag from the
+expense-ratio delta between the held regular plan and its direct-plan twin. No free expense-ratio
+data source exists — live-checked during P1.1/P1.3: mfapi.in's scheme metadata has no TER field,
+and AMFI's TER disclosures are scattered per-AMC filings, not a unified free feed. This ships as a
+binary flag only (`direct` / `regular` / `unknown`), which is what feeds the rubric's cost
+component (§5) at weight 20. Real-data check: all 13 of the user's real open holdings resolved to
+`direct` — none flagged `regular` or `unknown` in this portfolio.
 
 ## 7. Allocation & Drift
 

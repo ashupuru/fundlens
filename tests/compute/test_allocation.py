@@ -6,7 +6,12 @@ from sqlalchemy.orm import Session
 
 from fundlens.allocation.service import set_risk_profile
 from fundlens.compute import service
-from fundlens.compute.allocation import compute_allocation_drift
+from fundlens.compute.allocation import (
+    AllocationDrift,
+    EquityCapBreakdown,
+    compute_allocation_drift,
+    compute_category_fit_score,
+)
 from fundlens.db.models import (
     NavHistory,
     NavSource,
@@ -18,6 +23,26 @@ from fundlens.db.models import (
     UploadStatus,
 )
 from fundlens.tax.asset_class import TaxAssetClass
+
+
+def _make_drift(equity_drift_pct: float | None, debt_drift_pct: float | None) -> AllocationDrift:
+    return AllocationDrift(
+        persona=Persona.BALANCED,
+        target_equity_pct=60.0,
+        target_debt_pct=40.0,
+        actual_equity_pct=None,
+        actual_debt_pct=None,
+        actual_other_pct=None,
+        equity_drift_pct=equity_drift_pct,
+        debt_drift_pct=debt_drift_pct,
+        priced_portfolio_value_paise=0,
+        equity_value_paise=0,
+        debt_value_paise=0,
+        other_value_paise=0,
+        value_unavailable_paise=0,
+        equity_cap_breakdown=EquityCapBreakdown(0, 0, 0, 0, 0),
+        schemes_missing_metadata=0,
+    )
 
 
 def _make_upload(session: Session) -> RawCASUpload:
@@ -209,3 +234,42 @@ def test_holding_missing_nav_excluded_from_percentages_not_zeroed(session: Sessi
     assert drift.value_unavailable_paise == 1_000_000  # cost basis, flagged not zeroed
     assert drift.actual_equity_pct is None
     assert drift.equity_drift_pct is None
+
+
+def test_category_fit_neutral_when_no_drift() -> None:
+    drift = _make_drift(equity_drift_pct=0.0, debt_drift_pct=0.0)
+    score, reason = compute_category_fit_score(TaxAssetClass.EQUITY, drift)
+    assert score == 50.0
+    assert reason is None
+
+
+def test_category_fit_penalizes_overweight_category() -> None:
+    drift = _make_drift(equity_drift_pct=20.0, debt_drift_pct=-20.0)
+    score, _ = compute_category_fit_score(TaxAssetClass.EQUITY, drift)
+    assert score == 40.0  # 50 - 20/2
+
+
+def test_category_fit_rewards_underweight_category() -> None:
+    drift = _make_drift(equity_drift_pct=20.0, debt_drift_pct=-20.0)
+    score, _ = compute_category_fit_score(TaxAssetClass.DEBT, drift)
+    assert score == 60.0  # 50 - (-20)/2
+
+
+def test_category_fit_clamped_at_bounds() -> None:
+    drift = _make_drift(equity_drift_pct=200.0, debt_drift_pct=-200.0)
+    score, _ = compute_category_fit_score(TaxAssetClass.EQUITY, drift)
+    assert score == 0.0
+
+
+def test_category_fit_none_for_needs_review() -> None:
+    drift = _make_drift(equity_drift_pct=0.0, debt_drift_pct=0.0)
+    score, reason = compute_category_fit_score(TaxAssetClass.NEEDS_REVIEW, drift)
+    assert score is None
+    assert reason == "no_target_for_category"
+
+
+def test_category_fit_none_when_portfolio_unpriced() -> None:
+    drift = _make_drift(equity_drift_pct=None, debt_drift_pct=None)
+    score, reason = compute_category_fit_score(TaxAssetClass.EQUITY, drift)
+    assert score is None
+    assert reason == "portfolio_not_priced"

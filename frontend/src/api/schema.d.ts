@@ -345,6 +345,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/verdicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verdicts */
+        get: operations["verdicts_verdicts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/direct-vs-regular": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Direct Vs Regular Audit */
+        get: operations["direct_vs_regular_audit_audit_direct_vs_regular_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -549,6 +583,17 @@ export interface components {
             /** Data Freshness */
             data_freshness: components["schemas"]["DataFreshnessResponse"][];
         };
+        /** DirectVsRegularFlagResponse */
+        DirectVsRegularFlagResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Amc */
+            amc: string;
+            /** Plan Type */
+            plan_type: string;
+        };
         /** EquityCapBreakdownResponse */
         EquityCapBreakdownResponse: {
             /** Large Paise */
@@ -741,6 +786,17 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** RubricComponentResponse */
+        RubricComponentResponse: {
+            /** Name */
+            name: string;
+            /** Score */
+            score: number | null;
+            /** Weight */
+            weight: number;
+            /** Reason */
+            reason: string | null;
+        };
         /** SchemeRebuildErrorResponse */
         SchemeRebuildErrorResponse: {
             /** Folio */
@@ -767,6 +823,29 @@ export interface components {
             /** Has Dependents */
             has_dependents?: boolean | null;
         };
+        /** TaxImpactResponse */
+        TaxImpactResponse: {
+            /** Computable */
+            computable: boolean;
+            /** Reason */
+            reason: string | null;
+            /** Stcg Gain Paise */
+            stcg_gain_paise: number;
+            /** Ltcg Gain Paise */
+            ltcg_gain_paise: number;
+            /** Ltcg Exemption Available Paise */
+            ltcg_exemption_available_paise: number;
+            /** Ltcg Exemption Consumed Paise */
+            ltcg_exemption_consumed_paise: number;
+            /** Taxable Ltcg Paise */
+            taxable_ltcg_paise: number;
+            /** Tax Owed Paise */
+            tax_owed_paise: number;
+            /** Exit Load Modeled */
+            exit_load_modeled: boolean;
+            /** Breakeven Note */
+            breakeven_note: string;
+        };
         /** UnmatchedSchemeResponse */
         UnmatchedSchemeResponse: {
             /** Folio */
@@ -792,6 +871,32 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VerdictResponse */
+        VerdictResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Verdict Type */
+            verdict_type: string;
+            /** Overall Score */
+            overall_score: number | null;
+            /** Confidence Pct */
+            confidence_pct: number;
+            /** Components */
+            components: components["schemas"]["RubricComponentResponse"][];
+            /** Reasoning */
+            reasoning: string;
+            /** Counterfactual */
+            counterfactual: string | null;
+            tax_impact: components["schemas"]["TaxImpactResponse"] | null;
+            /** Blocked Reason */
+            blocked_reason: string | null;
+            /** Omitted Components */
+            omitted_components: string[];
         };
         /** CoverageGapResponse */
         fundlens__api__routers__data_quality__CoverageGapResponse: {
@@ -1334,6 +1439,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AllocationDriftResponse"];
+                };
+            };
+        };
+    };
+    verdicts_verdicts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerdictResponse"][];
+                };
+            };
+        };
+    };
+    direct_vs_regular_audit_audit_direct_vs_regular_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectVsRegularFlagResponse"][];
                 };
             };
         };

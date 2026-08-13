@@ -149,3 +149,31 @@ def compute_allocation_drift(session: Session, profile: RiskProfile) -> Allocati
         ),
         schemes_missing_metadata=missing_metadata,
     )
+
+
+def compute_category_fit_score(
+    tax_asset_class: TaxAssetClass, drift: AllocationDrift
+) -> tuple[float | None, str | None]:
+    """Rubric component (compute-engine.md §5): 0-100, 50 = neutral. Below
+    50 means holding more of this category would worsen an existing
+    overweight; above 50 means it would help correct an underweight.
+
+    The "1 percentage point of drift = 0.5 points of score, capped at
+    ±50-from-neutral" scaling is a judgment call — the PRD only specifies
+    the signal's *direction* ("actual-vs-target allocation drift
+    contribution"), not a formula. Documented as a choice, not asserted as
+    canonical.
+    """
+    if drift.equity_drift_pct is None or drift.debt_drift_pct is None:
+        return None, "portfolio_not_priced"
+    if tax_asset_class == TaxAssetClass.EQUITY:
+        relevant_drift = drift.equity_drift_pct
+    elif tax_asset_class == TaxAssetClass.DEBT:
+        relevant_drift = drift.debt_drift_pct
+    else:
+        # NEEDS_REVIEW: "other" has no target (see module docstring), so
+        # there's nothing to score fit against.
+        return None, "no_target_for_category"
+
+    score = 50 - relevant_drift / 2
+    return max(0.0, min(100.0, score)), None

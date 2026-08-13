@@ -12,6 +12,7 @@ something reads them — an untyped, unread assumption key is dead config.
 import enum
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -25,6 +26,28 @@ class AssumptionKey(enum.StrEnum):
     DEBT_SPECIFIED_FUND_CUTOFF = "debt_specified_fund_cutoff"
     EQUITY_GRANDFATHER_CUTOFF = "equity_grandfather_cutoff"
     EQUITY_LTCG_EXEMPTION_PAISE_PER_FY = "equity_ltcg_exemption_paise_per_fy"
+    EQUITY_STCG_RATE_PCT = "equity_stcg_rate_pct"
+    EQUITY_LTCG_RATE_PCT = "equity_ltcg_rate_pct"
+    # Deliberately NOT in DEFAULT_ASSUMPTIONS below: debt gains are taxed at
+    # the investor's marginal income-tax slab, which this app has no way to
+    # know — defaulting it to any number (even "the top slab, conservatively")
+    # would be presenting a guess as the user's real tax rate. Must be set
+    # explicitly via POST /assumptions before any debt-fund tax-friction
+    # statement (compute-engine.md §3.5) can be computed; until then it's
+    # reported as unconfigured, not silently assumed.
+    DEBT_MARGINAL_TAX_RATE_PCT = "debt_marginal_tax_rate_pct"
+    # Recommendation rubric (compute-engine.md §5) weights, out of the
+    # components P1.3 actually has real data for — overlap/redundancy
+    # (FR-5.3) and expense-ratio cost have no data source (P1.3 scope
+    # decision) and are omitted rather than weighted-and-faked. Default
+    # values keep the PRD table's original relative proportions among the
+    # 4 remaining components (alpha 30, consistency 20, category_fit 15,
+    # cost 20 -> direct_regular inherits cost's weight).
+    RUBRIC_WEIGHT_ALPHA = "rubric_weight_alpha"
+    RUBRIC_WEIGHT_CONSISTENCY = "rubric_weight_consistency"
+    RUBRIC_WEIGHT_CATEGORY_FIT = "rubric_weight_category_fit"
+    RUBRIC_WEIGHT_DIRECT_REGULAR = "rubric_weight_direct_regular"
+    RUBRIC_SELL_THRESHOLD_PCT = "rubric_sell_threshold_pct"
 
 
 DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
@@ -36,6 +59,15 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     # date whose NAV grandfathers pre-existing equity cost basis.
     AssumptionKey.EQUITY_GRANDFATHER_CUTOFF: "2018-01-31",
     AssumptionKey.EQUITY_LTCG_EXEMPTION_PAISE_PER_FY: "12500000",  # Rs 1,25,000
+    # Current law post-Budget-2024 (rates effective 23-Jul-2024) — fixed,
+    # publicly documented figures, unlike the debt slab rate below.
+    AssumptionKey.EQUITY_STCG_RATE_PCT: "20",
+    AssumptionKey.EQUITY_LTCG_RATE_PCT: "12.5",
+    AssumptionKey.RUBRIC_WEIGHT_ALPHA: "30",
+    AssumptionKey.RUBRIC_WEIGHT_CONSISTENCY: "20",
+    AssumptionKey.RUBRIC_WEIGHT_CATEGORY_FIT: "15",
+    AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR: "20",
+    AssumptionKey.RUBRIC_SELL_THRESHOLD_PCT: "35",
 }
 
 
@@ -116,4 +148,41 @@ def get_current_tax_assumptions(session: Session) -> TaxAssumptions:
         equity_ltcg_exemption_paise_per_fy=int(
             values[AssumptionKey.EQUITY_LTCG_EXEMPTION_PAISE_PER_FY.value]
         ),
+    )
+
+
+@dataclass(frozen=True)
+class RubricTaxRates:
+    equity_stcg_rate_pct: Decimal
+    equity_ltcg_rate_pct: Decimal
+    debt_marginal_tax_rate_pct: Decimal | None  # None => not configured, never guessed
+
+
+def get_current_rubric_tax_rates(session: Session) -> RubricTaxRates:
+    values = get_current_values(session)
+    debt_rate_raw = values.get(AssumptionKey.DEBT_MARGINAL_TAX_RATE_PCT.value)
+    return RubricTaxRates(
+        equity_stcg_rate_pct=Decimal(values[AssumptionKey.EQUITY_STCG_RATE_PCT.value]),
+        equity_ltcg_rate_pct=Decimal(values[AssumptionKey.EQUITY_LTCG_RATE_PCT.value]),
+        debt_marginal_tax_rate_pct=Decimal(debt_rate_raw) if debt_rate_raw is not None else None,
+    )
+
+
+@dataclass(frozen=True)
+class RubricWeights:
+    alpha: float
+    consistency: float
+    category_fit: float
+    direct_regular: float
+    sell_threshold_pct: float
+
+
+def get_current_rubric_weights(session: Session) -> RubricWeights:
+    values = get_current_values(session)
+    return RubricWeights(
+        alpha=float(values[AssumptionKey.RUBRIC_WEIGHT_ALPHA.value]),
+        consistency=float(values[AssumptionKey.RUBRIC_WEIGHT_CONSISTENCY.value]),
+        category_fit=float(values[AssumptionKey.RUBRIC_WEIGHT_CATEGORY_FIT.value]),
+        direct_regular=float(values[AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR.value]),
+        sell_threshold_pct=float(values[AssumptionKey.RUBRIC_SELL_THRESHOLD_PCT.value]),
     )

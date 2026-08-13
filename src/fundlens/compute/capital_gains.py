@@ -44,10 +44,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fundlens.assumptions.service import get_current_tax_assumptions
-from fundlens.db.models import NavHistory, RawTransaction, RealizedGain, SchemeMetadata
+from fundlens.db.models import RawTransaction, RealizedGain, SchemeMetadata
 from fundlens.money import to_paise_strict
 from fundlens.tax.asset_class import TaxAssetClass
 from fundlens.tax.classification import GainClassification, GainType, classify_gain
+from fundlens.tax.grandfathering import Grandfathering, apply_equity_grandfathering
 
 
 @dataclass(frozen=True)
@@ -90,50 +91,6 @@ def financial_year_bounds(fy_label: str) -> tuple[date, date]:
     """"2024-25" -> (2024-04-01, 2025-03-31)."""
     start_year = int(fy_label.split("-")[0])
     return date(start_year, 4, 1), date(start_year + 1, 3, 31)
-
-
-def _fmv_per_unit_on_or_before(
-    session: Session, amfi_code: str, on_date: date
-) -> Decimal | None:
-    return session.execute(
-        select(NavHistory.nav)
-        .where(NavHistory.amfi_code == amfi_code, NavHistory.nav_date <= on_date)
-        .order_by(NavHistory.nav_date.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-
-
-@dataclass(frozen=True)
-class _Grandfathering:
-    cost_per_unit: Decimal
-    applied: bool
-    note: str | None
-
-
-def _apply_equity_grandfathering(
-    session: Session,
-    amfi_code: str | None,
-    purchase_date: date,
-    original_cost_per_unit: Decimal,
-    sale_price_per_unit: Decimal,
-    cutoff: date,
-) -> _Grandfathering:
-    if purchase_date >= cutoff:
-        return _Grandfathering(original_cost_per_unit, applied=False, note=None)
-    if amfi_code is None:
-        return _Grandfathering(
-            original_cost_per_unit, applied=False, note="grandfathering_data_unavailable"
-        )
-
-    fmv = _fmv_per_unit_on_or_before(session, amfi_code, cutoff)
-    if fmv is None:
-        return _Grandfathering(
-            original_cost_per_unit, applied=False, note="grandfathering_data_unavailable"
-        )
-
-    floor = min(fmv, sale_price_per_unit)
-    adjusted = max(original_cost_per_unit, floor)
-    return _Grandfathering(adjusted, applied=adjusted != original_cost_per_unit, note=None)
 
 
 def _apply_ltcg_exemption(
@@ -225,13 +182,13 @@ def get_capital_gains_report(session: Session, fy_label: str) -> CapitalGainsRep
             )
 
         cost_per_unit = gain.cost_per_unit
-        grandfathering = _Grandfathering(cost_per_unit, applied=False, note=None)
+        grandfathering = Grandfathering(cost_per_unit, applied=False, note=None)
         if (
             metadata is not None
             and metadata.tax_asset_class == TaxAssetClass.EQUITY
             and classification.gain_type == GainType.LTCG
         ):
-            grandfathering = _apply_equity_grandfathering(
+            grandfathering = apply_equity_grandfathering(
                 session,
                 sale_txn.amfi_code if sale_txn else None,
                 gain.open_date,

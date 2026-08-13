@@ -626,6 +626,56 @@
           }
         }
       }
+    },
+    "/verdicts": {
+      "get": {
+        "tags": [
+          "verdicts"
+        ],
+        "summary": "Verdicts",
+        "operationId": "verdicts_verdicts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/VerdictResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Verdicts Verdicts Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit/direct-vs-regular": {
+      "get": {
+        "tags": [
+          "verdicts"
+        ],
+        "summary": "Direct Vs Regular Audit",
+        "operationId": "direct_vs_regular_audit_audit_direct_vs_regular_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DirectVsRegularFlagResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Direct Vs Regular Audit Audit Direct Vs Regular Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1300,6 +1350,34 @@
         ],
         "title": "DataQualitySummaryResponse"
       },
+      "DirectVsRegularFlagResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "amc": {
+            "type": "string",
+            "title": "Amc"
+          },
+          "plan_type": {
+            "type": "string",
+            "title": "Plan Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_name",
+          "amc",
+          "plan_type"
+        ],
+        "title": "DirectVsRegularFlagResponse"
+      },
       "EquityCapBreakdownResponse": {
         "properties": {
           "large_paise": {
@@ -1953,6 +2031,48 @@
         ],
         "title": "RiskProfileResponse"
       },
+      "RubricComponentResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "score",
+          "weight",
+          "reason"
+        ],
+        "title": "RubricComponentResponse"
+      },
       "SchemeRebuildErrorResponse": {
         "properties": {
           "folio": {
@@ -2055,6 +2175,71 @@
         ],
         "title": "SetRiskProfileRequest"
       },
+      "TaxImpactResponse": {
+        "properties": {
+          "computable": {
+            "type": "boolean",
+            "title": "Computable"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "stcg_gain_paise": {
+            "type": "integer",
+            "title": "Stcg Gain Paise"
+          },
+          "ltcg_gain_paise": {
+            "type": "integer",
+            "title": "Ltcg Gain Paise"
+          },
+          "ltcg_exemption_available_paise": {
+            "type": "integer",
+            "title": "Ltcg Exemption Available Paise"
+          },
+          "ltcg_exemption_consumed_paise": {
+            "type": "integer",
+            "title": "Ltcg Exemption Consumed Paise"
+          },
+          "taxable_ltcg_paise": {
+            "type": "integer",
+            "title": "Taxable Ltcg Paise"
+          },
+          "tax_owed_paise": {
+            "type": "integer",
+            "title": "Tax Owed Paise"
+          },
+          "exit_load_modeled": {
+            "type": "boolean",
+            "title": "Exit Load Modeled"
+          },
+          "breakeven_note": {
+            "type": "string",
+            "title": "Breakeven Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "computable",
+          "reason",
+          "stcg_gain_paise",
+          "ltcg_gain_paise",
+          "ltcg_exemption_available_paise",
+          "ltcg_exemption_consumed_paise",
+          "taxable_ltcg_paise",
+          "tax_owed_paise",
+          "exit_load_modeled",
+          "breakeven_note"
+        ],
+        "title": "TaxImpactResponse"
+      },
       "UnmatchedSchemeResponse": {
         "properties": {
           "folio": {
@@ -2141,6 +2326,107 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VerdictResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "verdict_type": {
+            "type": "string",
+            "title": "Verdict Type"
+          },
+          "overall_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Score"
+          },
+          "confidence_pct": {
+            "type": "number",
+            "title": "Confidence Pct"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/RubricComponentResponse"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "reasoning": {
+            "type": "string",
+            "title": "Reasoning"
+          },
+          "counterfactual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Counterfactual"
+          },
+          "tax_impact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaxImpactResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
+          },
+          "omitted_components": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Omitted Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key",
+          "scheme_name",
+          "verdict_type",
+          "overall_score",
+          "confidence_pct",
+          "components",
+          "reasoning",
+          "counterfactual",
+          "tax_impact",
+          "blocked_reason",
+          "omitted_components"
+        ],
+        "title": "VerdictResponse"
       },
       "fundlens__api__routers__data_quality__CoverageGapResponse": {
         "properties": {
