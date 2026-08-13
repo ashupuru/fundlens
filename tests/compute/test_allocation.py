@@ -11,6 +11,7 @@ from fundlens.compute.allocation import (
     EquityCapBreakdown,
     compute_allocation_drift,
     compute_category_fit_score,
+    compute_portfolio_valuation,
 )
 from fundlens.db.models import (
     NavHistory,
@@ -182,6 +183,37 @@ def test_equity_cap_breakdown_matches_fixture(session: Session) -> None:
     assert drift.equity_cap_breakdown.large_paise == 1_000_000  # Rs 10,000
     assert drift.equity_cap_breakdown.mid_paise == 500_000  # Rs 5,000
     assert drift.equity_cap_breakdown.small_paise == 0
+
+
+def test_compute_portfolio_valuation_needs_no_risk_profile(session: Session) -> None:
+    _build_fixture_portfolio(session)
+
+    valuation = compute_portfolio_valuation(session)
+
+    assert valuation.equity_paise == 1_500_000  # Rs 10,000 large + Rs 5,000 mid
+    assert valuation.debt_paise == 500_000  # Rs 5,000
+    assert valuation.other_paise == 0
+    assert valuation.equity_cap_breakdown.large_paise == 1_000_000
+    assert valuation.equity_cap_breakdown.mid_paise == 500_000
+    assert valuation.equity_cap_breakdown.small_paise == 0
+
+
+def test_compute_allocation_drift_reuses_portfolio_valuation(session: Session) -> None:
+    _build_fixture_portfolio(session)
+    profile = set_risk_profile(session, Persona.BALANCED)
+
+    valuation = compute_portfolio_valuation(session)
+    drift = compute_allocation_drift(session, profile)
+
+    # Behavior-preserving refactor: the drift figures must exactly match what
+    # the standalone valuation reports, not a second, independently-computed
+    # value.
+    assert drift.equity_value_paise == valuation.equity_paise
+    assert drift.debt_value_paise == valuation.debt_paise
+    assert drift.other_value_paise == valuation.other_paise
+    assert drift.value_unavailable_paise == valuation.unavailable_paise
+    assert drift.schemes_missing_metadata == valuation.missing_metadata
+    assert drift.equity_cap_breakdown == valuation.equity_cap_breakdown
 
 
 def test_other_bucket_for_missing_metadata_not_folded_into_equity_or_debt(

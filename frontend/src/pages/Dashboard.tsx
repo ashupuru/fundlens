@@ -3,6 +3,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   getAllocationDrift,
   getCategoryBreakdown,
+  getEquityBlendedBenchmark,
   getHealth,
   getPortfolioBenchmarkComparison,
   getPortfolioMetrics,
@@ -12,6 +13,8 @@ import type { components } from "../api/schema";
 type ApiStatus = "checking" | "connected" | "unreachable";
 type PortfolioMetrics = components["schemas"]["PortfolioMetricsResponse"];
 type PortfolioBenchmarkComparison = components["schemas"]["PortfolioBenchmarkComparisonResponse"];
+type EquityBlendedComparison =
+  components["schemas"]["PortfolioEquityBlendedComparisonResponse"];
 type CategoryGroup = components["schemas"]["CategoryBreakdownItemResponse"];
 type AllocationDrift = components["schemas"]["AllocationDriftResponse"];
 
@@ -286,6 +289,67 @@ function AllocationDriftSection({
   );
 }
 
+function EquityBlendedBenchmarkSection({
+  comparison,
+  loaded,
+}: {
+  comparison: EquityBlendedComparison | null;
+  loaded: boolean;
+}) {
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>Equity Blended Benchmark</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  if (comparison === null || comparison.xirr_reason === "no_equity_holdings") {
+    return (
+      <div className="card">
+        <h3>Equity Blended Benchmark</h3>
+        <p className="muted">No open equity holdings to compare.</p>
+      </div>
+    );
+  }
+
+  const alphaClass =
+    comparison.alpha_pct === null ? "" : comparison.alpha_pct >= 0 ? "positive" : "negative";
+
+  return (
+    <div className="card">
+      <h3>Equity Blended Benchmark</h3>
+      <div className="card-grid">
+        <div className="stat">
+          <div className="stat-label">Equity XIRR</div>
+          <div className="stat-value">
+            {comparison.xirr !== null ? formatPct(comparison.xirr) : "n/a"}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Blended benchmark XIRR</div>
+          <div className="stat-value">
+            {comparison.benchmark_xirr !== null ? formatPct(comparison.benchmark_xirr) : "n/a"}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Alpha</div>
+          <div className={`stat-value ${alphaClass}`}>{formatAlpha(comparison.alpha_pct)}</div>
+        </div>
+      </div>
+      <p className="muted" style={{ marginTop: 12 }}>
+        Blend weights (by current equity value): Large {formatGroupPct(comparison.large_weight_pct)},
+        Mid {formatGroupPct(comparison.mid_weight_pct)}, Small{" "}
+        {formatGroupPct(comparison.small_weight_pct)}
+      </p>
+      <p className="muted" style={{ marginTop: 8 }}>
+        {comparison.note}
+      </p>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
   const [metrics, setMetrics] = useState<PortfolioMetrics | null>(null);
@@ -295,6 +359,10 @@ export default function Dashboard() {
   const [subCategoryGroups, setSubCategoryGroups] = useState<CategoryGroup[] | null>(null);
   const [drift, setDrift] = useState<AllocationDrift | null>(null);
   const [driftLoaded, setDriftLoaded] = useState(false);
+  const [blendedComparison, setBlendedComparison] = useState<EquityBlendedComparison | null>(
+    null,
+  );
+  const [blendedComparisonLoaded, setBlendedComparisonLoaded] = useState(false);
 
   useEffect(() => {
     getHealth()
@@ -323,6 +391,13 @@ export default function Dashboard() {
         setDriftLoaded(true);
       })
       .catch(() => setDriftLoaded(true));
+
+    getEquityBlendedBenchmark()
+      .then((c) => {
+        setBlendedComparison(c);
+        setBlendedComparisonLoaded(true);
+      })
+      .catch(() => setBlendedComparisonLoaded(true));
   }, []);
 
   const alphaClass =
@@ -401,6 +476,11 @@ export default function Dashboard() {
             </table>
             {comparison && <p className="muted" style={{ marginTop: 12 }}>{comparison.proxy_note}</p>}
           </div>
+
+          <EquityBlendedBenchmarkSection
+            comparison={blendedComparison}
+            loaded={blendedComparisonLoaded}
+          />
 
           <AssetAllocationSection groups={categoryGroups} />
           <CategoryAllocationSection groups={subCategoryGroups} />

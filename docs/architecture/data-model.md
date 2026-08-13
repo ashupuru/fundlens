@@ -199,14 +199,21 @@ table rather than trusting the last cached NAV as implicitly current.
 `nav_date`): `NIFTY50_TRI`, `BSE100_TRI`, `NIFTY_MIDCAP150_TRI`, `NIFTY_SMALLCAP250_TRI`. Category
 debt indices (also PRD FR-1.4-named) are **not built** — no debt `BenchmarkId` exists.
 
-`proxy` is **always `true` today**, not merely a fallback flag: PRD §10 named true TRI data as
+`proxy` is `true` for every row the automatic refresh writes: PRD §10 named true TRI data as
 hard to source freely, and P1.1 live-verified this — NSE/niftyindices.com return 403/503 to
-unauthenticated requests. Every row's `value` is therefore a real index fund or ETF's own NAV,
+unauthenticated requests. Every such row's `value` is therefore a real index fund or ETF's own NAV,
 chosen per benchmark for longest available history via mfapi.in (`benchmark/proxy_config.py` has
 the exact scheme mapping and rationale), backfilled the same way P0.2 backfills any held scheme's
 history (one `mfapi.in` call per benchmark, not the AMFI NAVAll bulk file). `proxy_note` names the
 actual fund standing in, e.g. "UTI Nifty 50 Index Fund (Direct, Growth) NAV — no free TRI source
 available" — never presented as true TRI without this note attached.
+
+A row *can* carry `proxy=false`: `POST /benchmarks/import-tri` (`benchmark/tri_csv_import.py`)
+lets the user manually upload real TRI data for specific dates, reformatted into FundLens's own
+two-column CSV shape (no vendor's native export format was ever obtained, so none is parsed).
+Upserts, unlike the auto-refresh's insert-if-absent: a real row overwrites whatever proxy row was
+there, and the later-arriving proxy refresh can never overwrite it back (it only ever inserts
+absent dates). See compute-engine.md §4.
 
 ### `scheme_metadata`
 **Shipped in P0.5, narrower than originally planned**: `amfi_code` (PK), `category_raw` (the SEBI

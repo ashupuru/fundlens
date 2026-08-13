@@ -1,13 +1,15 @@
 """FR-4.1/4.2: benchmark data refresh and fund-vs-benchmark XIRR comparison."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from fundlens.api.deps import get_session
-from fundlens.benchmark.service import refresh_all_benchmarks
+from fundlens.benchmark.service import refresh_all_benchmarks, upsert_manual_tri_rows
+from fundlens.benchmark.tri_csv_import import TRICSVValidationError, parse_tri_csv
 from fundlens.compute.benchmark import (
     compute_portfolio_benchmark_comparison,
+    compute_portfolio_equity_blended_benchmark_comparison,
     get_all_benchmark_comparisons,
 )
 from fundlens.db.models import BenchmarkId
@@ -100,3 +102,68 @@ def portfolio_comparison(
         benchmark_xirr_reason=c.benchmark_xirr_reason,
         alpha_pct=c.alpha_pct,
     )
+
+
+class PortfolioEquityBlendedComparisonResponse(BaseModel):
+    xirr: float | None
+    xirr_reason: str | None
+    benchmark_xirr: float | None
+    benchmark_xirr_reason: str | None
+    alpha_pct: float | None
+    large_weight_pct: float
+    mid_weight_pct: float
+    small_weight_pct: float
+    blended_series_start_date: str | None
+    note: str
+
+
+@router.get(
+    "/comparison/equity-blended", response_model=PortfolioEquityBlendedComparisonResponse
+)
+def equity_blended_comparison(
+    session: Session = Depends(get_session),
+) -> PortfolioEquityBlendedComparisonResponse:
+    c = compute_portfolio_equity_blended_benchmark_comparison(session)
+    return PortfolioEquityBlendedComparisonResponse(
+        xirr=c.xirr,
+        xirr_reason=c.xirr_reason,
+        benchmark_xirr=c.benchmark_xirr,
+        benchmark_xirr_reason=c.benchmark_xirr_reason,
+        alpha_pct=c.alpha_pct,
+        large_weight_pct=c.large_weight_pct,
+        mid_weight_pct=c.mid_weight_pct,
+        small_weight_pct=c.small_weight_pct,
+        blended_series_start_date=(
+            c.blended_series_start_date.isoformat() if c.blended_series_start_date else None
+        ),
+        note=c.note,
+    )
+
+
+class TRIImportResponse(BaseModel):
+    benchmark_id: str
+    rows_written: int
+
+
+@router.post("/import-tri", response_model=TRIImportResponse)
+async def import_tri(
+    file: UploadFile = File(...),
+    benchmark_id: str = Form(...),
+    session: Session = Depends(get_session),
+) -> TRIImportResponse:
+    try:
+        resolved = BenchmarkId(benchmark_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"Unknown benchmark_id '{benchmark_id}'"
+        ) from exc
+
+    content = (await file.read()).decode("utf-8")
+    try:
+        rows = parse_tri_csv(content)
+    except TRICSVValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    written = upsert_manual_tri_rows(session, resolved, rows)
+    session.commit()
+    return TRIImportResponse(benchmark_id=resolved.value, rows_written=written)
