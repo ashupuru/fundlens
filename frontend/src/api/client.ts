@@ -257,3 +257,14 @@ export async function postRefreshGroww(): Promise<GrowwRefreshResponse> {
   }
   return response.json() as Promise<GrowwRefreshResponse>;
 }
+
+type BenchmarkRefreshResponse =
+  operations["refresh_benchmarks_refresh_post"]["responses"][200]["content"]["application/json"];
+
+export async function postRefreshBenchmarks(): Promise<BenchmarkRefreshResponse> {
+  const response = await fetch(`${API_BASE_URL}/benchmarks/refresh`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Failed to refresh benchmark data: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<BenchmarkRefreshResponse>;
+}

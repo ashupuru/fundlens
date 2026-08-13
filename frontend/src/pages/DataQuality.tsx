@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDataQualitySummary, postRefreshGroww } from "../api/client";
+import { getDataQualitySummary, postRefreshBenchmarks, postRefreshGroww } from "../api/client";
 import type { components } from "../api/schema";
 
 type Summary = components["schemas"]["DataQualitySummaryResponse"];
@@ -15,9 +15,18 @@ type GrowwRefreshState =
   | { status: "error"; message: string }
   | { status: "done"; rowsUpserted: number };
 
+type BenchmarkRefreshState =
+  | { status: "idle" }
+  | { status: "refreshing" }
+  | { status: "error"; message: string }
+  | { status: "done"; inserted: number; failedBenchmarks: string[] };
+
 export default function DataQuality() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [growwRefresh, setGrowwRefresh] = useState<GrowwRefreshState>({ status: "idle" });
+  const [benchmarkRefresh, setBenchmarkRefresh] = useState<BenchmarkRefreshState>({
+    status: "idle",
+  });
 
   function load() {
     getDataQualitySummary()
@@ -44,6 +53,22 @@ export default function DataQuality() {
       load(); // refresh the freshness table below
     } catch (err) {
       setGrowwRefresh({
+        status: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
+
+  async function refreshBenchmarks() {
+    setBenchmarkRefresh({ status: "refreshing" });
+    try {
+      const results = await postRefreshBenchmarks();
+      const inserted = results.reduce((sum, r) => sum + r.inserted, 0);
+      const failedBenchmarks = results.filter((r) => r.error).map((r) => r.benchmark_id);
+      setBenchmarkRefresh({ status: "done", inserted, failedBenchmarks });
+      load(); // refresh the freshness table below
+    } catch (err) {
+      setBenchmarkRefresh({
         status: "error",
         message: err instanceof Error ? err.message : "Unknown error",
       });
@@ -218,6 +243,29 @@ export default function DataQuality() {
           )}
           {growwRefresh.status === "error" && (
             <span className="muted">Failed: {growwRefresh.message}</span>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <button
+            onClick={() => void refreshBenchmarks()}
+            disabled={benchmarkRefresh.status === "refreshing"}
+          >
+            {benchmarkRefresh.status === "refreshing" ? "Refreshing…" : "Refresh benchmark data"}
+          </button>
+          {benchmarkRefresh.status === "refreshing" && (
+            <span className="muted">
+              Fetching TRI-proxy history for all four benchmarks — usually a few seconds.
+            </span>
+          )}
+          {benchmarkRefresh.status === "done" && (
+            <span className="muted">
+              Inserted {benchmarkRefresh.inserted} row{benchmarkRefresh.inserted === 1 ? "" : "s"}.
+              {benchmarkRefresh.failedBenchmarks.length > 0 &&
+                ` Failed: ${benchmarkRefresh.failedBenchmarks.join(", ")}.`}
+            </span>
+          )}
+          {benchmarkRefresh.status === "error" && (
+            <span className="muted">Failed: {benchmarkRefresh.message}</span>
           )}
         </div>
         {summary.data_freshness.length === 0 ? (
