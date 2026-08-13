@@ -139,6 +139,22 @@ row-shaping logic upstream of it:
      confident single match (ties, low score, or zero candidates) is never guessed — it's reported
      with its reason (`ambiguous` / `low_confidence` / `no_candidates`) and top suggestions for
      manual resolution.
+  3. **Cross-source duplicates.** Real-data-verified against a live portfolio: a transaction can
+     already exist in `raw_transaction` from a prior CAS/CSV import of the *same* real activity —
+     Dezerv reports the demat/custodian account as `folio`, while a CAS folio is the AMC's own
+     folio number, so the natural-key dedupe (keyed on `folio` among other fields) never
+     recognizes these as the same transaction and both get inserted. Confirmed case: 35
+     transactions, each present once from CAS and once from Dezerv, identical scheme/date/type/
+     amount but a different `folio` — and units agreed to 2 decimal places in 34/35 despite being
+     independently derived (exact from CAS, back-computed from NAV for Dezerv), confirming true
+     duplicates rather than coincidental collisions. `commit_dezerv_csv` now checks, per row,
+     whether a transaction already exists for the same `(amfi_code, txn_date, amount_paise,
+     buy/sell-equivalent txn_type)` *regardless of folio* — `PURCHASE` matches both `PURCHASE` and
+     `PURCHASE_SIP` on the CAS side, since Dezerv doesn't distinguish a SIP installment from a
+     lump-sum buy — and skips inserting it if so, reported via `cross_source_duplicate_count` /
+     `cross_source_duplicates`, never silently dropped. `units` is deliberately excluded from this
+     match (Dezerv's is back-computed and can legitimately differ slightly from CAS's exact
+     figure); `amount_paise` is used instead since both sources store it exactly.
 
   Known limitations: only the "-G" (Direct Growth) suffix is recognized in Dezerv's `Security`
   column — any other suffix is flagged `unrecognized_plan_suffix` rather than guessed at, since no

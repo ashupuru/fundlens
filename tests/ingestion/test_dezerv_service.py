@@ -1,10 +1,11 @@
+from datetime import date
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fundlens.db.models import RawCASUpload, RawTransaction
+from fundlens.db.models import RawCASUpload, RawTransaction, TransactionType, UploadStatus
 from fundlens.ingestion import dezerv_service
 from fundlens.market_data import service as market_data_service
 
@@ -52,6 +53,41 @@ _MFAPI_PAYLOAD = {
         {"date": "01-06-2023", "nav": "148.0000"},
     ],
 }
+
+
+def _seed_cas_transaction(
+    session: Session,
+    *,
+    folio: str,
+    amfi_code: str,
+    txn_date: date,
+    txn_type: TransactionType,
+    amount_paise: int,
+    natural_key: str,
+) -> None:
+    """Simulates a transaction already present from a prior CAS/CSV import --
+    a different `folio` (AMC folio, not the Dezerv demat/custodian account)
+    is the whole point, since that's what makes the natural-key dedupe miss
+    it (see dezerv_service.py's cross-source-duplicate docstring)."""
+    upload = RawCASUpload(file_hash=natural_key, parser_version="1.3.0", status=UploadStatus.PARSED)
+    session.add(upload)
+    session.flush()
+    session.add(
+        RawTransaction(
+            upload_id=upload.id,
+            folio=folio,
+            amc="Acme Mutual Fund",
+            scheme_name="Acme Focused Fund-Direct Plan-Growth",
+            isin="INF000A00001",
+            amfi_code=amfi_code,
+            txn_type=txn_type,
+            txn_date=txn_date,
+            units=Decimal("666.6667"),
+            amount_paise=amount_paise,
+            natural_key=natural_key,
+        )
+    )
+    session.commit()
 
 
 @pytest.fixture(autouse=True)
@@ -156,3 +192,77 @@ def test_recommitting_with_corrected_mapping_is_treated_as_new_upload(session: S
     )
     assert second.upload_id != first.upload_id
     assert second.inserted_count == 1
+
+
+def test_commit_skips_row_matching_an_existing_cross_source_transaction(session: Session) -> None:
+    # Same scheme/date/type/amount as _MATCHED_ROW, but a different folio --
+    # the AMC folio a CAS import would have used, not Dezerv's demat account.
+    _seed_cas_transaction(
+        session,
+        folio="AMC-FOLIO-000123",
+        amfi_code="999901",
+        txn_date=date(2023, 6, 14),
+        txn_type=TransactionType.PURCHASE,
+        amount_paise=10_000_000,
+        natural_key="preexisting-cas-key",
+    )
+
+    content = _content(_MATCHED_ROW)
+    mapping = {"Acme Focused Direct-G": "999901"}
+
+    result = dezerv_service.commit_dezerv_csv(session, content, mapping)
+
+    assert result.inserted_count == 0
+    assert result.cross_source_duplicate_count == 1
+    assert result.cross_source_duplicates == {"Acme Focused Direct-G": 1}
+    assert result.skipped_count == 0  # distinct from the no-mapping/no-NAV skip reasons
+    # the pre-existing CAS row is untouched, and no second row was added for it
+    assert len(session.scalars(select(RawTransaction)).all()) == 1
+
+
+def test_commit_matches_sip_tagged_cas_transaction_as_buy_equivalent(session: Session) -> None:
+    # CAS often tags recurring installments PURCHASE_SIP while Dezerv only
+    # distinguishes Buy/Sell -- the two must still be recognized as the same
+    # real transaction.
+    _seed_cas_transaction(
+        session,
+        folio="AMC-FOLIO-000123",
+        amfi_code="999901",
+        txn_date=date(2023, 6, 14),
+        txn_type=TransactionType.PURCHASE_SIP,
+        amount_paise=10_000_000,
+        natural_key="preexisting-sip-key",
+    )
+
+    content = _content(_MATCHED_ROW)
+    mapping = {"Acme Focused Direct-G": "999901"}
+
+    result = dezerv_service.commit_dezerv_csv(session, content, mapping)
+
+    assert result.inserted_count == 0
+    assert result.cross_source_duplicate_count == 1
+
+
+def test_commit_still_inserts_a_genuinely_new_transaction_for_the_same_scheme(
+    session: Session,
+) -> None:
+    # A pre-existing transaction for the same scheme but a different date
+    # must not block a genuinely new Dezerv transaction from being inserted.
+    _seed_cas_transaction(
+        session,
+        folio="AMC-FOLIO-000123",
+        amfi_code="999901",
+        txn_date=date(2023, 5, 1),
+        txn_type=TransactionType.PURCHASE,
+        amount_paise=10_000_000,
+        natural_key="preexisting-unrelated-key",
+    )
+
+    content = _content(_MATCHED_ROW)
+    mapping = {"Acme Focused Direct-G": "999901"}
+
+    result = dezerv_service.commit_dezerv_csv(session, content, mapping)
+
+    assert result.inserted_count == 1
+    assert result.cross_source_duplicate_count == 0
+    assert len(session.scalars(select(RawTransaction)).all()) == 2
