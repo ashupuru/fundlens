@@ -11,6 +11,7 @@ from fundlens.api.routers import (
     market_data,
     portfolio,
     reports,
+    verdict,
 )
 from fundlens.settings import get_settings
 
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(benchmark.router)
     app.include_router(assumptions.router)
     app.include_router(allocation.router)
+    app.include_router(verdict.router)
     return app
 
 

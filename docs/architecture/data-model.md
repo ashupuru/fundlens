@@ -256,21 +256,32 @@ typed at the read site). `assumptions/service.py::create_version()` clones the c
 values, applies overrides, and flips `is_current` — never mutates an existing version, so two
 versions stay independently reproducible.
 
-Only the keys the tax engine (§3 compute-engine.md) actually reads are seeded today:
-`equity_ltcg_threshold_days`, `debt_ltcg_threshold_days`, `debt_specified_fund_cutoff`,
-`equity_grandfather_cutoff`, `equity_ltcg_exemption_paise_per_fy`. Inflation %,
-expected-return-by-risk-profile, and exit-load schedules — all PRD §5.7-named — belong to goal
-planning and the recommendation engine (P1.3/P2) and aren't added until something reads them; an
-untyped, unread assumption key is dead config. The `report`/`goal`/`verdict` tables below that
-would reference `assumption_version_id` are themselves not yet built (see their own sections) —
-today only the compute layer reads `get_current_tax_assumptions()` directly, there's no persisted
-report row pinning a version yet.
+Only the keys something actually reads are seeded (P1.2 added the tax engine's; P1.3 added the
+rubric's): `equity_ltcg_threshold_days`, `debt_ltcg_threshold_days`, `debt_specified_fund_cutoff`,
+`equity_grandfather_cutoff`, `equity_ltcg_exemption_paise_per_fy`, `equity_stcg_rate_pct`,
+`equity_ltcg_rate_pct`, `rubric_weight_alpha`, `rubric_weight_consistency`,
+`rubric_weight_category_fit`, `rubric_weight_direct_regular`, `rubric_sell_threshold_pct`.
+`debt_marginal_tax_rate_pct` is a **valid key with no seeded default** — debt gains are taxed at
+the investor's income-tax slab, which this app has no way to know, so it must be set explicitly
+via `POST /assumptions` before any debt-fund tax-friction statement is computable (compute-engine.md
+§3.5), never defaulted to a guessed slab. Inflation % and expected-return-by-risk-profile — PRD
+§5.7-named — belong to goal planning (P2) and aren't added until something reads them; an untyped,
+unread assumption key is dead config. The `report`/`goal` tables below that would reference
+`assumption_version_id` are themselves not yet built — today only the compute layer reads
+`get_current_tax_assumptions()`/`get_current_rubric_tax_rates()`/`get_current_rubric_weights()`
+directly, there's no persisted report row pinning a version yet.
 
-### `verdict`
-Per-fund Hold/Sell/Switch output: rubric component scores (each traceable to its metric), overall
-verdict, confidence, reasoning text, "what would change this verdict," generated_at, and the
-`assumption_version_id` + metric snapshot hash it was computed from — so a verdict is reproducible
-even after assumptions change later.
+### `verdict` — **compute-on-demand, not a persisted table**
+`compute/verdict.py::Verdict` is a plain dataclass returned by `GET /verdicts`, matching every
+other derived-on-read view in this app (P1.1's benchmark comparison, P0.5's capital gains report)
+rather than the originally-planned persisted table with its own `generated_at` and
+`assumption_version_id` FK. Real fields: `verdict_type` (`hold`/`sell` — no `switch`, see
+compute-engine.md §5), `overall_score`, `confidence_pct`, `components` (each with its own
+`score`/`weight`/`reason`, independently inspectable), `reasoning`, `counterfactual`, `tax_impact`
+(non-null only for `sell`), `blocked_reason`, `omitted_components`. Historical verdict tracking
+("what did we recommend last month") would need the persisted-table design — deferred until
+something needs to compare a verdict against its own past self, consistent with this app's general
+bias toward deriving state fresh rather than caching it prematurely.
 
 ## 4. Entity Relationship Summary
 
