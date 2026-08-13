@@ -470,3 +470,61 @@ def test_compute_category_breakdown_excludes_fully_exited_positions(session: Ses
 
 def test_compute_category_breakdown_empty_portfolio(session: Session) -> None:
     assert metrics.compute_category_breakdown(session, "category") == []
+
+
+def test_compute_amc_breakdown_groups_by_amc_and_computes_weight(session: Session) -> None:
+    upload = _make_upload(session)
+    purchase_date = date.today() - timedelta(days=730)
+    _add_txn(
+        session, upload.id, amc="AMC One", scheme_name="Fund A", amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("100"), nav=Decimal("50"), amount_paise=500_000,
+    )
+    _add_txn(
+        session, upload.id, amc="AMC One", scheme_name="Fund B", amfi_code="222",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("10"), nav=Decimal("200"), amount_paise=2_000_000,
+    )
+    _add_txn(
+        session, upload.id, amc="AMC Two", scheme_name="Fund C", amfi_code="333",
+        txn_type=TransactionType.PURCHASE, txn_date=purchase_date,
+        units=Decimal("20"), nav=Decimal("100"), amount_paise=2_000_000,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "111", date.today(), Decimal("75"))
+    _add_nav(session, "222", date.today(), Decimal("250"))
+    _add_nav(session, "333", date.today(), Decimal("100"))
+    session.commit()
+
+    by_amc = {g.label: g for g in metrics.compute_amc_breakdown(session)}
+
+    assert set(by_amc) == {"AMC One", "AMC Two"}
+    assert by_amc["AMC One"].current_value_paise == 750_000 + 250_000  # 100*75 + 10*250
+    assert by_amc["AMC One"].fund_count == 2
+    assert by_amc["AMC Two"].current_value_paise == 200_000  # 20 * 100
+    assert by_amc["AMC Two"].fund_count == 1
+    total_pct = sum(g.allocation_pct for g in by_amc.values())
+    assert total_pct == pytest.approx(100.0)
+    assert by_amc["AMC One"].xirr is not None
+
+
+def test_compute_amc_breakdown_excludes_fully_exited_positions(session: Session) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amc="AMC One", amfi_code="111", txn_type=TransactionType.PURCHASE,
+        txn_date=date(2021, 1, 1), units=Decimal("100"), nav=Decimal("50"), amount_paise=500_000,
+    )
+    _add_txn(
+        session, upload.id, amc="AMC One", amfi_code="111", txn_type=TransactionType.REDEMPTION,
+        txn_date=date(2021, 6, 1), units=Decimal("-100"), nav=Decimal("60"), amount_paise=-600_000,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    session.commit()
+
+    assert metrics.compute_amc_breakdown(session) == []
+
+
+def test_compute_amc_breakdown_empty_portfolio(session: Session) -> None:
+    assert metrics.compute_amc_breakdown(session) == []

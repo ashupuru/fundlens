@@ -129,3 +129,45 @@ def test_breakdown_defaults_to_category_level(client: TestClient) -> None:
     response = client.get("/portfolio/breakdown")
 
     assert response.status_code == 200  # no query param needed, defaults cleanly
+
+
+def test_breakdown_amc_level_groups_by_amc(client: TestClient) -> None:
+    csv_content = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,amfi_code\n"
+        "F1,AMC One,Fund A,PURCHASE,2021-04-15,5000.00,100,111\n"
+        "F1,AMC Two,Fund B,PURCHASE,2021-04-15,5000.00,50,222\n"
+    )
+    client.post("/ingest/csv", files={"file": ("t.csv", csv_content, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+
+    by_amc = client.get("/portfolio/breakdown?level=amc").json()
+
+    assert {g["label"] for g in by_amc} == {"AMC One", "AMC Two"}
+    assert all(g["fund_count"] == 1 for g in by_amc)
+
+
+def test_value_history_empty_with_no_transactions(client: TestClient) -> None:
+    response = client.get("/portfolio/value-history")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_value_history_round_trip_after_ingest(client: TestClient) -> None:
+    csv_content = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,amfi_code\n"
+        "F1,Test AMC,Feeder Fund,PURCHASE,2021-04-15,5000.00,100,111\n"
+    )
+    client.post("/ingest/csv", files={"file": ("t.csv", csv_content, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+
+    response = client.get("/portfolio/value-history")
+
+    assert response.status_code == 200
+    points = response.json()
+    assert len(points) > 0
+    assert points[0]["as_of_date"] == "2021-04-15"
+    assert points[0]["invested_paise"] == 500_000
+    # No NAV backfilled in this test, so value stays unavailable throughout.
+    assert points[-1]["value_paise"] == 0
+    assert points[-1]["positions_missing_nav"] == 1

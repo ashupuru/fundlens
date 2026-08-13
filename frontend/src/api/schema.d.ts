@@ -242,6 +242,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/value-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Value History */
+        get: operations["value_history_portfolio_value_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/capital-gains": {
         parameters: {
             query?: never;
@@ -1213,6 +1230,17 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** ValuePointResponse */
+        ValuePointResponse: {
+            /** As Of Date */
+            as_of_date: string;
+            /** Value Paise */
+            value_paise: number;
+            /** Invested Paise */
+            invested_paise: number;
+            /** Positions Missing Nav */
+            positions_missing_nav: number;
+        };
         /** VerdictResponse */
         VerdictResponse: {
             /** Folio */
@@ -1602,7 +1630,7 @@ export interface operations {
     breakdown_portfolio_breakdown_get: {
         parameters: {
             query?: {
-                level?: "category" | "sub_category";
+                level?: "category" | "sub_category" | "amc";
             };
             header?: never;
             path?: never;
@@ -1626,6 +1654,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    value_history_portfolio_value_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValuePointResponse"][];
                 };
             };
         };

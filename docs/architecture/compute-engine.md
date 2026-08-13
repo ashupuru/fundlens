@@ -442,3 +442,41 @@ reimplemented), with an explicit tie-breaking bias toward index funds when
 downstream reduction over this same ranking: greedily pick a minimal fund set that covers the
 portfolio's category exposure within the risk profile's bands, and diff its blended expense ratio
 against the current portfolio's AUM-weighted expense ratio for the ₹/year savings figure.
+
+## 9. Historical Portfolio Valuation
+
+**Shipped alongside the dashboard-charts-round-2 batch** (`compute/valuation_history.py`).
+Every other compute module answers "what's true *now*" — this is the first that answers "what
+was true *then*": a **weekly** time series of portfolio value and cumulative invested capital
+from the portfolio's first-ever transaction to today, powering the Portfolio Value vs Invested
+line chart and (derived client-side from the same series, no second endpoint) the Drawdown chart.
+
+Scoped to every position ever held (`compute/metrics.py::get_all_positions`), not just
+currently-open ones — a valid historical point still needs to reflect what was held back then,
+even for positions since fully exited. Per position, a two-pointer merge walks that position's
+`RawTransaction`s (sorted `(txn_date, sequence)`, same tiebreaker as FIFO lots and the §4
+benchmark simulation) against the sorted report dates once — O(transactions + report dates), not
+their product — accumulating a running `units_held` and pricing it via a per-scheme NAV series
+pre-fetched once and bisected per report date (the same in-memory bisect template §4's synthetic
+blended-benchmark series already established, generalized from "one series" to "one series per
+held scheme").
+
+**`invested_paise` is gross, monotonically non-decreasing** — cumulative purchase-family cash
+flow only (`metrics.py::CASH_OUTFLOW_TYPES`), never netted against redemptions. This is a
+deliberate consistency choice, not an oversight: `PortfolioMetrics.invested_paise` (§ the
+Dashboard's "Details" card) already means gross invested everywhere else in this app; a
+net-of-redemptions series here would silently mean two different things by the same field name
+in the same dashboard. A report date where a position has units held but no NAV reaches back that
+far excludes just that position's value at that one point and increments
+`positions_missing_nav` — mirrors `allocation.py::compute_portfolio_valuation`'s
+`unavailable_paise` precedent (flag and exclude, never crash, never substitute).
+
+**AMC allocation** (`GET /portfolio/breakdown?level=amc`) reuses `compute_category_breakdown`'s
+exact grouping/XIRR-blending shape (§ extracted into a shared `_compute_grouped_breakdown` helper
+that both now call) rather than a new bespoke aggregation — the only difference is the label
+function (`h.amc` directly vs. a Groww-category lookup), so AMC concentration gets XIRR-per-AMC
+for free. Deliberately lives in `compute/metrics.py` next to `compute_category_breakdown`, not in
+`compute/holdings.py` (where the pre-existing, still-untouched, cost-basis-only
+`get_holdings_by_amc` lives) — `holdings.py` is lower-level and already imported *by*
+`metrics.py`, so pulling `metrics.py`'s NAV-pricing logic the other way would create a circular
+import; `metrics.py` already owns both `latest_nav` and the grouped-breakdown pattern this needed.

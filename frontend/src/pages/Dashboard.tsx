@@ -1,12 +1,30 @@
 import { useEffect, useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   getAllocationDrift,
+  getBenchmarkComparisons,
   getCategoryBreakdown,
   getEquityBlendedBenchmark,
   getHealth,
+  getHoldingMetrics,
   getPortfolioBenchmarkComparison,
   getPortfolioMetrics,
+  getPortfolioValueHistory,
 } from "../api/client";
 import type { components } from "../api/schema";
 
@@ -17,6 +35,12 @@ type EquityBlendedComparison =
   components["schemas"]["PortfolioEquityBlendedComparisonResponse"];
 type CategoryGroup = components["schemas"]["CategoryBreakdownItemResponse"];
 type AllocationDrift = components["schemas"]["AllocationDriftResponse"];
+type ValuePoint = components["schemas"]["ValuePointResponse"];
+type HoldingMetric = components["schemas"]["HoldingMetricsResponse"];
+type BenchmarkComparison = components["schemas"]["BenchmarkComparisonResponse"];
+
+const POSITIVE_COLOR = "#2f6b4f";
+const NEGATIVE_COLOR = "#b3402c";
 
 // Cycles across chart slices/tiles — chosen to harmonize with the existing
 // Monarch-style green/cream theme rather than the raw palette of any
@@ -289,6 +313,278 @@ function AllocationDriftSection({
   );
 }
 
+function computeDrawdownSeries(
+  points: ValuePoint[],
+): { as_of_date: string; drawdown_pct: number }[] {
+  let peak = 0;
+  const series: { as_of_date: string; drawdown_pct: number }[] = [];
+  for (const p of points) {
+    if (p.value_paise <= 0) continue; // no position yet -- nothing to draw down from
+    peak = Math.max(peak, p.value_paise);
+    series.push({ as_of_date: p.as_of_date, drawdown_pct: ((p.value_paise - peak) / peak) * 100 });
+  }
+  return series;
+}
+
+function PortfolioValueSection({ points, loaded }: { points: ValuePoint[] | null; loaded: boolean }) {
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>Portfolio Value vs Invested</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  if (points === null || points.length === 0) {
+    return (
+      <div className="card">
+        <h3>Portfolio Value vs Invested</h3>
+        <p className="muted">No transaction history yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3>Portfolio Value vs Invested</h3>
+      <div style={{ width: "100%", height: 280 }}>
+        <ResponsiveContainer>
+          <LineChart data={points}>
+            <XAxis dataKey="as_of_date" tick={{ fontSize: 11 }} minTickGap={40} />
+            <YAxis tickFormatter={(v: number) => formatPaise(v)} tick={{ fontSize: 11 }} width={90} />
+            <Tooltip formatter={(value) => formatPaise(Number(value))} />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="value_paise"
+              name="Value"
+              stroke={CHART_COLORS[0]}
+              dot={false}
+              strokeWidth={2}
+            />
+            <Line
+              type="monotone"
+              dataKey="invested_paise"
+              name="Invested"
+              stroke={CHART_COLORS[1]}
+              dot={false}
+              strokeWidth={2}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function DrawdownSection({ points, loaded }: { points: ValuePoint[] | null; loaded: boolean }) {
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>Drawdown</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  const series = points ? computeDrawdownSeries(points) : [];
+  if (series.length === 0) {
+    return (
+      <div className="card">
+        <h3>Drawdown</h3>
+        <p className="muted">No priced value history yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3>Drawdown</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Percentage fall from the portfolio's highest value reached so far, week by week.
+      </p>
+      <div style={{ width: "100%", height: 220 }}>
+        <ResponsiveContainer>
+          <AreaChart data={series}>
+            <XAxis dataKey="as_of_date" tick={{ fontSize: 11 }} minTickGap={40} />
+            <YAxis tickFormatter={(v: number) => `${v.toFixed(0)}%`} tick={{ fontSize: 11 }} width={50} />
+            <Tooltip formatter={(value) => `${Number(value).toFixed(2)}%`} />
+            <Area
+              type="monotone"
+              dataKey="drawdown_pct"
+              stroke={NEGATIVE_COLOR}
+              fill={NEGATIVE_COLOR}
+              fillOpacity={0.25}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function FundAllocationSection({
+  holdings,
+  loaded,
+}: {
+  holdings: HoldingMetric[] | null;
+  loaded: boolean;
+}) {
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>Fund Allocation</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  const priced = (holdings ?? []).filter(
+    (h): h is HoldingMetric & { current_value_paise: number } =>
+      h.current_value_paise !== null && h.current_value_paise > 0,
+  );
+  if (priced.length === 0) {
+    return (
+      <div className="card">
+        <h3>Fund Allocation</h3>
+        <p className="muted">No priced holdings yet.</p>
+      </div>
+    );
+  }
+
+  const sorted = [...priced].sort((a, b) => b.current_value_paise - a.current_value_paise);
+  const top = sorted.slice(0, 10);
+  const rest = sorted.slice(10);
+  const restValue = rest.reduce((sum, h) => sum + h.current_value_paise, 0);
+  const bars = [
+    ...top.map((h) => ({ name: h.scheme_name, value: h.current_value_paise })),
+    ...(rest.length > 0 ? [{ name: `Others (${rest.length} funds)`, value: restValue }] : []),
+  ];
+
+  return (
+    <div className="card">
+      <h3>Fund Allocation</h3>
+      <div style={{ width: "100%", height: Math.max(220, bars.length * 32) }}>
+        <ResponsiveContainer>
+          <BarChart data={bars} layout="vertical" margin={{ left: 24 }}>
+            <XAxis type="number" tickFormatter={(v: number) => formatPaise(v)} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="name" width={200} tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(value) => formatPaise(Number(value))} />
+            <Bar dataKey="value">
+              {bars.map((b, i) => (
+                <Cell key={b.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function AmcAllocationSection({ groups, loaded }: { groups: CategoryGroup[] | null; loaded: boolean }) {
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>AMC Allocation</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  if (groups === null || groups.length === 0) {
+    return (
+      <div className="card">
+        <h3>AMC Allocation</h3>
+        <p className="muted">No priced holdings yet.</p>
+      </div>
+    );
+  }
+
+  const sorted = [...groups].sort((a, b) => b.current_value_paise - a.current_value_paise);
+
+  return (
+    <div className="card">
+      <h3>AMC Allocation</h3>
+      <div style={{ width: "100%", height: Math.max(220, sorted.length * 32) }}>
+        <ResponsiveContainer>
+          <BarChart data={sorted} layout="vertical" margin={{ left: 24 }}>
+            <XAxis type="number" tickFormatter={(v: number) => formatPaise(v)} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="label" width={160} tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(value) => formatPaise(Number(value))} />
+            <Bar dataKey="current_value_paise">
+              {sorted.map((g, i) => (
+                <Cell key={g.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function AlphaVsBenchmarkSection({
+  comparisons,
+  loaded,
+}: {
+  comparisons: BenchmarkComparison[] | null;
+  loaded: boolean;
+}) {
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>Alpha vs Benchmark</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  const resolved = (comparisons ?? []).filter(
+    (c): c is BenchmarkComparison & { alpha_pct: number } => c.alpha_pct !== null,
+  );
+  if (resolved.length === 0) {
+    return (
+      <div className="card">
+        <h3>Alpha vs Benchmark</h3>
+        <p className="muted">No positions with a resolved benchmark yet.</p>
+      </div>
+    );
+  }
+
+  const sorted = [...resolved].sort((a, b) => a.alpha_pct - b.alpha_pct);
+  const key = (c: BenchmarkComparison) => `${c.folio}-${c.scheme_name}`;
+  const picked = new Map<string, (typeof sorted)[number]>();
+  for (const c of [...sorted.slice(0, 5), ...sorted.slice(-5)]) {
+    picked.set(key(c), c);
+  }
+  const bars = [...picked.values()].sort((a, b) => a.alpha_pct - b.alpha_pct);
+
+  return (
+    <div className="card">
+      <h3>Alpha vs Benchmark</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Biggest outperformers and underperformers vs each fund's category-appropriate benchmark.
+      </p>
+      <div style={{ width: "100%", height: Math.max(220, bars.length * 32) }}>
+        <ResponsiveContainer>
+          <BarChart data={bars} layout="vertical" margin={{ left: 24 }}>
+            <XAxis type="number" tickFormatter={(v: number) => `${v.toFixed(0)}%`} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="scheme_name" width={200} tick={{ fontSize: 11 }} />
+            <Tooltip formatter={(value) => formatAlpha(Number(value))} />
+            <Bar dataKey="alpha_pct">
+              {bars.map((c) => (
+                <Cell key={key(c)} fill={c.alpha_pct >= 0 ? POSITIVE_COLOR : NEGATIVE_COLOR} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function EquityBlendedBenchmarkSection({
   comparison,
   loaded,
@@ -363,6 +659,16 @@ export default function Dashboard() {
     null,
   );
   const [blendedComparisonLoaded, setBlendedComparisonLoaded] = useState(false);
+  const [valueHistory, setValueHistory] = useState<ValuePoint[] | null>(null);
+  const [valueHistoryLoaded, setValueHistoryLoaded] = useState(false);
+  const [holdingMetrics, setHoldingMetrics] = useState<HoldingMetric[] | null>(null);
+  const [holdingMetricsLoaded, setHoldingMetricsLoaded] = useState(false);
+  const [amcGroups, setAmcGroups] = useState<CategoryGroup[] | null>(null);
+  const [amcGroupsLoaded, setAmcGroupsLoaded] = useState(false);
+  const [benchmarkComparisons, setBenchmarkComparisons] = useState<BenchmarkComparison[] | null>(
+    null,
+  );
+  const [benchmarkComparisonsLoaded, setBenchmarkComparisonsLoaded] = useState(false);
 
   useEffect(() => {
     getHealth()
@@ -398,6 +704,34 @@ export default function Dashboard() {
         setBlendedComparisonLoaded(true);
       })
       .catch(() => setBlendedComparisonLoaded(true));
+
+    getPortfolioValueHistory()
+      .then((points) => {
+        setValueHistory(points);
+        setValueHistoryLoaded(true);
+      })
+      .catch(() => setValueHistoryLoaded(true));
+
+    getHoldingMetrics()
+      .then((h) => {
+        setHoldingMetrics(h);
+        setHoldingMetricsLoaded(true);
+      })
+      .catch(() => setHoldingMetricsLoaded(true));
+
+    getCategoryBreakdown("amc")
+      .then((groups) => {
+        setAmcGroups(groups);
+        setAmcGroupsLoaded(true);
+      })
+      .catch(() => setAmcGroupsLoaded(true));
+
+    getBenchmarkComparisons()
+      .then((c) => {
+        setBenchmarkComparisons(c);
+        setBenchmarkComparisonsLoaded(true);
+      })
+      .catch(() => setBenchmarkComparisonsLoaded(true));
   }, []);
 
   const alphaClass =
@@ -485,6 +819,15 @@ export default function Dashboard() {
           <AssetAllocationSection groups={categoryGroups} />
           <CategoryAllocationSection groups={subCategoryGroups} />
           <AllocationDriftSection drift={drift} loaded={driftLoaded} />
+
+          <PortfolioValueSection points={valueHistory} loaded={valueHistoryLoaded} />
+          <DrawdownSection points={valueHistory} loaded={valueHistoryLoaded} />
+          <FundAllocationSection holdings={holdingMetrics} loaded={holdingMetricsLoaded} />
+          <AmcAllocationSection groups={amcGroups} loaded={amcGroupsLoaded} />
+          <AlphaVsBenchmarkSection
+            comparisons={benchmarkComparisons}
+            loaded={benchmarkComparisonsLoaded}
+          />
         </>
       )}
     </div>
