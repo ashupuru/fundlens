@@ -348,3 +348,65 @@ def compute_portfolio_metrics(session: Session) -> PortfolioMetrics:
         current_value_paise=current_value_total,
         positions_missing_nav=missing_nav_count,
     )
+
+
+def compute_fund_metrics(session: Session, amfi_code: str) -> PortfolioMetrics | None:
+    """Aggregates every (folio, scheme_key) position for one fund across
+    every folio that holds or has held it — the fund detail page's
+    "your position" summary. Same concatenate-cash-flows-then-
+    compute_xirr-once pattern as compute_portfolio_metrics above, just
+    filtered to one fund instead of the whole portfolio (not new math).
+
+    Returns None if the user has never held this fund, so the caller can
+    render "you don't hold this fund" instead of an all-zero metrics
+    block — a fund reached via the "similar funds" list on someone else's
+    detail page is the expected case this covers.
+    """
+    all_positions = get_all_positions(session)
+    open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
+    txns_by_position = positions_with_transactions(session, all_positions)
+
+    fund_positions: set[tuple[str, str]] = set()
+    for folio, key in all_positions:
+        holding = open_holdings.get((folio, key))
+        if holding is not None:
+            if holding.amfi_code == amfi_code:
+                fund_positions.add((folio, key))
+            continue
+        # Fully-exited position: no open holding to read amfi_code from,
+        # fall back to its own transactions (mirrors get_all_positions'
+        # rationale for including exited positions at all).
+        if any(t.amfi_code == amfi_code for t in txns_by_position.get((folio, key), [])):
+            fund_positions.add((folio, key))
+
+    if not fund_positions:
+        return None
+
+    all_cash_flows: list[CashFlow] = []
+    invested_total = 0
+    received_total = 0
+    current_value_total = 0
+    missing_nav_count = 0
+
+    for folio, key in fund_positions:
+        pos = _build_position_cash_flows(
+            session, txns_by_position.get((folio, key), []), open_holdings.get((folio, key))
+        )
+        all_cash_flows.extend(pos.cash_flows)
+        invested_total += pos.invested_paise
+        received_total += pos.received_paise
+        if pos.current_value_paise is not None:
+            current_value_total += pos.current_value_paise
+        if pos.xirr_reason == "nav_unavailable":
+            missing_nav_count += 1
+
+    xirr_result = compute_xirr(all_cash_flows)
+
+    return PortfolioMetrics(
+        xirr=xirr_result.rate,
+        xirr_reason=xirr_result.reason,
+        invested_paise=invested_total,
+        received_paise=received_total,
+        current_value_paise=current_value_total,
+        positions_missing_nav=missing_nav_count,
+    )

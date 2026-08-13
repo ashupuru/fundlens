@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getDataQualitySummary } from "../api/client";
+import { getDataQualitySummary, postRefreshGroww } from "../api/client";
 import type { components } from "../api/schema";
 
 type Summary = components["schemas"]["DataQualitySummaryResponse"];
@@ -9,10 +9,17 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; summary: Summary };
 
+type GrowwRefreshState =
+  | { status: "idle" }
+  | { status: "refreshing" }
+  | { status: "error"; message: string }
+  | { status: "done"; rowsUpserted: number };
+
 export default function DataQuality() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [growwRefresh, setGrowwRefresh] = useState<GrowwRefreshState>({ status: "idle" });
 
-  useEffect(() => {
+  function load() {
     getDataQualitySummary()
       .then((summary) => setState({ status: "ready", summary }))
       .catch((err: unknown) =>
@@ -21,7 +28,27 @@ export default function DataQuality() {
           message: err instanceof Error ? err.message : "Unknown error",
         }),
       );
-  }, []);
+  }
+
+  useEffect(load, []);
+
+  async function refreshGroww() {
+    setGrowwRefresh({ status: "refreshing" });
+    try {
+      const result = await postRefreshGroww();
+      if (result.ok) {
+        setGrowwRefresh({ status: "done", rowsUpserted: result.rows_upserted });
+      } else {
+        setGrowwRefresh({ status: "error", message: result.error ?? "Unknown error" });
+      }
+      load(); // refresh the freshness table below
+    } catch (err) {
+      setGrowwRefresh({
+        status: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
 
   if (state.status === "loading") {
     return (
@@ -179,6 +206,20 @@ export default function DataQuality() {
 
       <div className="card">
         <h2>Market data freshness</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <button onClick={() => void refreshGroww()} disabled={growwRefresh.status === "refreshing"}>
+            {growwRefresh.status === "refreshing" ? "Refreshing…" : "Refresh fund metadata (Groww)"}
+          </button>
+          {growwRefresh.status === "refreshing" && (
+            <span className="muted">Fetching the full fund universe — usually a few seconds.</span>
+          )}
+          {growwRefresh.status === "done" && (
+            <span className="muted">Updated {growwRefresh.rowsUpserted} funds.</span>
+          )}
+          {growwRefresh.status === "error" && (
+            <span className="muted">Failed: {growwRefresh.message}</span>
+          )}
+        </div>
         {summary.data_freshness.length === 0 ? (
           <p className="muted">No market-data refresh has been run yet.</p>
         ) : (

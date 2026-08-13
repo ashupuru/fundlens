@@ -5,7 +5,11 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from fundlens.compute import service
-from fundlens.compute.holdings import get_current_holdings, get_holdings_by_amc
+from fundlens.compute.holdings import (
+    get_current_holdings,
+    get_holdings_by_amc,
+    get_holdings_for_scheme,
+)
 from fundlens.db.models import RawCASUpload, RawTransaction, TransactionType, UploadStatus
 
 
@@ -154,3 +158,42 @@ def test_holdings_by_amc_aggregates_across_schemes(session: Session) -> None:
     assert by_amc["AMC One"].cost_basis_paise == 200_000  # 1000 + 1000 rupees
     assert by_amc["AMC Two"].scheme_count == 1
     assert by_amc["AMC Two"].cost_basis_paise == 100_000
+
+
+def test_get_holdings_for_scheme_returns_only_that_amfi_code_across_folios(
+    session: Session,
+) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, folio="F1", scheme_name="Fund A", amfi_code="111",
+        txn_date=date(2021, 1, 1), units=Decimal("100"), nav=Decimal("10"),
+    )
+    _add_txn(
+        session, upload.id, folio="F2", scheme_name="Fund A", amfi_code="111",
+        txn_date=date(2021, 1, 1), units=Decimal("40"), nav=Decimal("10"),
+    )
+    _add_txn(
+        session, upload.id, folio="F1", scheme_name="Fund B", amfi_code="222",
+        txn_date=date(2021, 1, 1), units=Decimal("10"), nav=Decimal("100"),
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    service.rebuild_lots_for_folio(session, "F2")
+
+    holdings = get_holdings_for_scheme(session, "111")
+
+    assert {h.folio for h in holdings} == {"F1", "F2"}
+    assert all(h.amfi_code == "111" for h in holdings)
+    assert sum(h.units_remaining for h in holdings) == Decimal("140")
+
+
+def test_get_holdings_for_scheme_empty_when_not_held(session: Session) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="111", txn_date=date(2021, 1, 1),
+        units=Decimal("100"), nav=Decimal("10"),
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+
+    assert get_holdings_for_scheme(session, "does-not-exist") == []
