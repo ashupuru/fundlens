@@ -172,15 +172,17 @@ export default function Funds() {
     return sort.direction === "asc" ? cmp : -cmp;
   });
 
-  const totalReturns =
-    portfolio.current_value_paise + portfolio.received_paise - portfolio.invested_paise;
-  // "Invested value" means money currently deployed in active funds -- the
-  // cost basis of open positions, not portfolio.invested_paise (lifetime
-  // cumulative purchases across every fund ever held, including ones fully
-  // exited). invested_paise is still the right basis for totalReturns above
-  // (it needs the lifetime figure to net exited positions against their
-  // proceeds correctly), so that calculation is unchanged.
+  // "Invested value" and "Total returns" must share the same basis so the
+  // three headline stats reconcile on screen the way Groww's own dashboard
+  // does (verified against the reference screenshot: Total returns there is
+  // exactly Current value − Invested value). Both are scoped to currently
+  // active funds only -- cost_basis_paise is already 0 for a fully-exited
+  // position, so this naturally excludes them, same as "Invested value".
+  // Realized gains from exited funds still show up per-fund in the table
+  // below (each row's own return/XIRR reflects its full history); they're
+  // deliberately not blended into this portfolio-wide headline number.
   const activeCostBasis = rows.reduce((sum, r) => sum + (r.metrics?.cost_basis_paise ?? 0), 0);
+  const totalReturns = portfolio.current_value_paise - activeCostBasis;
 
   return (
     <div>
