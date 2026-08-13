@@ -199,10 +199,16 @@ function ImportSummary({
   rebuild: RebuildLotsResult | null;
 }) {
   const skippedReasons = Object.entries(commit.skipped_reasons);
+  const crossSourceDuplicates = Object.entries(commit.cross_source_duplicates);
   return (
     <div className="card">
       <h2>Import complete</h2>
-      <div className="card-grid" style={{ marginBottom: skippedReasons.length > 0 ? 16 : 0 }}>
+      <div
+        className="card-grid"
+        style={{
+          marginBottom: skippedReasons.length > 0 || crossSourceDuplicates.length > 0 ? 16 : 0,
+        }}
+      >
         <div className="stat">
           <div className="stat-label">Inserted</div>
           <div className="stat-value positive">{commit.inserted_count}</div>
@@ -212,10 +218,39 @@ function ImportSummary({
           <div className="stat-value">{commit.duplicate_count}</div>
         </div>
         <div className="stat">
+          <div className="stat-label">Already in portfolio</div>
+          <div className="stat-value">{commit.cross_source_duplicate_count}</div>
+        </div>
+        <div className="stat">
           <div className="stat-label">Skipped</div>
           <div className="stat-value">{commit.skipped_count}</div>
         </div>
       </div>
+
+      {crossSourceDuplicates.length > 0 && (
+        <div style={{ marginBottom: skippedReasons.length > 0 ? 16 : 0 }}>
+          <p className="muted" style={{ marginBottom: 8 }}>
+            These rows matched a transaction already in your portfolio from a different import
+            (same scheme, date, and amount) and were not re-imported:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Security</th>
+                <th>Rows matched to existing</th>
+              </tr>
+            </thead>
+            <tbody>
+              {crossSourceDuplicates.map(([security, count]) => (
+                <tr key={security}>
+                  <td>{security}</td>
+                  <td>{count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {skippedReasons.length > 0 && (
         <table>

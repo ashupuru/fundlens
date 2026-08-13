@@ -86,6 +86,8 @@ class DezervCommitResponse(BaseModel):
     duplicate_count: int
     skipped_count: int
     skipped_reasons: dict[str, int]
+    cross_source_duplicate_count: int
+    cross_source_duplicates: dict[str, int]
 
 
 @router.post("/commit", response_model=DezervCommitResponse)
@@ -113,4 +115,6 @@ async def commit(
         duplicate_count=result.duplicate_count,
         skipped_count=result.skipped_count,
         skipped_reasons=result.skipped_reasons,
+        cross_source_duplicate_count=result.cross_source_duplicate_count,
+        cross_source_duplicates=result.cross_source_duplicates,
     )

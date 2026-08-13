@@ -19,6 +19,27 @@ that make blind auto-matching unsafe):
 A scheme resolvable in the mapping but whose NAV backfill fails (network
 error) or has no NAV on/before a given transaction's date degrades that
 row to skipped-and-reported, never a fabricated unit count.
+
+**Cross-source duplicate detection.** Real-data-verified against a live
+portfolio: the same real transaction can already exist in `raw_transaction`
+from a CAS/CSV import *before* a Dezerv import of the same activity is run
+-- Dezerv reports the demat/custodian account as `folio`, while a CAS
+folio is the AMC's own folio number, so the natural-key dedup (keyed on
+`folio` among other fields) never recognizes these as the same
+transaction and both get inserted. Verified case: 35 transactions,
+each appearing once from CAS (`parser_version` from casparser) and once
+from Dezerv, identical scheme/date/type/amount but different `folio` --
+and units matched to 2 decimal places in 34/35 of them despite being
+independently derived (exact from CAS, back-computed from NAV for
+Dezerv), confirming these are true duplicates rather than coincidental
+collisions. `commit_dezerv_csv` therefore checks, per row, whether a
+transaction already exists for the same (amfi_code, txn_date, amount,
+buy/sell-equivalent txn_type) *regardless of folio*, and skips inserting
+it if so -- reported distinctly via `cross_source_duplicate_count` /
+`cross_source_duplicates`, never silently dropped. Units are
+deliberately *not* part of this match (Dezerv's are back-computed and
+can legitimately differ slightly from CAS's exact figure); amount_paise
+is used instead since it's stored exactly by both sources.
 """
 
 import hashlib
@@ -27,9 +48,10 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fundlens.db.models import RawCASUpload, TransactionType, UploadStatus
+from fundlens.db.models import RawCASUpload, RawTransaction, TransactionType, UploadStatus
 from fundlens.ingestion.dezerv_csv import DezervRow, parse_dezerv_csv
 from fundlens.ingestion.dezerv_matching import MatchCandidate, resolve_security
 from fundlens.ingestion.merge import merge_transactions
@@ -42,6 +64,9 @@ from fundlens.market_data.service import backfill_scheme_via_mfapi
 from fundlens.tax.grandfathering import fmv_per_unit_on_or_before as _nav_on_or_before
 
 PARSER_VERSION = "dezerv-csv-v1"
+
+_BUY_EQUIVALENT_TXN_TYPES = (TransactionType.PURCHASE, TransactionType.PURCHASE_SIP)
+_SELL_EQUIVALENT_TXN_TYPES = (TransactionType.REDEMPTION,)
 
 
 @dataclass(frozen=True)
@@ -100,6 +125,25 @@ class DezervCommitResult:
     duplicate_count: int
     skipped_count: int
     skipped_reasons: dict[str, int]  # security_name -> row count skipped for it
+    cross_source_duplicate_count: int
+    cross_source_duplicates: dict[str, int]  # security_name -> row count matched to an existing txn
+
+
+def _existing_cross_source_transaction(
+    session: Session, amfi_code: str, txn_date: date, is_buy: bool, amount_paise: int
+) -> bool:
+    equivalent_types = _BUY_EQUIVALENT_TXN_TYPES if is_buy else _SELL_EQUIVALENT_TXN_TYPES
+    match = session.execute(
+        select(RawTransaction.id)
+        .where(
+            RawTransaction.amfi_code == amfi_code,
+            RawTransaction.txn_date == txn_date,
+            RawTransaction.txn_type.in_(equivalent_types),
+            RawTransaction.amount_paise == amount_paise,
+        )
+        .limit(1)
+    ).first()
+    return match is not None
 
 
 def _resolve_amc_names(session: Session, amfi_codes: set[str]) -> dict[str, str]:
@@ -128,7 +172,7 @@ def commit_dezerv_csv(
     if existing is not None:
         return DezervCommitResult(
             upload_id=existing.id, inserted_count=0, duplicate_count=0, skipped_count=0,
-            skipped_reasons={},
+            skipped_reasons={}, cross_source_duplicate_count=0, cross_source_duplicates={},
         )
 
     parsed = parse_dezerv_csv(content)
@@ -141,6 +185,7 @@ def commit_dezerv_csv(
     amc_by_code = _resolve_amc_names(session, valid_codes)
 
     skipped_reasons: dict[str, int] = {}
+    cross_source_duplicates: dict[str, int] = {}
     records: list[TransactionRecord] = []
     ordinal_counts: dict[tuple, int] = {}
     sequence_counts: dict[tuple[str, str], int] = {}
@@ -152,16 +197,23 @@ def commit_dezerv_csv(
             skipped_reasons[row.security] = skipped_reasons.get(row.security, 0) + 1
             continue
 
+        is_buy = row.transaction_description == "Buy"
+        signed_amount_paise = row.amount_paise if is_buy else -row.amount_paise
+
+        if _existing_cross_source_transaction(
+            session, scheme.amfi_code, row.txn_date, is_buy, signed_amount_paise
+        ):
+            cross_source_duplicates[row.security] = cross_source_duplicates.get(row.security, 0) + 1
+            continue
+
         nav = _nav_on_or_before(session, scheme.amfi_code, row.txn_date)
         if nav is None or nav == 0:
             skipped_reasons[row.security] = skipped_reasons.get(row.security, 0) + 1
             continue
 
         units = (Decimal(row.amount_paise) / 100) / nav
-        is_buy = row.transaction_description == "Buy"
         txn_type = TransactionType.PURCHASE if is_buy else TransactionType.REDEMPTION
         signed_units = units if is_buy else -units
-        signed_amount_paise = row.amount_paise if is_buy else -row.amount_paise
 
         scheme_identifier = scheme.isin_growth or scheme.amfi_code
         tie_key = (
@@ -229,4 +281,6 @@ def commit_dezerv_csv(
         duplicate_count=merge_result.duplicate_count,
         skipped_count=sum(skipped_reasons.values()),
         skipped_reasons=skipped_reasons,
+        cross_source_duplicate_count=sum(cross_source_duplicates.values()),
+        cross_source_duplicates=cross_source_duplicates,
     )

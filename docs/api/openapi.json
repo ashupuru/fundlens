@@ -1489,6 +1489,17 @@
             },
             "type": "object",
             "title": "Skipped Reasons"
+          },
+          "cross_source_duplicate_count": {
+            "type": "integer",
+            "title": "Cross Source Duplicate Count"
+          },
+          "cross_source_duplicates": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Cross Source Duplicates"
           }
         },
         "type": "object",
@@ -1497,7 +1508,9 @@
           "inserted_count",
           "duplicate_count",
           "skipped_count",
-          "skipped_reasons"
+          "skipped_reasons",
+          "cross_source_duplicate_count",
+          "cross_source_duplicates"
         ],
         "title": "DezervCommitResponse"
       },

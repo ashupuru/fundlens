@@ -91,6 +91,8 @@ def test_commit_endpoint_inserts_transactions(client: TestClient) -> None:
     assert body["inserted_count"] == 1
     assert body["skipped_count"] == 0
     assert body["skipped_reasons"] == {}
+    assert body["cross_source_duplicate_count"] == 0
+    assert body["cross_source_duplicates"] == {}
 
 
 def test_commit_endpoint_rejects_invalid_mapping_json(client: TestClient) -> None:

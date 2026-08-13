@@ -643,6 +643,12 @@ export interface components {
             skipped_reasons: {
                 [key: string]: number;
             };
+            /** Cross Source Duplicate Count */
+            cross_source_duplicate_count: number;
+            /** Cross Source Duplicates */
+            cross_source_duplicates: {
+                [key: string]: number;
+            };
         };
         /** DezervPreviewResponse */
         DezervPreviewResponse: {
