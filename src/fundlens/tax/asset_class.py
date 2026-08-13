@@ -101,3 +101,31 @@ def classify_category(category_raw: str) -> TaxAssetClass:
     # Covers both the explicitly-known ambiguous markers above and anything
     # genuinely unrecognized — either way, "don't know" beats "guessed wrong".
     return TaxAssetClass.NEEDS_REVIEW
+
+
+class EquityCapSize(enum.StrEnum):
+    """Cap-size bucket within EQUITY-classified categories only — callers
+    must check `classify_category(...) == TaxAssetClass.EQUITY` first; this
+    function doesn't itself distinguish equity from debt/needs_review."""
+
+    LARGE = "large"
+    MID = "mid"
+    SMALL = "small"
+    LARGE_AND_MID = "large_and_mid"
+    # Flexi/Multi Cap, ELSS, Focused, Value, Contra, Dividend Yield,
+    # Sectoral/Thematic, equity index/ETF, arbitrage, aggressive hybrid —
+    # real equity categories with no single cap-size tilt to report.
+    OTHER = "other"
+
+
+def equity_cap_size(category_raw: str) -> EquityCapSize:
+    normalized = category_raw.strip().lower()
+    if "large & mid cap" in normalized or "large and mid cap" in normalized:
+        return EquityCapSize.LARGE_AND_MID
+    if "large cap" in normalized:
+        return EquityCapSize.LARGE
+    if "mid cap" in normalized:
+        return EquityCapSize.MID
+    if "small cap" in normalized:
+        return EquityCapSize.SMALL
+    return EquityCapSize.OTHER

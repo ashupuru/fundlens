@@ -125,7 +125,7 @@ def get_all_positions(session: Session) -> set[tuple[str, str]]:
     return {(t.folio, scheme_key(t.isin, t.amfi_code, t.scheme_name)) for t in txns}
 
 
-def _latest_nav(session: Session, amfi_code: str) -> tuple[Decimal, date] | None:
+def latest_nav(session: Session, amfi_code: str) -> tuple[Decimal, date] | None:
     row = session.execute(
         select(NavHistory.nav, NavHistory.nav_date)
         .where(NavHistory.amfi_code == amfi_code)
@@ -179,7 +179,7 @@ def _build_position_cash_flows(
         current_value_paise = 0
     else:
         amfi_code = open_holding.amfi_code if open_holding else None
-        latest = _latest_nav(session, amfi_code) if amfi_code else None
+        latest = latest_nav(session, amfi_code) if amfi_code else None
         if latest is not None:
             nav, nav_as_of = latest
             current_value_paise = to_paise_strict(units_remaining * nav)

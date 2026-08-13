@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from fundlens.api.routers import (
+    allocation,
     assumptions,
     benchmark,
     data_quality,
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(data_quality.router)
     app.include_router(benchmark.router)
     app.include_router(assumptions.router)
+    app.include_router(allocation.router)
     return app
 
 
