@@ -132,7 +132,12 @@ def test_rebuild_groups_by_scheme_independently(session: Session) -> None:
     assert scheme_keys == {"111", "222"}
 
 
-def test_insufficient_lots_error_recorded_not_raised(session: Session) -> None:
+def test_insufficient_lots_gap_filled_not_dropped(session: Session) -> None:
+    """A redemption exceeding recorded history (e.g. a Dezerv import whose
+    date window starts mid-holding) used to discard the whole scheme's
+    lots, silently dropping it from holdings. It should instead get a
+    synthetic, zero-cost, provenance-less "gap-fill" lot sized to exactly
+    the shortfall -- the fund still shows up, just flagged."""
     upload = _make_upload(session)
     _add_txn(
         session, upload.id, txn_date=date(2021, 1, 1), units=Decimal("50"), nav=Decimal("10")
@@ -145,15 +150,21 @@ def test_insufficient_lots_error_recorded_not_raised(session: Session) -> None:
 
     summary = service.rebuild_lots_for_folio(session, "F1")
 
-    assert summary.lots_created == 0
-    assert len(summary.errors) == 1
-    assert summary.errors[0].folio == "F1"
-    assert "more units than open lots hold" in summary.errors[0].message
+    assert summary.errors == []
+    assert summary.lots_created == 2  # the real 50-unit lot + the gap-fill lot
+    assert len(summary.gap_filled) == 1
+    assert summary.gap_filled[0].folio == "F1"
+    assert summary.gap_filled[0].units_assumed == Decimal("30")  # 80 - 50 shortfall
+
+    lots = session.scalars(select(Lot)).all()
+    gap_lot = next(lot for lot in lots if lot.source_txn_id is None)
+    assert gap_lot.zero_cost_flag is True
+    assert gap_lot.units_remaining == Decimal("0")  # fully consumed by the redemption
 
 
-def test_error_in_one_scheme_does_not_block_others(session: Session) -> None:
+def test_gap_fill_in_one_scheme_does_not_block_others(session: Session) -> None:
     upload = _make_upload(session)
-    # Fund A: oversold, will error
+    # Fund A: oversold relative to recorded history -- gets a gap-fill lot.
     _add_txn(
         session, upload.id, scheme_name="Fund A", amfi_code="111",
         txn_date=date(2021, 1, 1), units=Decimal("10"), nav=Decimal("10"),
@@ -172,11 +183,12 @@ def test_error_in_one_scheme_does_not_block_others(session: Session) -> None:
 
     summary = service.rebuild_lots_for_folio(session, "F1")
 
-    assert len(summary.errors) == 1
-    assert summary.lots_created == 1  # Fund B's lot still created
+    assert summary.errors == []
+    assert len(summary.gap_filled) == 1
+    assert summary.gap_filled[0].scheme_key == "111"
+    assert summary.lots_created == 3  # Fund A's real lot + its gap-fill lot + Fund B's lot
     lots = session.scalars(select(Lot)).all()
-    assert len(lots) == 1
-    assert lots[0].scheme_key == "222"
+    assert {lot.scheme_key for lot in lots} == {"111", "222"}
 
 
 def test_get_all_folios_returns_distinct_folios(session: Session) -> None:

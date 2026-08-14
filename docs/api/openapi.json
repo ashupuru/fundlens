@@ -2966,6 +2966,13 @@
             },
             "type": "array",
             "title": "Errors"
+          },
+          "gap_filled": {
+            "items": {
+              "$ref": "#/components/schemas/SchemeGapFilledResponse"
+            },
+            "type": "array",
+            "title": "Gap Filled"
           }
         },
         "type": "object",
@@ -2974,7 +2981,8 @@
           "schemes_processed",
           "lots_created",
           "realized_gains_created",
-          "errors"
+          "errors",
+          "gap_filled"
         ],
         "title": "RebuildResponse"
       },
@@ -3135,6 +3143,34 @@
           "reason"
         ],
         "title": "RubricComponentResponse"
+      },
+      "SchemeGapFilledResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
+          "units_assumed": {
+            "type": "string",
+            "title": "Units Assumed"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key",
+          "units_assumed",
+          "message"
+        ],
+        "title": "SchemeGapFilledResponse"
       },
       "SchemeRebuildErrorResponse": {
         "properties": {

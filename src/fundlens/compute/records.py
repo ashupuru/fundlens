@@ -33,7 +33,9 @@ class Lot:
     open_date: date
     units_remaining: Decimal
     cost_per_unit: Decimal
-    source_txn_id: str
+    # None for a gap-fill lot -- an assumed pre-existing position inferred
+    # from an InsufficientLotsError, with no real transaction to point to.
+    source_txn_id: str | None
     source_txn_type: str
     close_date: date | None = None
     zero_cost_flag: bool = False  # e.g. SEGREGATION rows with no priced amount
@@ -41,7 +43,7 @@ class Lot:
 
 @dataclass(frozen=True)
 class RealizedGainRecord:
-    source_txn_id: str  # the lot that was (partially) consumed
+    source_txn_id: str | None  # the lot (partially) consumed; None if it was a gap-fill lot
     open_date: date
     sale_txn_id: str
     sale_date: date

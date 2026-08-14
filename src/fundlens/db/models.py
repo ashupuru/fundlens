@@ -285,7 +285,11 @@ class Lot(Base):
     open_date: Mapped[date] = mapped_column(Date)
     units_remaining: Mapped[Decimal] = mapped_column(Numeric(20, 4))
     cost_per_unit: Mapped[Decimal] = mapped_column(Numeric(20, 4))
-    source_txn_id: Mapped[str] = mapped_column(ForeignKey("raw_transaction.id"))
+    # NULL for a gap-fill lot (compute/service.py) -- an assumed pre-existing
+    # position inferred from an outflow that exceeds recorded history, with
+    # no real transaction to point to. Same "flag, don't fabricate" instinct
+    # as zero_cost_flag, applied to provenance instead of cost.
+    source_txn_id: Mapped[str | None] = mapped_column(ForeignKey("raw_transaction.id"))
     source_txn_type: Mapped[TransactionType] = mapped_column(Enum(TransactionType))
     close_date: Mapped[date | None] = mapped_column(Date)
     zero_cost_flag: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -304,7 +308,8 @@ class RealizedGain(Base):
     folio: Mapped[str] = mapped_column(String(64), index=True)
     scheme_key: Mapped[str] = mapped_column(String(255), index=True)
 
-    source_txn_id: Mapped[str] = mapped_column(ForeignKey("raw_transaction.id"))
+    # NULL when this gain consumed a gap-fill lot (see Lot.source_txn_id).
+    source_txn_id: Mapped[str | None] = mapped_column(ForeignKey("raw_transaction.id"))
     open_date: Mapped[date] = mapped_column(Date)
     sale_txn_id: Mapped[str] = mapped_column(ForeignKey("raw_transaction.id"))
     sale_date: Mapped[date] = mapped_column(Date)

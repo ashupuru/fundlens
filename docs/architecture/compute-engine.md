@@ -31,9 +31,32 @@ negative=outflow) across every observed transaction type without exception, so n
   → consume from the oldest open lot(s) first (FIFO); split a lot if the outflow doesn't consume
   it fully. Each consumed slice's realized gain = `(sale_price_per_unit − lot.cost_per_unit) ×
   units_consumed`, using the same nav→amount→zero price fallback. Consuming more than the open
-  lots hold raises `InsufficientLotsError` (surfaced as a per-scheme error on the rebuild
-  summary, not a crash) — the expected signal when ingested history doesn't cover a scheme's
-  full past (see gap detection, data-model.md §2).
+  lots hold raises `InsufficientLotsError` — `compute/lots.py` itself is unchanged and still
+  raises this (its pure contract, well-tested); `compute/service.py::rebuild_lots_for_folio`
+  is what changed (see **gap-fill lots** below).
+
+**Gap-fill lots** (`compute/service.py`, added alongside the dashboard-charts/valuation-history
+batch — a real bug fix, not a new feature: Dezerv-only imports into an empty database were
+silently missing funds entirely). CAS has a native opening-balance signal (`Scheme.open`,
+data-model.md §2's `coverage_gap`); Dezerv's "BANK BOOK" export has no such concept at all — it's
+a plain buy/sell ledger for whatever date window was requested, so an account that predates the
+window's start routinely has a scheme whose *first recorded* transaction is a Sell. Previously,
+`InsufficientLotsError` on ANY transaction aborted `build_lots` for the WHOLE scheme, discarding
+every lot for it — including lots from later, perfectly clean transactions that came after the
+deficit point, since `build_lots` processes a scheme's full history as one call. The fund would
+vanish from holdings entirely, not just misprice the gap. Now, `rebuild_lots_for_folio` catches
+`InsufficientLotsError`, synthesizes a lot sized to exactly the reported shortfall (algebraically
+exact, never guessed) dated at the scheme's earliest known transaction, `zero_cost_flag=True` —
+the same "flag an unknown cost rather than fabricate one" instinct already used for
+`SEGREGATION`'s unpriced rows — and retries, bounded by the scheme's own transaction count (each
+retry can resolve at most one new deficit point, so this is a hard, provable bound, not a
+heuristic cap). A gap-fill lot has `source_txn_id=None` — there's no real transaction to point
+to, so `Lot.source_txn_id`/`RealizedGain.source_txn_id` were relaxed from `NOT NULL` to nullable
+(migration `192e08f1fbf1`) rather than inventing a fake `raw_transaction` row, which would have
+blurred that table's "real ingested data only" invariant. Reported via `RebuildSummary.gap_filled`
+(surfaced in both the CAS/CSV and Dezerv import UIs, alongside the pre-existing `errors` count) —
+informational, not hidden, since the affected lot's cost basis (and, unavoidably, its holding
+period — no date signal exists to do better) is an assumption, not a fact.
 - **units is `None` or 0** (`STT_TAX`, `STAMP_DUTY_TAX`, `TDS_TAX`, `DIVIDEND_PAYOUT`, `MISC`,
   `UNKNOWN`) → skipped entirely; these never touch the lot ledger.
 

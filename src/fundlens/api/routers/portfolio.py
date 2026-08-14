@@ -21,12 +21,20 @@ class SchemeRebuildErrorResponse(BaseModel):
     message: str
 
 
+class SchemeGapFilledResponse(BaseModel):
+    folio: str
+    scheme_key: str
+    units_assumed: str
+    message: str
+
+
 class RebuildResponse(BaseModel):
     folios_processed: int
     schemes_processed: int
     lots_created: int
     realized_gains_created: int
     errors: list[SchemeRebuildErrorResponse]
+    gap_filled: list[SchemeGapFilledResponse]
 
 
 class HoldingResponse(BaseModel):
@@ -57,6 +65,15 @@ def rebuild_lots(session: Session = Depends(get_session)) -> RebuildResponse:
         errors=[
             SchemeRebuildErrorResponse(folio=e.folio, scheme_key=e.scheme_key, message=e.message)
             for e in summary.errors
+        ],
+        gap_filled=[
+            SchemeGapFilledResponse(
+                folio=g.folio,
+                scheme_key=g.scheme_key,
+                units_assumed=str(g.units_assumed),
+                message=g.message,
+            )
+            for g in summary.gap_filled
         ],
     )
 

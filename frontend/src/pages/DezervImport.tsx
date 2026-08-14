@@ -275,6 +275,10 @@ function ImportSummary({
         <p className="muted" style={{ marginTop: 12 }}>
           Lots rebuilt: {rebuild.lots_created} created across {rebuild.schemes_processed} schemes.
           {rebuild.errors.length > 0 && ` ${rebuild.errors.length} scheme(s) had errors.`}
+          {rebuild.gap_filled.length > 0 &&
+            ` ${rebuild.gap_filled.length} scheme(s) had an assumed opening position ` +
+              "(this export doesn't cover the scheme's full history; cost basis flagged " +
+              "unknown for that portion)."}
         </p>
       )}
     </div>

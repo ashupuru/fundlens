@@ -304,7 +304,7 @@ folio (compute/service.py deletes and regenerates a folio's lots wholesale).
 | open_date | date | |
 | units_remaining | numeric(20,4) | reduced by FIFO consumption on redemption/switch-out |
 | cost_per_unit | numeric(20,4) | prefers `nav`, falls back to `amount/units`, else 0 (flagged) |
-| source_txn_id | fk → raw_transaction | the purchase/SIP/reinvest/switch-in that opened this lot |
+| source_txn_id | fk → raw_transaction, nullable | the purchase/SIP/reinvest/switch-in that opened this lot; NULL for a gap-fill lot (compute-engine.md §1) — an assumed pre-existing position with no real transaction to point to |
 | source_txn_type | enum | the `raw_transaction.txn_type` that opened this lot, kept for audit/SIP-detection |
 | close_date | date, nullable | set when fully consumed |
 | zero_cost_flag | boolean | true when neither `nav` nor `amount` was available to cost the lot — real-data-verified to occur only for `SEGREGATION` rows (side-pocket creation carries no priced amount). Indian tax rules require carrying over the original lot's cost basis pro-rata for these; that refinement is the tax engine's job (P1.2), not this table's |
@@ -324,7 +324,7 @@ draining several lots, each produce their own row here. Feeds the tax engine (P1
 |---|---|---|
 | folio | text | |
 | scheme_key | text | |
-| source_txn_id | fk → raw_transaction | the lot's opening transaction |
+| source_txn_id | fk → raw_transaction, nullable | the lot's opening transaction; NULL if that lot was a gap-fill lot |
 | open_date | date | |
 | sale_txn_id | fk → raw_transaction | the outflow transaction that consumed this slice |
 | sale_date | date | |

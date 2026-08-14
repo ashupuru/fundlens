@@ -1091,6 +1091,8 @@ export interface components {
             realized_gains_created: number;
             /** Errors */
             errors: components["schemas"]["SchemeRebuildErrorResponse"][];
+            /** Gap Filled */
+            gap_filled: components["schemas"]["SchemeGapFilledResponse"][];
         };
         /** RefreshResponse */
         RefreshResponse: {
@@ -1134,6 +1136,17 @@ export interface components {
             weight: number;
             /** Reason */
             reason: string | null;
+        };
+        /** SchemeGapFilledResponse */
+        SchemeGapFilledResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+            /** Units Assumed */
+            units_assumed: string;
+            /** Message */
+            message: string;
         };
         /** SchemeRebuildErrorResponse */
         SchemeRebuildErrorResponse: {

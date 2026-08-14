@@ -72,6 +72,14 @@ function IngestSummary({ ingest, rebuild }: { ingest: IngestResult; rebuild: Reb
           {rebuild.errors.length > 0 && (
             <span> — {rebuild.errors.length} scheme(s) had errors rebuilding.</span>
           )}
+          {rebuild.gap_filled.length > 0 && (
+            <span>
+              {" "}
+              — {rebuild.gap_filled.length} scheme(s) had an assumed opening position (import
+              doesn't cover the scheme's full history; cost basis flagged unknown for that
+              portion).
+            </span>
+          )}
         </p>
       )}
     </div>

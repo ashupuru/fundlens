@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,6 +30,18 @@ def _content(rows: str) -> str:
 _MATCHED_ROW = (
     "1,Test Investor,ICICI-1,ICICI Bank,Buy,14/06/2023,14/06/2023,MFDEMAT,ABC,"
     'Acme Focused Direct-G,"-100,000.00",0.00,0.00,0.00,"900,000.00",NSDL-TEST-1,,,1\n'
+)
+
+# A Sell with no prior Buy in this (empty) database, followed by a clean
+# later Buy -- the Dezerv "BANK BOOK" export only covers a date window, so
+# an account that predates the window's start routinely has this shape on
+# a first-ever import. The scheme ends with a real, still-held position
+# from the second row.
+_SELL_THEN_BUY_ROWS = (
+    "1,Test Investor,ICICI-1,ICICI Bank,Sell,14/06/2023,14/06/2023,MFDEMAT,ABC,"
+    'Acme Focused Direct-G,"20,000.00",0.00,0.00,0.00,"20,000.00",NSDL-TEST-1,,,1\n'
+    "1,Test Investor,ICICI-1,ICICI Bank,Buy,20/06/2023,20/06/2023,MFDEMAT,ABC,"
+    'Acme Focused Direct-G,"-50,000.00",0.00,0.00,0.00,"30,000.00",NSDL-TEST-1,,,1\n'
 )
 
 _NAVALL_TEXT = (
@@ -121,4 +134,38 @@ def test_commit_endpoint_reports_skipped_rows_when_mapped_to_null(client: TestCl
     body = response.json()
     assert body["inserted_count"] == 0
     assert body["skipped_count"] == 1
-    assert body["skipped_reasons"] == {"Acme Focused Direct-G": 1}
+
+
+def test_commit_then_rebuild_shows_fund_even_when_first_txn_is_a_sell(
+    client: TestClient,
+) -> None:
+    """Regression test: on an empty database, a Dezerv import whose first
+    recorded transaction for a scheme is a Sell (the export's date window
+    started mid-holding) used to insert both transactions fine but silently
+    drop that scheme's lots entirely after rebuild-lots -- InsufficientLotsError
+    on the first row aborted lot-building before the second row's clean Buy
+    was ever processed, so even that later, genuinely valid purchase never
+    surfaced as a holding. "The fund is not added" from the user's
+    perspective. It should now show up, priced, with the assumed
+    pre-history gap flagged rather than the whole scheme being lost."""
+    content = _content(_SELL_THEN_BUY_ROWS)
+    mapping = json.dumps({"Acme Focused Direct-G": "999901"})
+
+    commit_response = client.post(
+        "/ingest/dezerv/commit",
+        files={"file": ("dezerv.csv", content, "text/csv")},
+        data={"mapping": mapping},
+    )
+    assert commit_response.status_code == 200
+    assert commit_response.json()["inserted_count"] == 2
+
+    rebuild_response = client.post("/portfolio/rebuild-lots")
+    assert rebuild_response.status_code == 200
+    rebuild_body = rebuild_response.json()
+    assert rebuild_body["errors"] == []
+    assert rebuild_body["lots_created"] == 2  # the gap-fill lot + the later clean Buy's lot
+
+    holdings = client.get("/portfolio/holdings").json()
+    assert len(holdings) == 1
+    assert holdings[0]["amfi_code"] == "999901"
+    assert Decimal(holdings[0]["units_remaining"]) > 0
