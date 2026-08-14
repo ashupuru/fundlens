@@ -146,7 +146,7 @@ not a database migration.
 | Performance | Full recompute: 60 funds / 15 yrs / 5,000 txns in < 30s; incremental NAV update < 5s | Vectorized pandas/duckdb over transactions instead of row-by-row Python loops; lot ledger and XIRR cash-flow arrays built once per fund, memoized by a content hash of (transactions, NAV series) so incremental NAV-only updates skip lot re-derivation entirely |
 | Reliability | Graceful degradation on feed failure, never silent | Every fetcher records a `data_freshness` row (source, last_success_at, status); UI renders a stale-data banner keyed off this table rather than trusting the last cached value implicitly |
 | Security | Encrypted local DB; PDF passwords never persisted; PII excluded from LLM calls | SQLCipher-encrypted DB keyed from an OS-keychain-stored key; CAS password held only in-memory for the duration of a single parse call; LLM payload builder is an explicit allowlist serializer (§8.3), not a redaction filter |
-| Portability | macOS, no cloud dependency except NAV feeds + optional LLM | Single `pip install` + `uvicorn` entrypoint; SQLite file lives under `~/Library/Application Support/FundLens/`; app functions fully offline except ingestion/refresh/AI actions, each independently disable-able |
+| Portability | macOS, no cloud dependency except NAV feeds + optional LLM | Single `pip install` + `uvicorn` entrypoint; SQLite file defaults to `fundlens.db` in the backend's working directory (override via `FUNDLENS_DB_PATH`); app functions fully offline except ingestion/refresh/AI actions, each independently disable-able |
 
 ## 8. Security & Privacy Architecture
 
