@@ -17,6 +17,14 @@ from alembic.config import Config
 
 
 def run_migrations() -> None:
+    from fundlens.settings import get_settings
+
+    # Ensure the DB directory exists before Alembic tries to connect.
+    # env.py uses engine_from_config directly (bypassing get_engine's mkdir),
+    # so the directory must be created here first.
+    settings = get_settings()
+    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+
     migrations_dir = Path(__file__).parent / "migrations"
     config = Config()
     config.set_main_option("script_location", str(migrations_dir))

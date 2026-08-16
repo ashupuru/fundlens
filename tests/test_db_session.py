@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from keyring.errors import PasswordSetError
 
 from fundlens.db import session as db_session
 from fundlens.settings import Settings
@@ -46,3 +47,27 @@ def test_get_engine_creates_db_parent_dir_and_binds_to_settings_path(
 
     assert db_path.parent.is_dir()
     assert engine.url.database == str(db_path)
+
+
+def test_local_key_is_created_when_keychain_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def raise_password_set_error(service: str, username: str, password: str) -> None:
+        raise PasswordSetError("simulated keychain failure")
+
+    monkeypatch.setattr(db_session.keyring, "get_password", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(db_session.keyring, "set_password", raise_password_set_error)
+    monkeypatch.setattr(
+        db_session.keyring,
+        "delete_password",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not reach delete")),
+    )
+
+    key = db_session.get_or_create_encryption_key()
+
+    assert len(key) == 64
+    local_key_path = tmp_path / ".fundlens_db_key"
+    assert local_key_path.exists()
+    assert local_key_path.read_text() == key

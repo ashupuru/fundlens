@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
 from fundlens.api.routers import (
     allocation,
@@ -19,12 +20,16 @@ from fundlens.api.routers import (
     verdict,
 )
 from fundlens.db.migrate import run_migrations
+from fundlens.db.session import get_engine
+from fundlens.market_data.service import refresh_all_held_schemes
 from fundlens.settings import get_settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     run_migrations()
+    with Session(get_engine()) as session:
+        refresh_all_held_schemes(session)
     yield
 
 
