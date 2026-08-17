@@ -16,7 +16,7 @@ import secrets
 from pathlib import Path
 
 import keyring
-from keyring.errors import PasswordDeleteError, PasswordSetError
+from keyring.errors import PasswordSetError
 from sqlalchemy import Engine, create_engine
 
 from fundlens.settings import get_settings
@@ -50,11 +50,12 @@ def _write_local_key(key: str) -> None:
 def get_or_create_encryption_key() -> str:
     """Return the DB encryption key from the Keychain, or a local fallback file.
 
-    macOS error -25299 (errSecDuplicateItem) can occur when a keychain item exists
-    but is inaccessible to this process (e.g. written by a different app / access
-    group). In that case get_password returns None yet set_password is rejected.
-    We handle it by deleting the stale entry and rewriting it; if the Keychain is
-    unavailable we persist the key in a local file so development can continue.
+    If the Keychain is unavailable or rejects the write (common in sandboxed/dev
+    shells, CI, or broken macOS keychain access), the key is persisted in a local
+    file instead so development can continue. (A stale/inaccessible duplicate
+    keychain entry — macOS error -25299, errSecDuplicateItem — is already
+    self-healed by keyring's macOS backend, which deletes any existing entry
+    before adding; no manual delete-and-retry is needed here.)
     """
     existing = keyring.get_password(_KEYRING_SERVICE, _KEYRING_KEY_NAME)
     if existing:
@@ -69,19 +70,8 @@ def get_or_create_encryption_key() -> str:
         keyring.set_password(_KEYRING_SERVICE, _KEYRING_KEY_NAME, new_key)
         return new_key
     except PasswordSetError:
-        # Stale/inaccessible duplicate — clear it and rewrite.
-        try:
-            keyring.delete_password(_KEYRING_SERVICE, _KEYRING_KEY_NAME)
-        except PasswordDeleteError:
-            pass
-        try:
-            keyring.set_password(_KEYRING_SERVICE, _KEYRING_KEY_NAME, new_key)
-            return new_key
-        except PasswordSetError:
-            # Keychain is unavailable (common in sandboxed/dev shells or broken
-            # macOS keychain access). Fall back to a local file for continuity.
-            _write_local_key(new_key)
-            return new_key
+        _write_local_key(new_key)
+        return new_key
 
 
 def get_engine() -> Engine:
