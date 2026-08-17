@@ -279,3 +279,25 @@ export async function postRefreshBenchmarks(): Promise<BenchmarkRefreshResponse>
   }
   return response.json() as Promise<BenchmarkRefreshResponse>;
 }
+
+type AiAnalysisResponse =
+  operations["analyze_ai_analyze_post"]["responses"][200]["content"]["application/json"];
+
+export async function postAiAnalyze(): Promise<AiAnalysisResponse> {
+  const response = await fetch(`${API_BASE_URL}/ai/analyze`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`AI analysis failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<AiAnalysisResponse>;
+}
+
+export async function getLatestAiAnalysis(): Promise<AiAnalysisResponse | null> {
+  const response = await fetch(`${API_BASE_URL}/ai/latest`);
+  if (response.status === 404) {
+    return null; // no analysis has been run yet -- an expected state, not an error
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to load latest AI analysis: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<AiAnalysisResponse>;
+}
