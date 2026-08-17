@@ -1,10 +1,31 @@
 # FundLens — AI Analysis Layer
 
-Status: Draft v1.0 · Part of [technical-spec.md](technical-spec.md)
+Status: **Shipped, on-demand only** (phase P2.1: `src/fundlens/ai/`) · Part of
+[technical-spec.md](technical-spec.md)
 
 Implements PRD FR-5.x. The governing rule (FR-5.2, restated as the single most important
 constraint in this module): **the LLM interprets, it never calculates.** Every number in an LLM
 narrative must trace back to a number the compute engine already produced.
+
+**As shipped, vs. this doc's original sketch:**
+- Model is **Claude Sonnet 5** (cost-conscious choice for a personal app), not left unspecified.
+- Trigger is **on-demand only** (`POST /ai/analyze`) — §4's "auto-run on each successful monthly
+  CAS refresh" is deliberately not wired up yet, to avoid automatic spending; a natural later
+  addition once real cost/quality is visible.
+- `PortfolioMetricsSnapshot.funds` gained two fields beyond the original sketch,
+  `aum_crores`/`groww_rating`, both already available from the same `GrowwFundMetadata` join
+  `expense_ratio`/`plan_type` already needed — effectively free once that join exists.
+- **News/context enrichment (FR-5.4)** — originally scoped here as "P2" future work — shipped in
+  this same pass, using Claude's server-side `web_search` tool (no RAG/embeddings pipeline;
+  considered and rejected as overkill for a single-user app checking a few dozen funds). Modeled
+  as a `NewsContextItem` (fund name, text, `source_url`) alongside `GroundedStatement` in the
+  response schema — structurally separate from the validated statements, per §3's requirement
+  that this content type never be confused with a snapshot-grounded claim.
+- "Memory" (what changed since last time) is the `ai_analysis` table's own history: each call
+  looks up the most recent prior row and summarizes its accepted statements into the prompt — no
+  separate memory store.
+- Per-fund qualitative commentary (§3's *other* output type — un-sourced claims like "the fund
+  manager left") is still **not built**; only the sourced, `web_search`-backed version above is.
 
 ## 1. Input Contract: `PortfolioMetricsSnapshot`
 

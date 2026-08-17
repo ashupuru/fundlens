@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from fundlens.api.routers import (
+    ai,
     allocation,
     assumptions,
     benchmark,
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(assumptions.router)
     app.include_router(allocation.router)
     app.include_router(verdict.router)
+    app.include_router(ai.router)
     return app
 
 

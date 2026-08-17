@@ -4,6 +4,7 @@ import DataQuality from "./pages/DataQuality";
 import DezervImport from "./pages/DezervImport";
 import FundDetail from "./pages/FundDetail";
 import Funds from "./pages/Funds";
+import Insights from "./pages/Insights";
 import Upload from "./pages/Upload";
 
 function DashboardIcon() {
@@ -40,6 +41,20 @@ function DataQualityIcon() {
   );
 }
 
+function InsightsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M8 1.5a4.5 4.5 0 0 0-2.5 8.24V11.5h5V9.74A4.5 4.5 0 0 0 8 1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path d="M6 13.5h4M6.5 15h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function UploadIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -63,6 +78,7 @@ function UploadIcon() {
 
 const links = [
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
+  { to: "/insights", label: "Insights", icon: InsightsIcon, end: false },
   { to: "/funds", label: "Funds", icon: FundsIcon, end: false },
   { to: "/upload", label: "Upload", icon: UploadIcon, end: false },
   { to: "/data-quality", label: "Data Quality", icon: DataQualityIcon, end: false },
@@ -89,6 +105,7 @@ function App() {
       <div className="app-main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/insights" element={<Insights />} />
           <Route path="/funds" element={<Funds />} />
           <Route path="/funds/:amfiCode" element={<FundDetail />} />
           <Route path="/upload" element={<Upload />} />

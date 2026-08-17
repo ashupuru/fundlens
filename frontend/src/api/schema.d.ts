@@ -515,10 +515,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analyze */
+        post: operations["analyze_ai_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest */
+        get: operations["latest_ai_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AiAnalysisResponse */
+        AiAnalysisResponse: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Accepted */
+            accepted: components["schemas"]["GroundedStatementResponse"][];
+            /** News Context */
+            news_context: components["schemas"]["NewsContextItemResponse"][];
+            /** Status */
+            status: string;
+            /** Error Message */
+            error_message: string | null;
+        };
         /** AllocationDriftResponse */
         AllocationDriftResponse: {
             /** Persona */
@@ -934,6 +983,15 @@ export interface components {
             /** Positions Missing Nav */
             positions_missing_nav: number;
         };
+        /** GroundedStatementResponse */
+        GroundedStatementResponse: {
+            /** Topic */
+            topic: string;
+            /** Text */
+            text: string;
+            /** Cited Metric Paths */
+            cited_metric_paths: string[];
+        };
         /** GrowwRefreshResponse */
         GrowwRefreshResponse: {
             /** Rows Upserted */
@@ -1023,6 +1081,15 @@ export interface components {
             isin: string | null;
             /** Score */
             score: number;
+        };
+        /** NewsContextItemResponse */
+        NewsContextItemResponse: {
+            /** Fund Name */
+            fund_name: string;
+            /** Text */
+            text: string;
+            /** Source Url */
+            source_url: string | null;
         };
         /** PortfolioBenchmarkComparisonResponse */
         PortfolioBenchmarkComparisonResponse: {
@@ -2082,6 +2149,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DirectVsRegularFlagResponse"][];
+                };
+            };
+        };
+    };
+    analyze_ai_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiAnalysisResponse"];
+                };
+            };
+        };
+    };
+    latest_ai_latest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiAnalysisResponse"];
                 };
             };
         };

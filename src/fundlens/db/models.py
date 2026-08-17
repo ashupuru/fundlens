@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from fundlens.tax.asset_class import TaxAssetClass
@@ -389,3 +389,40 @@ class RiskProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )
+
+
+class AiAnalysisStatus(enum.StrEnum):
+    OK = "ok"
+    UNAVAILABLE = "unavailable"
+    ALL_REJECTED = "all_rejected"
+
+
+class AiAnalysis(Base):
+    """One row per on-demand portfolio-narrative run (PRD FR-5.x,
+    docs/architecture/ai-layer.md). Every call creates a new row rather than
+    overwriting -- simple, auditable, and this is also what stands in for
+    "memory": the most recent row's accepted statements are summarized back
+    into the next call's prompt so Claude can note what's changed.
+
+    `snapshot_json` is the exact PortfolioMetricsSnapshot sent, kept for
+    audit/reproducibility. `rejected_json` persists what the determinism
+    validator dropped and why (docs/architecture/ai-layer.md §2: "logged,
+    not silently fixed") -- never shown to the user, but not thrown away
+    either. `news_context_json` is the sourced-but-unvalidated web layer,
+    kept structurally separate from `accepted_json` for the same reason the
+    frontend renders them in visually distinct cards.
+    """
+
+    __tablename__ = "ai_analysis"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), index=True
+    )
+    snapshot_json: Mapped[str] = mapped_column(Text)
+    accepted_json: Mapped[str] = mapped_column(Text)
+    rejected_json: Mapped[str] = mapped_column(Text)
+    news_context_json: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(50))
+    status: Mapped[AiAnalysisStatus] = mapped_column(Enum(AiAnalysisStatus))
+    error_message: Mapped[str | None] = mapped_column(String(500))

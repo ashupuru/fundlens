@@ -960,10 +960,103 @@
           }
         }
       }
+    },
+    "/ai/analyze": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Analyze",
+        "operationId": "analyze_ai_analyze_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAnalysisResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/latest": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Latest",
+        "operationId": "latest_ai_latest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiAnalysisResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AiAnalysisResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "accepted": {
+            "items": {
+              "$ref": "#/components/schemas/GroundedStatementResponse"
+            },
+            "type": "array",
+            "title": "Accepted"
+          },
+          "news_context": {
+            "items": {
+              "$ref": "#/components/schemas/NewsContextItemResponse"
+            },
+            "type": "array",
+            "title": "News Context"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "accepted",
+          "news_context",
+          "status",
+          "error_message"
+        ],
+        "title": "AiAnalysisResponse"
+      },
       "AllocationDriftResponse": {
         "properties": {
           "persona": {
@@ -2404,6 +2497,32 @@
         ],
         "title": "FundPositionResponse"
       },
+      "GroundedStatementResponse": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "cited_metric_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cited Metric Paths"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic",
+          "text",
+          "cited_metric_paths"
+        ],
+        "title": "GroundedStatementResponse"
+      },
       "GrowwRefreshResponse": {
         "properties": {
           "rows_upserted": {
@@ -2711,6 +2830,36 @@
           "score"
         ],
         "title": "MatchCandidateResponse"
+      },
+      "NewsContextItemResponse": {
+        "properties": {
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fund_name",
+          "text",
+          "source_url"
+        ],
+        "title": "NewsContextItemResponse"
       },
       "PortfolioBenchmarkComparisonResponse": {
         "properties": {
