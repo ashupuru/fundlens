@@ -208,6 +208,7 @@ export async function postDezervCommit(
   return response.json() as Promise<DezervCommitResult>;
 }
 
+export type Holding = components["schemas"]["HoldingResponse"];
 type HoldingsResponse =
   operations["holdings_portfolio_holdings_get"]["responses"][200]["content"]["application/json"];
 
@@ -300,4 +301,81 @@ export async function getLatestAiAnalysis(): Promise<AiAnalysisResponse | null> 
     throw new Error(`Failed to load latest AI analysis: ${await detailOrStatus(response)}`);
   }
   return response.json() as Promise<AiAnalysisResponse>;
+}
+
+export type Goal = components["schemas"]["GoalResponse"];
+export type GoalHoldingRef = components["schemas"]["GoalHoldingRef"];
+export type GoalProjection = components["schemas"]["GoalProjectionResponse"];
+
+export async function getGoals(): Promise<Goal[]> {
+  const response = await fetch(`${API_BASE_URL}/goals`);
+  if (!response.ok) {
+    throw new Error(`Failed to load goals: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<Goal[]>;
+}
+
+export async function createGoal(
+  name: string,
+  targetAmountRupees: string,
+  targetDate: string,
+): Promise<Goal> {
+  const response = await fetch(`${API_BASE_URL}/goals`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      target_amount_rupees: targetAmountRupees,
+      target_date: targetDate,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to create goal: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<Goal>;
+}
+
+export async function deleteGoal(goalId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/goals/${encodeURIComponent(goalId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to delete goal: ${await detailOrStatus(response)}`);
+  }
+}
+
+export async function setGoalHoldings(
+  goalId: string,
+  holdings: GoalHoldingRef[],
+): Promise<GoalHoldingRef[]> {
+  const response = await fetch(`${API_BASE_URL}/goals/${encodeURIComponent(goalId)}/holdings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(holdings),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to tag goal holdings: ${await detailOrStatus(response)}`);
+  }
+  const body = (await response.json()) as { holdings: GoalHoldingRef[] };
+  return body.holdings;
+}
+
+export async function getGoalHoldings(goalId: string): Promise<GoalHoldingRef[]> {
+  const response = await fetch(`${API_BASE_URL}/goals/${encodeURIComponent(goalId)}/holdings`);
+  if (!response.ok) {
+    throw new Error(`Failed to load goal holdings: ${await detailOrStatus(response)}`);
+  }
+  const body = (await response.json()) as { holdings: GoalHoldingRef[] };
+  return body.holdings;
+}
+
+export async function getGoalProjection(goalId: string): Promise<GoalProjection | null> {
+  const response = await fetch(`${API_BASE_URL}/goals/${encodeURIComponent(goalId)}/projection`);
+  if (response.status === 404) {
+    return null; // no risk profile set yet -- an expected state, not an error
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to load goal projection: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<GoalProjection>;
 }

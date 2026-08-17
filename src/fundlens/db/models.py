@@ -426,3 +426,50 @@ class AiAnalysis(Base):
     model: Mapped[str] = mapped_column(String(50))
     status: Mapped[AiAnalysisStatus] = mapped_column(Enum(AiAnalysisStatus))
     error_message: Mapped[str | None] = mapped_column(String(500))
+
+
+class Goal(Base):
+    """PRD FR-8.1/8.2, phase P2.4: a savings target with holdings tagged
+    toward it. `target_amount_paise` is entered in today's rupees (inflated
+    to `target_date` at projection time via the `inflation_pct` assumption,
+    docs/architecture/compute-engine.md §10) -- current state, not a time
+    series, like RiskProfile. Holdings are tagged via the separate
+    GoalHolding link table, not a JSON column, so they can be queried/joined
+    normally (e.g. "which goals is this holding tagged to").
+    """
+
+    __tablename__ = "goal"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(200))
+    target_amount_paise: Mapped[int] = mapped_column(Integer)
+    target_date: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+
+
+class GoalHolding(Base):
+    """Many-to-many tag: one currently-open (folio, scheme_key) holding
+    (compute/holdings.py's HoldingView key) counted toward one goal's
+    corpus. Not PAN-scoped -- there is no Pan table in this schema (`pan` is
+    a free-text column on raw_transaction/holdings); tagging at the
+    (folio, scheme_key) grain is what makes a goal's corpus span PANs, per
+    PRD §12.1/§8.1.
+
+    No `ondelete="CASCADE"` here: SQLite doesn't enforce FK actions unless
+    `PRAGMA foreign_keys` is turned on per-connection, which this app never
+    does, so that clause would be dead config. goals/service.py::delete_goal
+    deletes these rows explicitly instead.
+    """
+
+    __tablename__ = "goal_holding"
+
+    goal_id: Mapped[str] = mapped_column(ForeignKey("goal.id"), primary_key=True)
+    folio: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scheme_key: Mapped[str] = mapped_column(String(255), primary_key=True)

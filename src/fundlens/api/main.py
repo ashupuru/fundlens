@@ -13,6 +13,7 @@ from fundlens.api.routers import (
     data_quality,
     dezerv,
     funds,
+    goals,
     health,
     ingestion,
     market_data,
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(allocation.router)
     app.include_router(verdict.router)
     app.include_router(ai.router)
+    app.include_router(goals.router)
     return app
 
 

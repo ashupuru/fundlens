@@ -549,6 +549,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Goals */
+        get: operations["list_goals_goals_get"];
+        put?: never;
+        /** Create Goal */
+        post: operations["create_goal_goals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/goals/{goal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal */
+        get: operations["get_goal_goals__goal_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Goal */
+        delete: operations["delete_goal_goals__goal_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Goal */
+        patch: operations["update_goal_goals__goal_id__patch"];
+        trace?: never;
+    };
+    "/goals/{goal_id}/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal Holdings */
+        get: operations["get_goal_holdings_goals__goal_id__holdings_get"];
+        /** Set Goal Holdings */
+        put: operations["set_goal_holdings_goals__goal_id__holdings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/goals/{goal_id}/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal Projection */
+        get: operations["get_goal_projection_goals__goal_id__projection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -774,6 +846,18 @@ export interface components {
                 [key: string]: string;
             };
         };
+        /** CreateGoalRequest */
+        CreateGoalRequest: {
+            /** Name */
+            name: string;
+            /** Target Amount Rupees */
+            target_amount_rupees: string;
+            /**
+             * Target Date
+             * Format: date
+             */
+            target_date: string;
+        };
         /** DataFreshnessResponse */
         DataFreshnessResponse: {
             /** Source */
@@ -983,6 +1067,59 @@ export interface components {
             /** Positions Missing Nav */
             positions_missing_nav: number;
         };
+        /** GoalHoldingRef */
+        GoalHoldingRef: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+        };
+        /** GoalHoldingsResponse */
+        GoalHoldingsResponse: {
+            /** Holdings */
+            holdings: components["schemas"]["GoalHoldingRef"][];
+        };
+        /** GoalProjectionResponse */
+        GoalProjectionResponse: {
+            /** Goal Id */
+            goal_id: string;
+            /** Years To Target */
+            years_to_target: number;
+            /** Current Corpus Paise */
+            current_corpus_paise: number;
+            /** Current Corpus Unavailable Paise */
+            current_corpus_unavailable_paise: number;
+            /** Inflated Target Paise */
+            inflated_target_paise: number;
+            /** Blended Expected Return Pct */
+            blended_expected_return_pct: string;
+            /** Projected Corpus Paise */
+            projected_corpus_paise: number;
+            /** Surplus Or Shortfall Paise */
+            surplus_or_shortfall_paise: number;
+            /** Required Monthly Sip Paise */
+            required_monthly_sip_paise: number;
+            /** Sensitivity */
+            sensitivity: components["schemas"]["SensitivityPointResponse"][];
+        };
+        /** GoalResponse */
+        GoalResponse: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Target Amount Paise */
+            target_amount_paise: number;
+            /**
+             * Target Date
+             * Format: date
+             */
+            target_date: string;
+            /** Created At */
+            created_at: string;
+            /** Updated At */
+            updated_at: string;
+        };
         /** GroundedStatementResponse */
         GroundedStatementResponse: {
             /** Topic */
@@ -1045,6 +1182,8 @@ export interface components {
         HoldingResponse: {
             /** Folio */
             folio: string;
+            /** Scheme Key */
+            scheme_key: string;
             /** Scheme Name */
             scheme_name: string;
             /** Amc */
@@ -1224,6 +1363,13 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** SensitivityPointResponse */
+        SensitivityPointResponse: {
+            /** Return Pct */
+            return_pct: string;
+            /** Required Monthly Sip Paise */
+            required_monthly_sip_paise: number;
+        };
         /** SetRiskProfileRequest */
         SetRiskProfileRequest: {
             /** Persona */
@@ -1296,6 +1442,15 @@ export interface components {
             isin: string | null;
             /** Amfi Code */
             amfi_code: string | null;
+        };
+        /** UpdateGoalRequest */
+        UpdateGoalRequest: {
+            /** Name */
+            name?: string | null;
+            /** Target Amount Rupees */
+            target_amount_rupees?: string | null;
+            /** Target Date */
+            target_date?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2189,6 +2344,251 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiAnalysisResponse"];
+                };
+            };
+        };
+    };
+    list_goals_goals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"][];
+                };
+            };
+        };
+    };
+    create_goal_goals_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGoalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_goal_goals__goal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_goal_goals__goal_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_goal_goals__goal_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGoalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_goal_holdings_goals__goal_id__holdings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalHoldingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_goal_holdings_goals__goal_id__holdings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalHoldingRef"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalHoldingsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_goal_projection_goals__goal_id__projection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalProjectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

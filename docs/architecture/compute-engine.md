@@ -503,3 +503,51 @@ for free. Deliberately lives in `compute/metrics.py` next to `compute_category_b
 `get_holdings_by_amc` lives) — `holdings.py` is lower-level and already imported *by*
 `metrics.py`, so pulling `metrics.py`'s NAV-pricing logic the other way would create a circular
 import; `metrics.py` already owns both `latest_nav` and the grouped-breakdown pattern this needed.
+
+## 10. Goal Planning (PRD FR-8.1/8.2, shipped P2.4 — `compute/goal.py`, `goals/`)
+
+`Goal` is persisted CRUD (name, target amount, target date — like `RiskProfile`, current state
+not a time series). The **projection** built on top is compute-on-demand and never persisted,
+same philosophy as §7's allocation drift.
+
+**Tagging**: there is no `Pan` table anywhere in this schema (`pan` is a free-text column on
+`raw_transaction`/holdings, per §4's reasoning), so "a goal's corpus spans PANs" (PRD §12.1) is
+implemented by tagging individual `(folio, scheme_key)` holdings — `HoldingView`'s own natural
+key — via a `goal_holding` link table, not anything keyed to a PAN entity that doesn't exist. A
+holding can be tagged to more than one goal; no attempt is made to prevent the same rupee being
+counted toward two different goals' corpora, since each goal's math is independent and a real
+holding can genuinely serve more than one purpose.
+
+**Expected return** is blended from the *existing* `RiskProfile` singleton's
+`target_equity_pct`/`target_debt_pct` against two new assumption-registry keys,
+`expected_equity_return_pct` and `expected_debt_return_pct`:
+`blended_return = equity_pct/100 * equity_return + debt_pct/100 * debt_return`. This is a
+judgment call (the PRD's `data-model.md` sketch named "expected-return-by-risk-profile" without
+specifying the exact shape) — reusing the app's one existing allocation-target concept instead of
+inventing a parallel per-persona return table, and it handles `Persona.CUSTOM` for free (no named
+preset, but always has explicit equity/debt targets). Projection requires a `RiskProfile` to
+exist — 404s otherwise, identical precedent to `GET /allocation/drift`.
+
+**Projected corpus** (FR-8.1) = pure lump-sum growth of currently-tagged holdings' present market
+value at the blended return, to the target date — "where today's tagged money is headed if
+nothing more is added." Unpriceable tagged holdings (no NAV on file) are excluded and flagged
+separately (`current_corpus_unavailable_paise`), same "flag, don't fabricate" pattern as
+`compute_portfolio_valuation`'s `unavailable_paise`.
+
+**Required monthly SIP** (FR-8.2) = the payment needed, on top of that, to close the gap between
+projected corpus and the inflation-adjusted target (`target_amount_paise` is entered in today's
+rupees, inflated to the target date via a new `inflation_pct` assumption key before comparing).
+Solved with the standard future-value-of-an-ordinary-annuity formula, monthly compounding
+(`i = r/1200`, `n = years*12`): `P = gap / (((1+i)^n - 1) / i)`, or `gap/n` when `i == 0`. No
+"current monthly contribution" field exists on `Goal` — keeps the two outputs exactly as
+PRD-named, with no extra state for the user to keep in sync.
+
+**±2% sensitivity table**: required SIP recomputed at `blended_return - 2`, `blended_return`,
+`blended_return + 2` — three rows, per the PRD's literal wording. Year-fraction uses
+`(target_date - today).days / 365.0`, the same convention already used by `compute/xirr.py`,
+`compute/rolling_returns.py`, and `compute/metrics.py`'s short-horizon check — not a new one.
+
+Money stays in `Decimal` throughout this module's growth math (not `float`), matching
+`money.py`'s convention; only converted to integer paise at the boundary via the module's own
+`_round_paise` (ROUND_HALF_UP), not `money.py::to_paise_strict` (which expects a rupee amount,
+not an already-paise-denominated `Decimal`).
