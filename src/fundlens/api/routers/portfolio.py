@@ -39,6 +39,7 @@ class RebuildResponse(BaseModel):
 
 class HoldingResponse(BaseModel):
     folio: str
+    scheme_key: str
     scheme_name: str
     amc: str
     isin: str | None
@@ -83,6 +84,7 @@ def holdings(session: Session = Depends(get_session)) -> list[HoldingResponse]:
     return [
         HoldingResponse(
             folio=h.folio,
+            scheme_key=h.scheme_key,
             scheme_name=h.scheme_name,
             amc=h.amc,
             isin=h.isin,

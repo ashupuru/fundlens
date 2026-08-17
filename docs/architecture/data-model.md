@@ -354,9 +354,17 @@ the P1.1 benchmark engine's portfolio-level comparison, compute-engine.md §4) �
 per-PAN `risk_profile` would be inconsistent with every other PAN-touching feature in the app
 still being PAN-agnostic. Revisit together whenever multi-PAN support actually gets built.
 
-### `goal`
-Name, target amount, inflation assumption (fk → `assumption`), target date, tagged holdings
-(many-to-many across PANs — corpus math is MF-only and cross-PAN per PRD §12.1/§8.1).
+### `goal` / `goal_holding` — **shipped P2.4**
+Real shape (`db/models.py`): `goal` (`id`, `name`, `target_amount_paise` — entered in today's
+rupees, `target_date`, `created_at`/`updated_at`) + `goal_holding`, a link table tagging
+individual `(folio, scheme_key)` holdings to a goal. No FK to an `assumption_version` on the
+`goal` row itself — unlike `report`, a goal is persisted *input* (like `risk_profile`), and its
+*projection* is computed fresh against whatever assumption values are current at read time
+(compute-engine.md §10), never pinned. "Inflation assumption" from the original sketch below is a
+new `inflation_pct` assumption-registry key, not a per-goal FK — read at projection time, same as
+every other assumption. There is no `Pan` table in this schema (see the `risk_profile` note
+above), so "tagged holdings across PANs" is holdings tagged at the `(folio, scheme_key)` grain,
+which is what actually makes a goal's corpus span PANs (PRD §12.1/§8.1).
 
 ### `assumption` / `assumption_version` — **infrastructure shipped P1.2, narrower than planned**
 Real shape (`db/models.py`): `assumption_version` (`id`, `label`, `created_at`, `is_current` —
@@ -406,7 +414,7 @@ Benchmark *──* benchmark_history
 NavSource 1──1 data_freshness
 
 risk_profile (app-wide singleton — not PAN-scoped, see its own section)
-PAN *──* Goal *──* Folio (via tagged holdings)
+Goal 1──* goal_holding *──1 (folio, scheme_key) — spans PANs since folios aren't PAN-scoped either
 
 Verdict *──1 Scheme, *──1 PAN, *──1 assumption (version)
 Report *──1 assumption (version), *──1 PAN (or household rollup)
@@ -414,5 +422,8 @@ Report *──1 assumption (version), *──1 PAN (or household rollup)
 
 ## 5. Status
 
-Both items previously open here are resolved (2026-08-09): risk profile is per-PAN (§3), and
-missing-ISIN rows are resolved deterministically via `scheme_identity` (§2), not guessed.
+Missing-ISIN rows are resolved deterministically via `scheme_identity` (§2), not guessed
+(resolved 2026-08-09). The risk-profile item is **not** resolved the way this line previously
+claimed: `risk_profile` shipped as an app-wide singleton, not per-PAN — see its own section above
+for why (no `Pan` table exists anywhere in this schema, and no other feature is PAN-scoped
+either). Corrected here since P2.4's goal-planning work depended on getting this right.

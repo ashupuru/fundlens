@@ -7,6 +7,9 @@ Only the values the current tax engine actually reads are seeded/typed
 here (`TaxAssumptions`); inflation % and expected-return assumptions named
 in the PRD belong to the goal-planning phase (P2+) and aren't added until
 something reads them — an untyped, unread assumption key is dead config.
+
+Goal planning (P2.4, `compute/goal.py`) is now a reader too: see
+`GoalAssumptions`/`get_current_goal_assumptions` below.
 """
 
 import enum
@@ -48,6 +51,13 @@ class AssumptionKey(enum.StrEnum):
     RUBRIC_WEIGHT_CATEGORY_FIT = "rubric_weight_category_fit"
     RUBRIC_WEIGHT_DIRECT_REGULAR = "rubric_weight_direct_regular"
     RUBRIC_SELL_THRESHOLD_PCT = "rubric_sell_threshold_pct"
+    # Goal planning (compute-engine.md §10): expected returns are blended
+    # per-goal from the existing RiskProfile's target_equity_pct/
+    # target_debt_pct rather than a separate per-persona table, so only the
+    # two per-asset-class rates need to live here.
+    INFLATION_PCT = "inflation_pct"
+    EXPECTED_EQUITY_RETURN_PCT = "expected_equity_return_pct"
+    EXPECTED_DEBT_RETURN_PCT = "expected_debt_return_pct"
 
 
 DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
@@ -68,6 +78,12 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     AssumptionKey.RUBRIC_WEIGHT_CATEGORY_FIT: "15",
     AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR: "20",
     AssumptionKey.RUBRIC_SELL_THRESHOLD_PCT: "35",
+    # Reasonable Indian-market long-term planning defaults, editable via
+    # POST /assumptions like everything else here — not asserted as a
+    # forecast.
+    AssumptionKey.INFLATION_PCT: "6",
+    AssumptionKey.EXPECTED_EQUITY_RETURN_PCT: "12",
+    AssumptionKey.EXPECTED_DEBT_RETURN_PCT: "7",
 }
 
 
@@ -185,4 +201,22 @@ def get_current_rubric_weights(session: Session) -> RubricWeights:
         category_fit=float(values[AssumptionKey.RUBRIC_WEIGHT_CATEGORY_FIT.value]),
         direct_regular=float(values[AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR.value]),
         sell_threshold_pct=float(values[AssumptionKey.RUBRIC_SELL_THRESHOLD_PCT.value]),
+    )
+
+
+@dataclass(frozen=True)
+class GoalAssumptions:
+    inflation_pct: Decimal
+    expected_equity_return_pct: Decimal
+    expected_debt_return_pct: Decimal
+
+
+def get_current_goal_assumptions(session: Session) -> GoalAssumptions:
+    values = get_current_values(session)
+    return GoalAssumptions(
+        inflation_pct=Decimal(values[AssumptionKey.INFLATION_PCT.value]),
+        expected_equity_return_pct=Decimal(
+            values[AssumptionKey.EXPECTED_EQUITY_RETURN_PCT.value]
+        ),
+        expected_debt_return_pct=Decimal(values[AssumptionKey.EXPECTED_DEBT_RETURN_PCT.value]),
     )

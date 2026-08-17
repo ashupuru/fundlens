@@ -1002,6 +1002,333 @@
           }
         }
       }
+    },
+    "/goals": {
+      "get": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "List Goals",
+        "operationId": "list_goals_goals_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Goals Goals Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Create Goal",
+        "operationId": "create_goal_goals_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGoalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/goals/{goal_id}": {
+      "get": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Get Goal",
+        "operationId": "get_goal_goals__goal_id__get",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Update Goal",
+        "operationId": "update_goal_goals__goal_id__patch",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGoalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Delete Goal",
+        "operationId": "delete_goal_goals__goal_id__delete",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/goals/{goal_id}/holdings": {
+      "put": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Set Goal Holdings",
+        "operationId": "set_goal_holdings_goals__goal_id__holdings_put",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GoalHoldingRef"
+                },
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalHoldingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Get Goal Holdings",
+        "operationId": "get_goal_holdings_goals__goal_id__holdings_get",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalHoldingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/goals/{goal_id}/projection": {
+      "get": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Get Goal Projection",
+        "operationId": "get_goal_projection_goals__goal_id__projection_get",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoalProjectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1723,6 +2050,30 @@
           "label"
         ],
         "title": "CreateAssumptionVersionRequest"
+      },
+      "CreateGoalRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "target_amount_rupees": {
+            "type": "string",
+            "title": "Target Amount Rupees"
+          },
+          "target_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Target Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "target_amount_rupees",
+          "target_date"
+        ],
+        "title": "CreateGoalRequest"
       },
       "DataFreshnessResponse": {
         "properties": {
@@ -2497,6 +2848,140 @@
         ],
         "title": "FundPositionResponse"
       },
+      "GoalHoldingRef": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key"
+        ],
+        "title": "GoalHoldingRef"
+      },
+      "GoalHoldingsResponse": {
+        "properties": {
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/GoalHoldingRef"
+            },
+            "type": "array",
+            "title": "Holdings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "holdings"
+        ],
+        "title": "GoalHoldingsResponse"
+      },
+      "GoalProjectionResponse": {
+        "properties": {
+          "goal_id": {
+            "type": "string",
+            "title": "Goal Id"
+          },
+          "years_to_target": {
+            "type": "number",
+            "title": "Years To Target"
+          },
+          "current_corpus_paise": {
+            "type": "integer",
+            "title": "Current Corpus Paise"
+          },
+          "current_corpus_unavailable_paise": {
+            "type": "integer",
+            "title": "Current Corpus Unavailable Paise"
+          },
+          "inflated_target_paise": {
+            "type": "integer",
+            "title": "Inflated Target Paise"
+          },
+          "blended_expected_return_pct": {
+            "type": "string",
+            "title": "Blended Expected Return Pct"
+          },
+          "projected_corpus_paise": {
+            "type": "integer",
+            "title": "Projected Corpus Paise"
+          },
+          "surplus_or_shortfall_paise": {
+            "type": "integer",
+            "title": "Surplus Or Shortfall Paise"
+          },
+          "required_monthly_sip_paise": {
+            "type": "integer",
+            "title": "Required Monthly Sip Paise"
+          },
+          "sensitivity": {
+            "items": {
+              "$ref": "#/components/schemas/SensitivityPointResponse"
+            },
+            "type": "array",
+            "title": "Sensitivity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal_id",
+          "years_to_target",
+          "current_corpus_paise",
+          "current_corpus_unavailable_paise",
+          "inflated_target_paise",
+          "blended_expected_return_pct",
+          "projected_corpus_paise",
+          "surplus_or_shortfall_paise",
+          "required_monthly_sip_paise",
+          "sensitivity"
+        ],
+        "title": "GoalProjectionResponse"
+      },
+      "GoalResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "target_amount_paise": {
+            "type": "integer",
+            "title": "Target Amount Paise"
+          },
+          "target_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Target Date"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "target_amount_paise",
+          "target_date",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GoalResponse"
+      },
       "GroundedStatementResponse": {
         "properties": {
           "topic": {
@@ -2709,6 +3194,10 @@
             "type": "string",
             "title": "Folio"
           },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
           "scheme_name": {
             "type": "string",
             "title": "Scheme Name"
@@ -2755,6 +3244,7 @@
         "type": "object",
         "required": [
           "folio",
+          "scheme_key",
           "scheme_name",
           "amc",
           "isin",
@@ -3344,6 +3834,24 @@
         ],
         "title": "SchemeRebuildErrorResponse"
       },
+      "SensitivityPointResponse": {
+        "properties": {
+          "return_pct": {
+            "type": "string",
+            "title": "Return Pct"
+          },
+          "required_monthly_sip_paise": {
+            "type": "integer",
+            "title": "Required Monthly Sip Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "return_pct",
+          "required_monthly_sip_paise"
+        ],
+        "title": "SensitivityPointResponse"
+      },
       "SetRiskProfileRequest": {
         "properties": {
           "persona": {
@@ -3606,6 +4114,46 @@
           "amfi_code"
         ],
         "title": "UnmatchedSchemeResponse"
+      },
+      "UpdateGoalRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "target_amount_rupees": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Amount Rupees"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          }
+        },
+        "type": "object",
+        "title": "UpdateGoalRequest"
       },
       "ValidationError": {
         "properties": {
