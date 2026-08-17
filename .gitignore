@@ -18,11 +18,13 @@ frontend/build/
 .env
 .env.local
 !.env.example
+.fundlens_db_key
 
 # FundLens local data (SQLite DB, decrypted CAS PDFs, exports) — never commit real financial data
 *.sqlite
 *.sqlite3
 *.db
+*.db.backup-*
 data/
 uploads/
 exports/

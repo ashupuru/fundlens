@@ -201,6 +201,52 @@ def test_get_all_folios_returns_distinct_folios(session: Session) -> None:
     assert service.get_all_folios(session) == {"F1", "F2"}
 
 
+def test_get_all_folios_includes_folios_with_only_stale_derived_state(
+    session: Session,
+) -> None:
+    """A folio whose transactions were all removed (e.g. deleting a PAN's
+    data by hand) still has stale Lot/RealizedGain rows until a rebuild
+    reaches it -- but rebuild_all_lots only ever calls
+    rebuild_lots_for_folio for folios get_all_folios returns. Missing this
+    case would leave orphaned lots forever, since nothing else ever
+    revisits a transaction-less folio."""
+    session.add(
+        Lot(
+            folio="GHOST",
+            scheme_key="K1",
+            open_date=date(2021, 1, 1),
+            units_remaining=Decimal("10"),
+            cost_per_unit=Decimal("100"),
+            source_txn_id=None,
+            source_txn_type="PURCHASE",
+        )
+    )
+    session.commit()
+
+    assert "GHOST" in service.get_all_folios(session)
+
+
+def test_rebuild_all_lots_clears_orphaned_lots_for_a_deleted_folio(
+    session: Session,
+) -> None:
+    session.add(
+        Lot(
+            folio="GHOST",
+            scheme_key="K1",
+            open_date=date(2021, 1, 1),
+            units_remaining=Decimal("10"),
+            cost_per_unit=Decimal("100"),
+            source_txn_id=None,
+            source_txn_type="PURCHASE",
+        )
+    )
+    session.commit()
+
+    service.rebuild_all_lots(session)
+
+    assert session.scalars(select(Lot).where(Lot.folio == "GHOST")).all() == []
+
+
 def test_rebuild_all_lots_processes_every_folio(session: Session) -> None:
     upload = _make_upload(session)
     _add_txn(

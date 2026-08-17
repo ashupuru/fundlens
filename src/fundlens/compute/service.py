@@ -68,7 +68,17 @@ class RebuildSummary:
 
 
 def get_all_folios(session: Session) -> set[str]:
-    return set(session.scalars(select(RawTransaction.folio).distinct()).all())
+    """Union of every folio with transactions AND every folio with existing
+    derived state (Lot/RealizedGain) -- not just the former. A folio whose
+    transactions were all removed (e.g. deleting a PAN's data) still has
+    stale lot/realized_gain rows until rebuild_lots_for_folio runs for it,
+    but that only happens for folios this function returns; missing the
+    lot/realized_gain-only case would leave those rows orphaned forever,
+    since nothing else ever revisits a folio with zero transactions."""
+    txn_folios = set(session.scalars(select(RawTransaction.folio).distinct()).all())
+    lot_folios = set(session.scalars(select(Lot.folio).distinct()).all())
+    gain_folios = set(session.scalars(select(RealizedGain.folio).distinct()).all())
+    return txn_folios | lot_folios | gain_folios
 
 
 def rebuild_lots_for_folio(session: Session, folio: str) -> RebuildSummary:
