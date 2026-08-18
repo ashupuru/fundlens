@@ -25,6 +25,9 @@ import {
   getPortfolioBenchmarkComparison,
   getPortfolioMetrics,
   getPortfolioValueHistory,
+  getRiskProfile,
+  setRiskProfile,
+  type RiskProfile,
 } from "../api/client";
 import type { components } from "../api/schema";
 
@@ -219,6 +222,240 @@ function CategoryAllocationSection({ groups }: { groups: CategoryGroup[] | null 
   );
 }
 
+const PERSONA_OPTIONS = ["conservative", "balanced", "aggressive", "custom"] as const;
+const DRAWDOWN_TOLERANCE_OPTIONS = ["low", "medium", "high"] as const;
+const INCOME_STABILITY_OPTIONS = ["stable", "variable"] as const;
+
+function RiskProfileForm({
+  initial,
+  onSaved,
+  onCancel,
+}: {
+  initial: RiskProfile | null;
+  onSaved: (profile: RiskProfile) => void;
+  onCancel: (() => void) | null;
+}) {
+  const [persona, setPersona] = useState<(typeof PERSONA_OPTIONS)[number]>(
+    (initial?.persona as (typeof PERSONA_OPTIONS)[number] | undefined) ?? "balanced",
+  );
+  const [customEquity, setCustomEquity] = useState(initial?.target_equity_pct ?? "60");
+  const [customDebt, setCustomDebt] = useState(initial?.target_debt_pct ?? "40");
+  const [horizonYears, setHorizonYears] = useState(
+    initial?.horizon_years !== null && initial?.horizon_years !== undefined
+      ? String(initial.horizon_years)
+      : "",
+  );
+  const [drawdownTolerance, setDrawdownTolerance] = useState(initial?.drawdown_tolerance ?? "");
+  const [incomeStability, setIncomeStability] = useState(initial?.income_stability ?? "");
+  const [hasDependents, setHasDependents] = useState(initial?.has_dependents ?? false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      const profile = await setRiskProfile({
+        persona,
+        target_equity_pct: persona === "custom" ? customEquity : null,
+        target_debt_pct: persona === "custom" ? customDebt : null,
+        horizon_years: horizonYears === "" ? null : Number(horizonYears),
+        drawdown_tolerance: drawdownTolerance === "" ? null : drawdownTolerance,
+        income_stability: incomeStability === "" ? null : incomeStability,
+        has_dependents: hasDependents,
+      });
+      onSaved(profile);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(e) => void handleSubmit(e)}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 360 }}>
+        <label>
+          Persona
+          <br />
+          <select
+            value={persona}
+            onChange={(e) => setPersona(e.target.value as (typeof PERSONA_OPTIONS)[number])}
+          >
+            {PERSONA_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {persona === "custom" && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <label style={{ flex: 1 }}>
+              Target equity %
+              <br />
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={customEquity}
+                onChange={(e) => setCustomEquity(e.target.value)}
+              />
+            </label>
+            <label style={{ flex: 1 }}>
+              Target debt %
+              <br />
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={customDebt}
+                onChange={(e) => setCustomDebt(e.target.value)}
+              />
+            </label>
+          </div>
+        )}
+
+        <label>
+          Investment horizon (years) — optional, used for glide-path suggestions
+          <br />
+          <input
+            type="number"
+            min="0"
+            value={horizonYears}
+            onChange={(e) => setHorizonYears(e.target.value)}
+            placeholder="e.g. 15"
+          />
+        </label>
+
+        <label>
+          Drawdown tolerance — optional
+          <br />
+          <select
+            value={drawdownTolerance}
+            onChange={(e) => setDrawdownTolerance(e.target.value)}
+          >
+            <option value="">Not specified</option>
+            {DRAWDOWN_TOLERANCE_OPTIONS.map((v) => (
+              <option key={v} value={v}>
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Income stability — optional
+          <br />
+          <select value={incomeStability} onChange={(e) => setIncomeStability(e.target.value)}>
+            <option value="">Not specified</option>
+            {INCOME_STABILITY_OPTIONS.map((v) => (
+              <option key={v} value={v}>
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          <input
+            type="checkbox"
+            checked={hasDependents}
+            onChange={(e) => setHasDependents(e.target.checked)}
+          />{" "}
+          Has dependents
+        </label>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <button type="submit" disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          {onCancel && (
+            <button type="button" onClick={onCancel} disabled={saving}>
+              Cancel
+            </button>
+          )}
+        </div>
+        {error && <p style={{ color: "var(--negative)" }}>{error}</p>}
+      </div>
+    </form>
+  );
+}
+
+function RiskProfileSection({
+  profile,
+  loaded,
+  onSaved,
+}: {
+  profile: RiskProfile | null;
+  loaded: boolean;
+  onSaved: (profile: RiskProfile) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (!loaded) {
+    return (
+      <div className="card">
+        <h3>Risk Profile</h3>
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+
+  if (profile === null || editing) {
+    return (
+      <div className="card">
+        <h3>Risk Profile</h3>
+        {profile === null && (
+          <p className="muted" style={{ marginBottom: 12 }}>
+            Set a target allocation to unlock allocation drift, glide-path suggestions, goal
+            projections, and Monte Carlo simulation.
+          </p>
+        )}
+        <RiskProfileForm
+          initial={profile}
+          onSaved={(p) => {
+            setEditing(false);
+            onSaved(p);
+          }}
+          onCancel={profile !== null ? () => setEditing(false) : null}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h3>Risk Profile</h3>
+      <div className="card-grid" style={{ marginBottom: 0 }}>
+        <div className="stat">
+          <div className="stat-label">Persona</div>
+          <div className="stat-value" style={{ textTransform: "capitalize" }}>
+            {profile.persona}
+          </div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Target equity / debt</div>
+          <div className="stat-value">
+            {profile.target_equity_pct}% / {profile.target_debt_pct}%
+          </div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">Horizon</div>
+          <div className="stat-value">
+            {profile.horizon_years !== null ? `${profile.horizon_years}y` : "—"}
+          </div>
+        </div>
+      </div>
+      <button style={{ marginTop: 12 }} onClick={() => setEditing(true)}>
+        Edit
+      </button>
+    </div>
+  );
+}
+
 function AllocationDriftSection({
   drift,
   loaded,
@@ -240,8 +477,8 @@ function AllocationDriftSection({
       <div className="card">
         <h3>Allocation Drift</h3>
         <p className="muted">
-          No risk profile set — target allocation isn't configured yet (there's no setup screen
-          for this in the UI today; it's set via <code>POST /risk-profile</code>).
+          No risk profile set — target allocation isn't configured yet. Set one in the Risk
+          Profile card above.
         </p>
       </div>
     );
@@ -694,6 +931,18 @@ export default function Dashboard() {
   const [subCategoryGroups, setSubCategoryGroups] = useState<CategoryGroup[] | null>(null);
   const [drift, setDrift] = useState<AllocationDrift | null>(null);
   const [driftLoaded, setDriftLoaded] = useState(false);
+  const [riskProfile, setRiskProfileState] = useState<RiskProfile | null>(null);
+  const [riskProfileLoaded, setRiskProfileLoaded] = useState(false);
+
+  function refreshDrift() {
+    setDriftLoaded(false);
+    getAllocationDrift()
+      .then((d) => {
+        setDrift(d);
+        setDriftLoaded(true);
+      })
+      .catch(() => setDriftLoaded(true));
+  }
   const [blendedComparison, setBlendedComparison] = useState<EquityBlendedComparison | null>(
     null,
   );
@@ -730,12 +979,14 @@ export default function Dashboard() {
       .then(setSubCategoryGroups)
       .catch(() => setSubCategoryGroups([]));
 
-    getAllocationDrift()
-      .then((d) => {
-        setDrift(d);
-        setDriftLoaded(true);
+    refreshDrift();
+
+    getRiskProfile()
+      .then((p) => {
+        setRiskProfileState(p);
+        setRiskProfileLoaded(true);
       })
-      .catch(() => setDriftLoaded(true));
+      .catch(() => setRiskProfileLoaded(true));
 
     getEquityBlendedBenchmark()
       .then((c) => {
@@ -857,6 +1108,14 @@ export default function Dashboard() {
 
           <AssetAllocationSection groups={categoryGroups} />
           <CategoryAllocationSection groups={subCategoryGroups} />
+          <RiskProfileSection
+            profile={riskProfile}
+            loaded={riskProfileLoaded}
+            onSaved={(p) => {
+              setRiskProfileState(p);
+              refreshDrift();
+            }}
+          />
           <AllocationDriftSection drift={drift} loaded={driftLoaded} />
 
           <PortfolioValueSection points={valueHistory} loaded={valueHistoryLoaded} />
