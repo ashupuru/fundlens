@@ -64,10 +64,12 @@ from fundlens.db.models import (
     NavHistory,
     RawTransaction,
     RealizedGain,
+    SchemeMetadata,
     TransactionType,
 )
 from fundlens.money import to_paise_strict
 from fundlens.scheme_identity import scheme_key
+from fundlens.tax.asset_class import parse_category_raw
 
 CASH_OUTFLOW_TYPES = {
     TransactionType.PURCHASE,
@@ -488,8 +490,12 @@ def _compute_grouped_breakdown(
 def compute_category_breakdown(
     session: Session, level: Literal["category", "sub_category"]
 ) -> list[CategoryGroupMetrics]:
-    """Groups currently-open positions by Groww's fund category or
-    sub-category (market_data/groww_service.py's groww_fund_metadata).
+    """Groups currently-open positions by fund category or sub-category,
+    preferring Groww's listing (market_data/groww_service.py's
+    groww_fund_metadata) and falling back to AMFI's own category feed
+    (scheme_metadata.category_raw, parsed via
+    tax/asset_class.py::parse_category_raw) when Groww has no row for a
+    scheme.
 
     Scoped to currently-open positions only (get_current_holdings()),
     deliberately excluding fully-exited ones -- same reasoning as the
@@ -498,27 +504,51 @@ def compute_category_breakdown(
     cash flows would conflate "how is my current Equity slice doing"
     with "how did that Equity fund I already sold do".
 
-    A position whose scheme has no amfi_code, or an amfi_code Groww's
-    screener doesn't cover, lands in "Uncategorized" -- real-data-verified
-    coverage gap (data-model.md's groww_fund_metadata section), never
-    dropped silently.
+    **Why the fallback**: Groww's screener is direct-plan-only, so any
+    Regular-plan holding has no groww_fund_metadata row regardless of how
+    well-known the fund is -- real-data-verified on a real portfolio where
+    27 of 35 held funds (all Regular plan) had zero Groww coverage despite
+    every one of them having an AMFI scheme_metadata row (AMFI's category
+    feed covers every scheme, not just Groww-listed ones). Falling back to
+    it turns a mostly-"Uncategorized" chart into a fully-labeled one using
+    data this app already ingests for every scheme, not a new source.
+
+    A position whose scheme has no amfi_code, or an amfi_code covered by
+    neither source, lands in "Uncategorized" -- never dropped silently.
     """
     holdings = get_current_holdings(session)
     if not holdings:
         return []
 
     amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
-    metadata_by_code = {
+    groww_by_code = {
         m.amfi_code: m
         for m in session.scalars(
             select(GrowwFundMetadata).where(GrowwFundMetadata.amfi_code.in_(amfi_codes))
         )
     }
+    amfi_by_code = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(SchemeMetadata).where(SchemeMetadata.amfi_code.in_(amfi_codes))
+        )
+    }
 
     def label_for(h: HoldingView) -> str:
-        metadata = metadata_by_code.get(h.amfi_code) if h.amfi_code else None
-        label = getattr(metadata, level) if metadata is not None else None
-        return label or "Uncategorized"
+        if h.amfi_code is None:
+            return "Uncategorized"
+
+        groww = groww_by_code.get(h.amfi_code)
+        groww_label = getattr(groww, level) if groww is not None else None
+        if groww_label:
+            return groww_label
+
+        amfi_meta = amfi_by_code.get(h.amfi_code)
+        if amfi_meta is not None:
+            broad, specific = parse_category_raw(amfi_meta.category_raw)
+            return broad if level == "category" else specific
+
+        return "Uncategorized"
 
     return _compute_grouped_breakdown(session, holdings, label_for)
 

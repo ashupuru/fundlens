@@ -118,6 +118,49 @@ class EquityCapSize(enum.StrEnum):
     OTHER = "other"
 
 
+def parse_category_raw(category_raw: str) -> tuple[str, str]:
+    """Best-effort split of AMFI's raw category string into (broad
+    category, specific type) labels -- e.g. "Open Ended Schemes(Equity
+    Scheme - Small Cap Fund)" -> ("Equity", "Small Cap Fund") -- matching
+    the shape of Groww's own category/sub_category fields
+    (market_data/groww_service.py) so AMFI's classification (available for
+    every scheme this app has ever seen a category feed for) can stand in
+    when Groww's screener doesn't cover a scheme. Groww's screener is
+    direct-plan-only, so any Regular-plan holding is otherwise invisible to
+    it entirely, real-data-verified: none of a real portfolio's Regular
+    plans had a groww_fund_metadata row despite every one of them having a
+    scheme_metadata row via the always-available AMFI feed.
+
+    AMFI's raw strings aren't perfectly uniform (a handful of categories
+    are missing their closing paren, e.g. "...(ETFs)"; the pre-2018
+    bare names have no " - " separator at all) -- this degrades to using
+    the whole cleaned string as both labels on anything that doesn't fit
+    the common "(Group Scheme - Specific Type)" pattern, never raises.
+    """
+    if "(" not in category_raw:
+        cleaned = category_raw.strip()
+        return cleaned, cleaned
+
+    inner = category_raw.split("(", 1)[1]
+    if inner.endswith(")"):
+        inner = inner[:-1]
+    inner = inner.strip()
+    if not inner:
+        cleaned = category_raw.strip()
+        return cleaned, cleaned
+
+    if " - " in inner:
+        broad, specific = inner.split(" - ", 1)
+        broad = broad.strip()
+        for suffix in ("Schemes", "Scheme"):
+            if broad.endswith(suffix):
+                broad = broad[: -len(suffix)].strip()
+                break
+        return (broad or inner), specific.strip()
+
+    return inner, inner
+
+
 def equity_cap_size(category_raw: str) -> EquityCapSize:
     normalized = category_raw.strip().lower()
     if "large & mid cap" in normalized or "large and mid cap" in normalized:

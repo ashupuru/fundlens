@@ -12,9 +12,11 @@ from fundlens.db.models import (
     NavSource,
     RawCASUpload,
     RawTransaction,
+    SchemeMetadata,
     TransactionType,
     UploadStatus,
 )
+from fundlens.tax.asset_class import TaxAssetClass
 
 
 def _add_groww_metadata(
@@ -26,6 +28,16 @@ def _add_groww_metadata(
             scheme_name=f"Fund {amfi_code}",
             category=category,
             sub_category=sub_category,
+        )
+    )
+
+
+def _add_scheme_metadata(
+    session: Session, amfi_code: str, *, category_raw: str, tax_asset_class: TaxAssetClass
+) -> None:
+    session.add(
+        SchemeMetadata(
+            amfi_code=amfi_code, category_raw=category_raw, tax_asset_class=tax_asset_class
         )
     )
 
@@ -446,6 +458,63 @@ def test_compute_category_breakdown_uncategorized_bucket_for_missing_groww_data(
     assert len(result) == 1
     assert result[0].label == "Uncategorized"
     assert result[0].current_value_paise == 110_000  # 10 units * 110 rupees, in paise
+
+
+def test_compute_category_breakdown_falls_back_to_amfi_when_groww_has_no_row(
+    session: Session,
+) -> None:
+    """Groww's screener is direct-plan-only -- a Regular-plan holding has
+    no groww_fund_metadata row regardless of how well-known the fund is.
+    Falls back to AMFI's own category feed (always available) instead of
+    landing in "Uncategorized"."""
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="999", txn_type=TransactionType.PURCHASE,
+        txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("100"), amount_paise=1_000_000,
+    )
+    _add_scheme_metadata(
+        session, "999",
+        category_raw="Open Ended Schemes(Equity Scheme - Small Cap Fund)",
+        tax_asset_class=TaxAssetClass.EQUITY,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "999", date.today(), Decimal("110"))
+    session.commit()
+
+    by_category = metrics.compute_category_breakdown(session, "category")
+    by_sub_category = metrics.compute_category_breakdown(session, "sub_category")
+
+    assert len(by_category) == 1
+    assert by_category[0].label == "Equity"
+    assert len(by_sub_category) == 1
+    assert by_sub_category[0].label == "Small Cap Fund"
+
+
+def test_compute_category_breakdown_prefers_groww_over_amfi_when_both_exist(
+    session: Session,
+) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="111", txn_type=TransactionType.PURCHASE,
+        txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("100"), amount_paise=1_000_000,
+    )
+    _add_groww_metadata(session, "111", category="Equity", sub_category="Large Cap")
+    _add_scheme_metadata(
+        session, "111",
+        category_raw="Open Ended Schemes(Equity Scheme - Large Cap Fund)",
+        tax_asset_class=TaxAssetClass.EQUITY,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "111", date.today(), Decimal("110"))
+    session.commit()
+
+    result = metrics.compute_category_breakdown(session, "sub_category")
+
+    assert result[0].label == "Large Cap"  # Groww's label, not AMFI's "Large Cap Fund"
 
 
 def test_compute_category_breakdown_excludes_fully_exited_positions(session: Session) -> None:
