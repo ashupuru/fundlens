@@ -8,6 +8,7 @@ import {
   type NavRefreshResponse,
 } from "../api/client";
 import type { components } from "../api/schema";
+import { DezervImportCard } from "./DezervImport";
 
 type IngestResult = components["schemas"]["IngestResponse"];
 type RebuildResult = components["schemas"]["RebuildResponse"];
@@ -186,8 +187,10 @@ export default function Upload() {
     <div>
       <h1>Upload</h1>
 
+      <h2>From your fund house / RTA</h2>
+
       <div className="card">
-        <h2>CAS statement (PDF)</h2>
+        <h3>CAS statement (PDF)</h3>
         <p className="muted" style={{ marginBottom: 12 }}>
           The password-protected Consolidated Account Statement from MFCentral or CAMS/KFintech.
           Re-uploading a newer statement is safe — transactions already on file are skipped.
@@ -226,7 +229,7 @@ export default function Upload() {
       </div>
 
       <div className="card">
-        <h2>Transactions CSV (escape hatch)</h2>
+        <h3>Transactions CSV (escape hatch)</h3>
         <p className="muted" style={{ marginBottom: 12 }}>
           Columns: folio, amc, scheme_name, txn_type, txn_date, amount, units, isin, amfi_code.
           For platforms that don't issue a CAS, or manual corrections.
@@ -256,8 +259,14 @@ export default function Upload() {
         )}
       </div>
 
+      <h2>From your broker / platform</h2>
+
+      <DezervImportCard />
+
+      <h2>Benchmark data</h2>
+
       <div className="card">
-        <h2>Import benchmark TRI data (CSV)</h2>
+        <h3>Import benchmark TRI data (CSV)</h3>
         <p className="muted" style={{ marginBottom: 12 }}>
           FundLens's own two-column format — columns: date, value. Use this to upgrade a
           benchmark's history from a proxy (an index fund's NAV standing in for its TRI) to real

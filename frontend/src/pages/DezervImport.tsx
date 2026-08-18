@@ -35,7 +35,7 @@ function initialMapping(preview: DezervPreview): Mapping {
   return mapping;
 }
 
-export default function DezervImport() {
+export function DezervImportCard() {
   const [stage, setStage] = useState<Stage>({ step: "pick" });
 
   async function handleFileSelected(file: File) {
@@ -69,16 +69,14 @@ export default function DezervImport() {
   }
 
   return (
-    <div>
-      <h1>Import Dezerv CSV</h1>
-      <p className="muted" style={{ marginBottom: 20 }}>
-        Upload a Dezerv "BANK BOOK" export. Scheme names are auto-matched against the current
-        AMFI scheme list — review and correct the proposed mapping below before anything is
-        imported.
-      </p>
-
+    <>
       <div className="card">
-        <h2>1. Choose file</h2>
+        <h3>Dezerv (CSV)</h3>
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Upload a Dezerv "BANK BOOK" export. Scheme names are auto-matched against the current
+          AMFI scheme list — review and correct the proposed mapping below before anything is
+          imported.
+        </p>
         <input
           type="file"
           accept=".csv,text/csv"
@@ -105,7 +103,7 @@ export default function DezervImport() {
       {stage.step === "done" && (
         <ImportSummary commit={stage.commit} rebuild={stage.rebuild} refresh={stage.refresh} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -124,10 +122,10 @@ function MappingReview({
 
   return (
     <div className="card">
-      <h2>
-        2. Review proposed mapping ({stage.preview.total_mfdemat_rows} transactions across{" "}
+      <h3>
+        Review proposed mapping ({stage.preview.total_mfdemat_rows} transactions across{" "}
         {stage.preview.schemes.length} schemes)
-      </h2>
+      </h3>
 
       {stage.preview.unrecognized_transaction_descriptions.length > 0 && (
         <p className="muted" style={{ marginBottom: 12 }}>
@@ -215,7 +213,7 @@ function ImportSummary({
   const crossSourceDuplicates = Object.entries(commit.cross_source_duplicates);
   return (
     <div className="card">
-      <h2>Import complete</h2>
+      <h3>Import complete</h3>
       <div
         className="card-grid"
         style={{
