@@ -243,6 +243,19 @@ name — not worth a parallel table/enum for one more source).
 Deliberately a separate table from `scheme_metadata`: a scheme absent from Groww's listing simply
 has no row here, never blocking anything else that reads `scheme_metadata`.
 
+**Groww's screener is direct-plan-only** — real-data-verified: a real portfolio with 35 held
+schemes had 27 Regular-plan holdings, and *every one* of them had zero `groww_fund_metadata`
+coverage regardless of how well-known the fund was, while all 8 Direct-plan holdings were
+covered. Groww doesn't sell Regular (distributor-sold) plans, so its own catalog never lists them
+— not a staleness or matching problem, a structural gap in what this source publishes at all. This
+made the Dashboard's category/sub-category allocation chart (`compute_category_breakdown`,
+compute-engine.md §1) show the majority of a Regular-plan-heavy portfolio as "Uncategorized" even
+though `scheme_metadata` (always available, AMFI-sourced) had a real category for 100% of the same
+holdings. Fixed by falling back to `scheme_metadata.category_raw` (parsed into a Groww-shaped
+`(category, sub_category)` pair via `tax/asset_class.py::parse_category_raw`) whenever Groww has
+no row for a scheme — Groww's label still wins when both exist, since it's the more specific,
+curated source; AMFI is the fallback, not a replacement.
+
 **The real endpoint isn't the one the screener page's URL suggests.** `docs/groww.py` (a scraper
 the user already had) paginated `https://groww.in/mutual-funds/filter?...&pageNo=N`, scraping the
 page's server-rendered `__NEXT_DATA__` JSON. Live-verified two things wrong with that approach:
