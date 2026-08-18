@@ -705,6 +705,7 @@ export interface components {
             equity_cap_breakdown: components["schemas"]["EquityCapBreakdownResponse"];
             /** Schemes Missing Metadata */
             schemes_missing_metadata: number;
+            glide_path: components["schemas"]["GlidePathSuggestionResponse"];
         };
         /** AllocationDriftSummaryResponse */
         AllocationDriftSummaryResponse: {
@@ -1132,6 +1133,23 @@ export interface components {
             current_value_paise: number;
             /** Positions Missing Nav */
             positions_missing_nav: number;
+        };
+        /** GlidePathSuggestionResponse */
+        GlidePathSuggestionResponse: {
+            /** Years Remaining */
+            years_remaining: number | null;
+            /** Current Target Equity Pct */
+            current_target_equity_pct: number;
+            /** Current Target Debt Pct */
+            current_target_debt_pct: number;
+            /** Suggested Target Equity Pct */
+            suggested_target_equity_pct: number | null;
+            /** Suggested Target Debt Pct */
+            suggested_target_debt_pct: number | null;
+            /** Drift Pp */
+            drift_pp: number | null;
+            /** Reason */
+            reason: string | null;
         };
         /** GoalHoldingRef */
         GoalHoldingRef: {

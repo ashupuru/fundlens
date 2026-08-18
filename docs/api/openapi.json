@@ -1565,6 +1565,9 @@
           "schemes_missing_metadata": {
             "type": "integer",
             "title": "Schemes Missing Metadata"
+          },
+          "glide_path": {
+            "$ref": "#/components/schemas/GlidePathSuggestionResponse"
           }
         },
         "type": "object",
@@ -1583,7 +1586,8 @@
           "other_value_paise",
           "value_unavailable_paise",
           "equity_cap_breakdown",
-          "schemes_missing_metadata"
+          "schemes_missing_metadata",
+          "glide_path"
         ],
         "title": "AllocationDriftResponse"
       },
@@ -3048,6 +3052,84 @@
           "positions_missing_nav"
         ],
         "title": "FundPositionResponse"
+      },
+      "GlidePathSuggestionResponse": {
+        "properties": {
+          "years_remaining": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Years Remaining"
+          },
+          "current_target_equity_pct": {
+            "type": "number",
+            "title": "Current Target Equity Pct"
+          },
+          "current_target_debt_pct": {
+            "type": "number",
+            "title": "Current Target Debt Pct"
+          },
+          "suggested_target_equity_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Target Equity Pct"
+          },
+          "suggested_target_debt_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Target Debt Pct"
+          },
+          "drift_pp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drift Pp"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "years_remaining",
+          "current_target_equity_pct",
+          "current_target_debt_pct",
+          "suggested_target_equity_pct",
+          "suggested_target_debt_pct",
+          "drift_pp",
+          "reason"
+        ],
+        "title": "GlidePathSuggestionResponse"
       },
       "GoalHoldingRef": {
         "properties": {

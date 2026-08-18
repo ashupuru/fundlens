@@ -309,7 +309,46 @@ function AllocationDriftSection({
           "Other".
         </p>
       )}
+      <GlidePathSection glidePath={drift.glide_path} />
     </div>
+  );
+}
+
+function GlidePathSection({ glidePath }: { glidePath: AllocationDrift["glide_path"] }) {
+  if (glidePath.reason === "no_horizon_set") {
+    return (
+      <p className="muted" style={{ marginTop: 16 }}>
+        No horizon set at onboarding — glide-path suggestions need a horizon_years value
+        (<code>POST /risk-profile</code>) to estimate years remaining.
+      </p>
+    );
+  }
+
+  const yearsRemaining = glidePath.years_remaining;
+  if (yearsRemaining === null || glidePath.suggested_target_equity_pct === null) {
+    return null;
+  }
+
+  const roundedYears = Math.max(0, Math.round(yearsRemaining));
+  const isOnTrack = glidePath.drift_pp === 0;
+
+  return (
+    <p className="muted" style={{ marginTop: 16 }}>
+      Glide path: ~{roundedYears} year{roundedYears === 1 ? "" : "s"} remaining to your horizon.{" "}
+      {isOnTrack ? (
+        "Current target allocation is on track — no adjustment suggested."
+      ) : (
+        <>
+          Consider shifting toward{" "}
+          <strong>
+            {glidePath.suggested_target_equity_pct.toFixed(1)}% equity /{" "}
+            {glidePath.suggested_target_debt_pct?.toFixed(1)}% debt
+          </strong>{" "}
+          (currently {glidePath.current_target_equity_pct.toFixed(1)}% /{" "}
+          {glidePath.current_target_debt_pct.toFixed(1)}%).
+        </>
+      )}
+    </p>
   );
 }
 
