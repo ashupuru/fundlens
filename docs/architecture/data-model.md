@@ -381,12 +381,12 @@ rubric's): `equity_ltcg_threshold_days`, `debt_ltcg_threshold_days`, `debt_speci
 `debt_marginal_tax_rate_pct` is a **valid key with no seeded default** — debt gains are taxed at
 the investor's income-tax slab, which this app has no way to know, so it must be set explicitly
 via `POST /assumptions` before any debt-fund tax-friction statement is computable (compute-engine.md
-§3.5), never defaulted to a guessed slab. Inflation % and expected-return-by-risk-profile — PRD
-§5.7-named — belong to goal planning (P2) and aren't added until something reads them; an untyped,
-unread assumption key is dead config. The `report`/`goal` tables below that would reference
-`assumption_version_id` are themselves not yet built — today only the compute layer reads
-`get_current_tax_assumptions()`/`get_current_rubric_tax_rates()`/`get_current_rubric_weights()`
-directly, there's no persisted report row pinning a version yet.
+§3.5), never defaulted to a guessed slab. Inflation %/expected-return keys (P2.4) and the rubric's
+weights are read the same way: `get_current_tax_assumptions()`/`get_current_rubric_tax_rates()`/
+`get_current_rubric_weights()`/`get_current_goal_assumptions()`, always against whatever version
+is current *at read time* — see the `report` note below for why no persisted row has ever pinned
+a version to a specific `assumption_version_id`, despite that being this table's original reason
+for existing as a *version* history rather than flat config.
 
 ### `verdict` — **compute-on-demand, not a persisted table**
 `compute/verdict.py::Verdict` is a plain dataclass returned by `GET /verdicts`, matching every
@@ -399,6 +399,18 @@ compute-engine.md §5), `overall_score`, `confidence_pct`, `components` (each wi
 ("what did we recommend last month") would need the persisted-table design — deferred until
 something needs to compare a verdict against its own past self, consistent with this app's general
 bias toward deriving state fresh rather than caching it prematurely.
+
+### `report` — **deliberately never built, both P0.5 and P2.5**
+No `report` table exists, and neither of this app's two "report" features (capital gains, P0.5;
+yearly report, P2.5, `compute/yearly_report.py`) persist anything or pin an `assumption_version_id`
+— both are computed fresh, against *current* assumption values, on every request, same
+compute-on-demand shape as `verdict` above. The original sketch's reproducibility rationale (a
+report generated before a tax-rate edit should still reproduce its original figures after the
+edit) was real, but by the time P2.5 shipped a second "report" feature with the identical
+un-addressed gap, building the persistence machinery for *only* the newer one would have left the
+two features handling reproducibility inconsistently — worse than the status quo. Left as a
+known, pre-existing, cross-cutting gap (not solved ad hoc for one feature), not a P2.5-introduced
+regression.
 
 ## 4. Entity Relationship Summary
 

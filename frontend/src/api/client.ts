@@ -379,3 +379,21 @@ export async function getGoalProjection(goalId: string): Promise<GoalProjection 
   }
   return response.json() as Promise<GoalProjection>;
 }
+
+export type YearlyReport = components["schemas"]["YearlyReportResponse"];
+
+export async function getYearlyReport(fy: string): Promise<YearlyReport> {
+  const response = await fetch(`${API_BASE_URL}/reports/yearly.json?fy=${encodeURIComponent(fy)}`);
+  if (!response.ok) {
+    throw new Error(`Failed to load yearly report: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<YearlyReport>;
+}
+
+export function yearlyReportPdfUrl(fy: string): string {
+  return `${API_BASE_URL}/reports/yearly?fy=${encodeURIComponent(fy)}`;
+}
+
+export function capitalGainsCsvUrl(fy: string): string {
+  return `${API_BASE_URL}/reports/capital-gains.csv?fy=${encodeURIComponent(fy)}`;
+}

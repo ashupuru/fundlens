@@ -7,6 +7,7 @@ import Funds from "./pages/Funds";
 import GoalPlanning from "./pages/GoalPlanning";
 import Insights from "./pages/Insights";
 import Upload from "./pages/Upload";
+import YearlyReportPage from "./pages/YearlyReport";
 
 function DashboardIcon() {
   return (
@@ -66,6 +67,20 @@ function GoalIcon() {
   );
 }
 
+function ReportIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M4 1.5h6l3 3v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path d="M5.5 8.5h5M5.5 11h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function UploadIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -91,6 +106,7 @@ const links = [
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/insights", label: "Insights", icon: InsightsIcon, end: false },
   { to: "/goals", label: "Goals", icon: GoalIcon, end: false },
+  { to: "/reports", label: "Reports", icon: ReportIcon, end: false },
   { to: "/funds", label: "Funds", icon: FundsIcon, end: false },
   { to: "/upload", label: "Upload", icon: UploadIcon, end: false },
   { to: "/data-quality", label: "Data Quality", icon: DataQualityIcon, end: false },
@@ -119,6 +135,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/goals" element={<GoalPlanning />} />
+          <Route path="/reports" element={<YearlyReportPage />} />
           <Route path="/funds" element={<Funds />} />
           <Route path="/funds/:amfiCode" element={<FundDetail />} />
           <Route path="/upload" element={<Upload />} />

@@ -551,3 +551,63 @@ Money stays in `Decimal` throughout this module's growth math (not `float`), mat
 `money.py`'s convention; only converted to integer paise at the boundary via the module's own
 `_round_paise` (ROUND_HALF_UP), not `money.py::to_paise_strict` (which expects a rupee amount,
 not an already-paise-denominated `Decimal`).
+
+## 11. Yearly Report (PRD FR-10.1, shipped P2.5 — `compute/yearly_report.py`)
+
+FY-aligned (Apr-Mar) assembly of opening/closing value, XIRR (this year + since inception),
+benchmark alpha, best/worst funds, allocation drift, estimated fees, and realized gains. FY
+boundaries reuse `compute/capital_gains.py::financial_year_bounds` (already public, already
+exactly this shape) — not reimplemented. `report_end = min(fy_end, today)`, so a report for the
+FY currently in progress reports through today rather than into the future.
+
+**The synthetic-boundary-flow technique**: almost every existing engine
+(`compute_portfolio_metrics`, `compute_portfolio_benchmark_comparison`, `compute_allocation_drift`)
+is hardcoded to "as of today," not an arbitrary past date. Rather than modifying those, this module
+prices the portfolio at exactly `[fy_start, report_end]` via a new
+`compute/valuation_history.py::compute_portfolio_value_at_dates` (the historical-valuation
+module's own per-position NAV-bisection engine, generalized from an internally-generated weekly
+cadence to an arbitrary explicit date list — `compute_portfolio_value_history` is now a thin
+wrapper over it), then treats the opening value as a synthetic outflow at the period start and the
+closing value as a synthetic inflow at the period end, alongside the position's *real*
+transactions in between (`build_position_cash_flows(session, filtered_txns, open_holding=None)` —
+passing `None` suppresses that function's own today-priced terminal flow, since it isn't wanted
+here). The combined flow list goes straight into the existing `compute_xirr` solver — the same
+engine every other XIRR figure in this app uses. Since-inception XIRR *as of report_end* reuses
+the identical technique with no `fy_start` floor on the transaction filter and only the closing
+synthetic flow. Best/worst funds (top/bottom 3, fewer if fewer than 6 positions were active) apply
+the *same* helper per `(folio, scheme_key)` instead of pooled, rather than a separate simpler
+"return %" heuristic.
+
+**Benchmark comparison is deliberately "since inception, as of report_end," not a true FY-only
+sub-period simulation** (judgment call): `compute/benchmark.py::simulate_benchmark_cash_flows`
+(promoted from private to public for this second call site) must replay a position's *full*
+transaction history to correctly track its partial-redemption fraction-sold state — floor-filtering
+to `fy_start` would silently miscompute that fraction for any position that already existed before
+the FY. Reused unmodified with the transaction list truncated only at `report_end`, giving "alpha
+since I started investing, as of this FY's end" — well-defined and still useful, instead of a
+fragile new simulation surface bolted onto a function three other features already depend on.
+
+**Allocation drift** reuses `compute_allocation_drift` exactly as shipped for §7 — current (today),
+not reconstructed as of `report_end`. A backward-looking report's most actionable drift figure is
+"where do I stand right now"; a historical one would also need `scheme_metadata` classifications
+this app doesn't track over time. Omitted entirely (not fabricated) if no risk profile is set, same
+precedent as `GET /allocation/drift`'s 404.
+
+**Estimated fees**: `sum(current_value_paise * expense_ratio_pct / 100)` over currently-open
+holdings with a known `GrowwFundMetadata.expense_ratio`, holdings missing it excluded and counted
+separately — same "flag, don't fabricate" shape as `ai/snapshot.py`'s fee-drag calc, deliberately
+not shared code across the `ai/` and `reports/` packages (small enough to duplicate for two
+different consumers).
+
+**Realized gains** reuses `get_capital_gains_report(session, fy_label)` wholesale, zero new code —
+the one section that's genuinely pure assembly, no synthetic flows or new date-bounding needed.
+
+**Rendering**: Jinja2 (inline `Template` string, not a separate template file — avoids any wheel
+packaging-inclusion risk for a single-template, local-only app) → HTML → WeasyPrint → PDF, split
+into `render_yearly_report_html` (pure string templating, testable with zero native dependencies)
+and `render_yearly_report_pdf` (the only thing that needs Pango/cairo, imported lazily inside the
+function so importing the module itself never requires WeasyPrint's native libs to be loadable).
+WeasyPrint needs Pango/cairo installed via Homebrew (`brew install pango`) and
+`DYLD_FALLBACK_LIBRARY_PATH` pointed at Homebrew's lib dir on macOS — the latter is silently
+stripped from any process launched through `nohup`, which is why `scripts/start.sh` backgrounds
+the backend via plain `&` + `disown` instead (see that script's own comment).

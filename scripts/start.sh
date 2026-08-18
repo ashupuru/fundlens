@@ -22,16 +22,28 @@ if is_running "$BACKEND_PID_FILE"; then
   echo "Backend already running (PID $(cat "$BACKEND_PID_FILE"))"
 else
   echo "Starting backend (uvicorn --reload, port 8000)..."
-  (cd "$ROOT_DIR" && nohup uv run uvicorn fundlens.api.main:app --reload --port 8000 \
-    > "$BACKEND_LOG" 2>&1 & echo $! > "$BACKEND_PID_FILE")
+  # WeasyPrint (yearly report PDF rendering) needs its native Pango/cairo
+  # libs on the dyld search path -- not on it by default via Homebrew on
+  # macOS. Harmless no-op if pango isn't installed (only the PDF endpoint
+  # would then fail at request time, not backend startup).
+  if command -v brew >/dev/null 2>&1; then
+    export DYLD_FALLBACK_LIBRARY_PATH="$(brew --prefix)/lib"
+  fi
+  # `disown`, not `nohup`: macOS strips DYLD_* env vars from any process
+  # launched through nohup (a hardened/SIP-protected binary), which would
+  # silently break WeasyPrint even with the export above. Plain background
+  # + disown survives shell exit the same way nohup would, without that
+  # side effect.
+  (cd "$ROOT_DIR" && uv run uvicorn fundlens.api.main:app --reload --port 8000 \
+    > "$BACKEND_LOG" 2>&1 & echo $! > "$BACKEND_PID_FILE"; disown)
 fi
 
 if is_running "$FRONTEND_PID_FILE"; then
   echo "Frontend already running (PID $(cat "$FRONTEND_PID_FILE"))"
 else
   echo "Starting frontend (vite, port 5173)..."
-  (cd "$ROOT_DIR/frontend" && nohup pnpm run dev \
-    > "$FRONTEND_LOG" 2>&1 & echo $! > "$FRONTEND_PID_FILE")
+  (cd "$ROOT_DIR/frontend" && pnpm run dev \
+    > "$FRONTEND_LOG" 2>&1 & echo $! > "$FRONTEND_PID_FILE"; disown)
 fi
 
 sleep 2

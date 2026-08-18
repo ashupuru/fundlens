@@ -557,6 +557,92 @@
         }
       }
     },
+    "/reports/yearly.json": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Yearly Report Json",
+        "operationId": "yearly_report_json_reports_yearly_json_get",
+        "parameters": [
+          {
+            "name": "fy",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Financial year, e.g. '2024-25'",
+              "title": "Fy"
+            },
+            "description": "Financial year, e.g. '2024-25'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/YearlyReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/yearly": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Yearly Report Pdf",
+        "operationId": "yearly_report_pdf_reports_yearly_get",
+        "parameters": [
+          {
+            "name": "fy",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Financial year, e.g. '2024-25'",
+              "title": "Fy"
+            },
+            "description": "Financial year, e.g. '2024-25'"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/data-quality/summary": {
       "get": {
         "tags": [
@@ -1500,6 +1586,53 @@
           "schemes_missing_metadata"
         ],
         "title": "AllocationDriftResponse"
+      },
+      "AllocationDriftSummaryResponse": {
+        "properties": {
+          "persona": {
+            "type": "string",
+            "title": "Persona"
+          },
+          "target_equity_pct": {
+            "type": "number",
+            "title": "Target Equity Pct"
+          },
+          "target_debt_pct": {
+            "type": "number",
+            "title": "Target Debt Pct"
+          },
+          "actual_equity_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Equity Pct"
+          },
+          "actual_debt_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Debt Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "persona",
+          "target_equity_pct",
+          "target_debt_pct",
+          "actual_equity_pct",
+          "actual_debt_pct"
+        ],
+        "title": "AllocationDriftSummaryResponse"
       },
       "AmcHoldingResponse": {
         "properties": {
@@ -2795,6 +2928,58 @@
           "average_cost_per_unit"
         ],
         "title": "FundHoldingResponse"
+      },
+      "FundPerformanceResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "amc": {
+            "type": "string",
+            "title": "Amc"
+          },
+          "xirr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr"
+          },
+          "xirr_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Xirr Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key",
+          "scheme_name",
+          "amc",
+          "xirr",
+          "xirr_reason"
+        ],
+        "title": "FundPerformanceResponse"
       },
       "FundPositionResponse": {
         "properties": {
@@ -4323,6 +4508,169 @@
           "omitted_components"
         ],
         "title": "VerdictResponse"
+      },
+      "YearlyReportResponse": {
+        "properties": {
+          "financial_year": {
+            "type": "string",
+            "title": "Financial Year"
+          },
+          "fy_start": {
+            "type": "string",
+            "title": "Fy Start"
+          },
+          "report_end": {
+            "type": "string",
+            "title": "Report End"
+          },
+          "opening_value_paise": {
+            "type": "integer",
+            "title": "Opening Value Paise"
+          },
+          "closing_value_paise": {
+            "type": "integer",
+            "title": "Closing Value Paise"
+          },
+          "portfolio_xirr_this_year": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Xirr This Year"
+          },
+          "portfolio_xirr_this_year_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Xirr This Year Reason"
+          },
+          "portfolio_xirr_since_inception": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Xirr Since Inception"
+          },
+          "portfolio_xirr_since_inception_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Portfolio Xirr Since Inception Reason"
+          },
+          "benchmark_id": {
+            "type": "string",
+            "title": "Benchmark Id"
+          },
+          "benchmark_xirr_since_inception": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr Since Inception"
+          },
+          "benchmark_xirr_since_inception_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Xirr Since Inception Reason"
+          },
+          "alpha_pct_since_inception": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Pct Since Inception"
+          },
+          "best_funds": {
+            "items": {
+              "$ref": "#/components/schemas/FundPerformanceResponse"
+            },
+            "type": "array",
+            "title": "Best Funds"
+          },
+          "worst_funds": {
+            "items": {
+              "$ref": "#/components/schemas/FundPerformanceResponse"
+            },
+            "type": "array",
+            "title": "Worst Funds"
+          },
+          "allocation_drift": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllocationDriftSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "estimated_annual_fee_paise": {
+            "type": "integer",
+            "title": "Estimated Annual Fee Paise"
+          },
+          "fee_funds_excluded": {
+            "type": "integer",
+            "title": "Fee Funds Excluded"
+          },
+          "capital_gains": {
+            "$ref": "#/components/schemas/CapitalGainsReportResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "financial_year",
+          "fy_start",
+          "report_end",
+          "opening_value_paise",
+          "closing_value_paise",
+          "portfolio_xirr_this_year",
+          "portfolio_xirr_this_year_reason",
+          "portfolio_xirr_since_inception",
+          "portfolio_xirr_since_inception_reason",
+          "benchmark_id",
+          "benchmark_xirr_since_inception",
+          "benchmark_xirr_since_inception_reason",
+          "alpha_pct_since_inception",
+          "best_funds",
+          "worst_funds",
+          "allocation_drift",
+          "estimated_annual_fee_paise",
+          "fee_funds_excluded",
+          "capital_gains"
+        ],
+        "title": "YearlyReportResponse"
       },
       "fundlens__api__routers__data_quality__CoverageGapResponse": {
         "properties": {

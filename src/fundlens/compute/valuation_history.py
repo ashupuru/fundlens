@@ -90,7 +90,18 @@ def compute_portfolio_value_history(session: Session) -> list[PortfolioValuePoin
         return []
 
     report_dates = _weekly_report_dates(first_date, date.today())
+    return compute_portfolio_value_at_dates(session, report_dates)
 
+
+def compute_portfolio_value_at_dates(
+    session: Session, report_dates: list[date]
+) -> list[PortfolioValuePoint]:
+    """The per-position NAV-bisection engine behind
+    compute_portfolio_value_history, generalized to an arbitrary explicit
+    list of report dates rather than an internally-generated weekly
+    cadence -- reused as-is by compute/yearly_report.py to price the
+    portfolio at exactly [fy_start, report_end], two points instead of a
+    weekly series."""
     positions = get_all_positions(session)
     txns_by_position = positions_with_transactions(session, positions)
 

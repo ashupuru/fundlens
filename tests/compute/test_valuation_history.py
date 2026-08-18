@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from fundlens.compute.valuation_history import (
     _weekly_report_dates,
+    compute_portfolio_value_at_dates,
     compute_portfolio_value_history,
 )
 from fundlens.db.models import (
@@ -206,6 +207,31 @@ def test_compute_portfolio_value_history_no_amfi_code_excluded_from_value(
     assert points[-1].value_paise == 0
     assert points[-1].positions_missing_nav == 1
     assert points[-1].invested_paise == 100_000
+
+
+def test_compute_portfolio_value_at_dates_custom_non_weekly_dates(session: Session) -> None:
+    """compute_portfolio_value_history's weekly cadence is one caller of the
+    shared engine -- confirm it also works with an arbitrary, non-weekly
+    date list (e.g. [fy_start, fy_end]), as compute/yearly_report.py needs."""
+    day0 = date(2023, 1, 1)
+    day1 = date(2023, 6, 15)
+    day2 = date(2024, 3, 31)
+
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, txn_type=TransactionType.PURCHASE, txn_date=day0,
+        units=Decimal("100"), amount_paise=1_000_000, sequence=0,
+    )
+    _add_nav(session, "111", day0, "100")
+    _add_nav(session, "111", day1, "110")
+    _add_nav(session, "111", day2, "120")
+    session.commit()
+
+    points = compute_portfolio_value_at_dates(session, [day0, day2])
+
+    assert [p.as_of_date for p in points] == [day0, day2]
+    assert points[0].value_paise == 1_000_000  # 100 units * NAV 100
+    assert points[1].value_paise == 1_200_000  # 100 units * NAV 120
 
 
 def test_compute_portfolio_value_history_real_scale_does_not_crash(session: Session) -> None:
