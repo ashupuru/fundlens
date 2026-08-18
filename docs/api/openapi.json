@@ -1415,6 +1415,48 @@
           }
         }
       }
+    },
+    "/goals/{goal_id}/monte-carlo": {
+      "get": {
+        "tags": [
+          "goals"
+        ],
+        "summary": "Get Goal Monte Carlo",
+        "operationId": "get_goal_monte_carlo_goals__goal_id__monte_carlo_get",
+        "parameters": [
+          {
+            "name": "goal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Goal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonteCarloResultResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3603,6 +3645,49 @@
           "score"
         ],
         "title": "MatchCandidateResponse"
+      },
+      "MonteCarloResultResponse": {
+        "properties": {
+          "goal_id": {
+            "type": "string",
+            "title": "Goal Id"
+          },
+          "simulations_run": {
+            "type": "integer",
+            "title": "Simulations Run"
+          },
+          "success_probability_no_contribution_pct": {
+            "type": "number",
+            "title": "Success Probability No Contribution Pct"
+          },
+          "success_probability_with_required_sip_pct": {
+            "type": "number",
+            "title": "Success Probability With Required Sip Pct"
+          },
+          "percentile_10_corpus_paise": {
+            "type": "integer",
+            "title": "Percentile 10 Corpus Paise"
+          },
+          "percentile_50_corpus_paise": {
+            "type": "integer",
+            "title": "Percentile 50 Corpus Paise"
+          },
+          "percentile_90_corpus_paise": {
+            "type": "integer",
+            "title": "Percentile 90 Corpus Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal_id",
+          "simulations_run",
+          "success_probability_no_contribution_pct",
+          "success_probability_with_required_sip_pct",
+          "percentile_10_corpus_paise",
+          "percentile_50_corpus_paise",
+          "percentile_90_corpus_paise"
+        ],
+        "title": "MonteCarloResultResponse"
       },
       "NewsContextItemResponse": {
         "properties": {

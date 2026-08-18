@@ -3,12 +3,14 @@ import {
   createGoal,
   deleteGoal,
   getGoalHoldings,
+  getGoalMonteCarlo,
   getGoalProjection,
   getGoals,
   getHoldings,
   setGoalHoldings,
   type Goal,
   type GoalHoldingRef,
+  type GoalMonteCarloResult,
   type GoalProjection,
   type Holding,
 } from "../api/client";
@@ -88,6 +90,62 @@ function ProjectionPanel({ state }: { state: ProjectionState }) {
   );
 }
 
+function formatPct(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+type MonteCarloState =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "no-risk-profile" }
+  | { status: "ready"; result: GoalMonteCarloResult };
+
+function MonteCarloPanel({
+  state,
+  onRun,
+}: {
+  state: MonteCarloState;
+  onRun: () => void;
+}) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <button onClick={onRun} disabled={state.status === "running"}>
+        {state.status === "running" ? "Running 5,000 simulations…" : "Run Monte Carlo simulation"}
+      </button>
+      {state.status === "no-risk-profile" && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          No risk profile set — simulation needs one (set via <code>POST /risk-profile</code>).
+        </p>
+      )}
+      {state.status === "ready" && (
+        <table style={{ marginTop: 8 }}>
+          <tbody>
+            <tr>
+              <td>Success probability (no further contribution)</td>
+              <td>{formatPct(state.result.success_probability_no_contribution_pct)}</td>
+            </tr>
+            <tr>
+              <td>Success probability (with required SIP)</td>
+              <td>{formatPct(state.result.success_probability_with_required_sip_pct)}</td>
+            </tr>
+            <tr>
+              <td>Outcome range (10th–90th percentile, with required SIP)</td>
+              <td>
+                {formatPaise(state.result.percentile_10_corpus_paise)} –{" "}
+                {formatPaise(state.result.percentile_90_corpus_paise)}
+              </td>
+            </tr>
+            <tr>
+              <td>Median outcome</td>
+              <td>{formatPaise(state.result.percentile_50_corpus_paise)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 function GoalCard({
   goal,
   allHoldings,
@@ -100,6 +158,15 @@ function GoalCard({
   const [taggedKeys, setTaggedKeys] = useState<Set<string> | null>(null);
   const [projectionState, setProjectionState] = useState<ProjectionState>({ status: "loading" });
   const [showTagger, setShowTagger] = useState(false);
+  const [monteCarloState, setMonteCarloState] = useState<MonteCarloState>({ status: "idle" });
+
+  async function runMonteCarlo() {
+    setMonteCarloState({ status: "running" });
+    const result = await getGoalMonteCarlo(goal.id);
+    setMonteCarloState(
+      result === null ? { status: "no-risk-profile" } : { status: "ready", result },
+    );
+  }
 
   async function refreshProjection() {
     setProjectionState({ status: "loading" });
@@ -143,6 +210,7 @@ function GoalCard({
       </p>
 
       <ProjectionPanel state={projectionState} />
+      <MonteCarloPanel state={monteCarloState} onRun={() => void runMonteCarlo()} />
 
       <button style={{ marginTop: 12 }} onClick={() => setShowTagger((v) => !v)}>
         {showTagger ? "Hide holdings" : "Tag holdings"}

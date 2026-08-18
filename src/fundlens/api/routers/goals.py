@@ -9,9 +9,13 @@ from sqlalchemy.orm import Session
 
 from fundlens.allocation.service import get_risk_profile
 from fundlens.api.deps import get_session
-from fundlens.assumptions.service import get_current_goal_assumptions
+from fundlens.assumptions.service import (
+    get_current_goal_assumptions,
+    get_current_monte_carlo_assumptions,
+)
 from fundlens.compute.goal import GoalProjection, compute_goal_projection
-from fundlens.db.models import Goal
+from fundlens.compute.monte_carlo import MonteCarloResult, run_monte_carlo
+from fundlens.db.models import Goal, RiskProfile
 from fundlens.goals import service
 from fundlens.money import to_paise_strict
 
@@ -183,10 +187,9 @@ def _projection_to_response(p: GoalProjection) -> GoalProjectionResponse:
     )
 
 
-@router.get("/goals/{goal_id}/projection", response_model=GoalProjectionResponse)
-def get_goal_projection(
-    goal_id: str, session: Session = Depends(get_session)
-) -> GoalProjectionResponse:
+def _compute_projection_or_404(
+    session: Session, goal_id: str
+) -> tuple[Goal, RiskProfile, GoalProjection]:
     goal = _get_goal_or_404(session, goal_id)
     profile = get_risk_profile(session)
     if profile is None:
@@ -197,4 +200,56 @@ def get_goal_projection(
     tagged = {(h.folio, h.scheme_key) for h in service.get_goal_holdings(session, goal_id)}
     assumptions = get_current_goal_assumptions(session)
     projection = compute_goal_projection(session, goal, tagged, profile, assumptions)
+    return goal, profile, projection
+
+
+@router.get("/goals/{goal_id}/projection", response_model=GoalProjectionResponse)
+def get_goal_projection(
+    goal_id: str, session: Session = Depends(get_session)
+) -> GoalProjectionResponse:
+    _goal, _profile, projection = _compute_projection_or_404(session, goal_id)
     return _projection_to_response(projection)
+
+
+class MonteCarloResultResponse(BaseModel):
+    goal_id: str
+    simulations_run: int
+    success_probability_no_contribution_pct: float
+    success_probability_with_required_sip_pct: float
+    percentile_10_corpus_paise: int
+    percentile_50_corpus_paise: int
+    percentile_90_corpus_paise: int
+
+
+def _monte_carlo_to_response(m: MonteCarloResult) -> MonteCarloResultResponse:
+    return MonteCarloResultResponse(
+        goal_id=m.goal_id,
+        simulations_run=m.simulations_run,
+        success_probability_no_contribution_pct=m.success_probability_no_contribution_pct,
+        success_probability_with_required_sip_pct=m.success_probability_with_required_sip_pct,
+        percentile_10_corpus_paise=m.percentile_10_corpus_paise,
+        percentile_50_corpus_paise=m.percentile_50_corpus_paise,
+        percentile_90_corpus_paise=m.percentile_90_corpus_paise,
+    )
+
+
+@router.get("/goals/{goal_id}/monte-carlo", response_model=MonteCarloResultResponse)
+def get_goal_monte_carlo(
+    goal_id: str, session: Session = Depends(get_session)
+) -> MonteCarloResultResponse:
+    goal, profile, projection = _compute_projection_or_404(session, goal_id)
+
+    mc_assumptions = get_current_monte_carlo_assumptions(session)
+    result = run_monte_carlo(
+        goal_id=goal.id,
+        current_corpus_paise=projection.current_corpus_paise,
+        inflated_target_paise=projection.inflated_target_paise,
+        required_monthly_sip_paise=projection.required_monthly_sip_paise,
+        blended_return_pct=projection.blended_expected_return_pct,
+        years=projection.years_to_target,
+        equity_volatility_pct=mc_assumptions.equity_volatility_pct,
+        debt_volatility_pct=mc_assumptions.debt_volatility_pct,
+        target_equity_pct=profile.target_equity_pct,
+        target_debt_pct=profile.target_debt_pct,
+    )
+    return _monte_carlo_to_response(result)

@@ -714,3 +714,60 @@ app — `POST /risk-profile` remains API-only, set once at onboarding (P1.4) wit
 frontend form since. This feature surfaces the suggestion on the existing Dashboard allocation-
 drift card; acting on it (or setting a profile in the first place) still requires calling the API
 directly. A real, pre-existing gap, not introduced or silently worked around by this phase.
+
+## 14. Monte Carlo Goal-Probability Simulation (PRD FR-8.3, shipped P3 — `compute/monte_carlo.py`)
+
+A probability lens on top of Goal Planning's (P2.4, §10) deterministic projection, which assumes
+returns exactly equal the blended expected rate every year — this simulates 5,000 random
+monthly-return paths instead and reports the fraction that actually reach the (inflation-adjusted)
+target. Two scenarios, directly extending Goal Planning's two headline numbers rather than
+duplicating just one: **no further contribution** (a probability lens on `projected_corpus_paise`)
+and **with the required SIP** (`required_monthly_sip_paise`, already computed deterministically —
+shows how that calculation's "exactly the expected return every year" assumption holds up under
+real volatility). Both scenarios reuse the *same already-computed* `blended_expected_return_pct`/
+`current_corpus_paise`/`inflated_target_paise`/`required_monthly_sip_paise` from
+`compute_goal_projection` rather than re-deriving them — one source of truth for "what's the
+blended return," matching the "reuse, don't duplicate" precedent from every prior P2/P3 phase.
+
+**Volatility blending, new assumption keys**: `equity_volatility_pct` (default 18) and
+`debt_volatility_pct` (default 3), blended the *same simple weighted-average way the expected
+return already is* (`compute/goal.py:96-99`) — not a covariance-based portfolio-variance formula,
+which would need an equity-debt correlation assumption this app doesn't have. Documented
+simplification, not asserted as canonical, same treatment as every other blending/scoring judgment
+call in this codebase.
+
+**Money is float, not Decimal, in this module** — a deliberate departure from `money.py`'s
+paise-as-Decimal convention, which this codebase reserves for exact accounting of real transaction
+amounts. A Monte Carlo simulation is inherently statistical (matches how XIRR, rolling-return CAGR,
+and Sharpe/Sortino are already float, not Decimal, throughout this codebase); Decimal precision
+here would be a false sense of accuracy.
+
+**Geometric monthly-equivalent rate, not `annual/12`**: the simulation steps monthly (numpy,
+vectorized — `numpy` added as an explicit dependency, already present transitively via `scipy`,
+used directly here for the first time), so it needs a monthly mean return. Using `annual_rate/12`
+directly (a common simplification) introduces a small systematic upward bias vs. the stated annual
+rate once compounded over 12 months. Using `(1+annual_rate)^(1/12) - 1` instead means 12 months of
+compounding reproduces *exactly* the stated annual rate — which is also what makes the module's
+zero-volatility test gate a real correctness proof rather than an approximate one (see below).
+
+**Test-gate approach**: Monte Carlo results are inherently statistical, not exactly
+hand-computable to one precise value the way prior phases' formulas were — the honest equivalent
+here is a **zero-volatility collapse test**: with both volatility assumptions at 0, every simulated
+path is deterministic, so the simulated final corpus must land on *exactly* the same value an
+independently-written monthly-compounding calculation produces (for a clean, integer-years
+fixture, this also matches `compute/goal.py`'s own annual-compounding formula exactly). This is a
+real proof the compounding math is correct, not a "looks statistically plausible" check. A
+zero-volatility fixture also collapses all three output percentiles to a single value, and success
+probability to a clean 100%/0% depending on which side of the target the deterministic figure
+lands on. Nonzero-volatility tests are directional-only (higher volatility widens the
+percentile-10-to-90 spread; an easy/already-funded goal has high success probability, a wildly
+ambitious one low) — appropriate coverage for a statistical method, not a precision claim.
+
+**Separate endpoint, not folded into `GET /goals/{id}/projection`** — a deliberate deviation from
+the "extend the aggregating endpoint" precedent every prior P2/P3 phase followed (funds detail
+×2, allocation drift, yearly report): those were all cheap enough to compute unconditionally on
+every read of an already-existing endpoint. 5,000 vectorized simulations is a meaningfully
+different cost tier, and bundling it in would tax every plain projection fetch. Matches the
+precedent of `POST /ai/analyze` being its own explicitly-triggered endpoint for the same reason —
+`GET /goals/{goal_id}/monte-carlo`, button-triggered on the frontend, not auto-fetched on page
+load.

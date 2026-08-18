@@ -655,6 +655,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/goals/{goal_id}/monte-carlo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Goal Monte Carlo */
+        get: operations["get_goal_monte_carlo_goals__goal_id__monte_carlo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1304,6 +1321,23 @@ export interface components {
             isin: string | null;
             /** Score */
             score: number;
+        };
+        /** MonteCarloResultResponse */
+        MonteCarloResultResponse: {
+            /** Goal Id */
+            goal_id: string;
+            /** Simulations Run */
+            simulations_run: number;
+            /** Success Probability No Contribution Pct */
+            success_probability_no_contribution_pct: number;
+            /** Success Probability With Required Sip Pct */
+            success_probability_with_required_sip_pct: number;
+            /** Percentile 10 Corpus Paise */
+            percentile_10_corpus_paise: number;
+            /** Percentile 50 Corpus Paise */
+            percentile_50_corpus_paise: number;
+            /** Percentile 90 Corpus Paise */
+            percentile_90_corpus_paise: number;
         };
         /** NewsContextItemResponse */
         NewsContextItemResponse: {
@@ -2807,6 +2841,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GoalProjectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_goal_monte_carlo_goals__goal_id__monte_carlo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonteCarloResultResponse"];
                 };
             };
             /** @description Validation Error */

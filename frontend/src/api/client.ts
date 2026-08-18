@@ -380,6 +380,19 @@ export async function getGoalProjection(goalId: string): Promise<GoalProjection 
   return response.json() as Promise<GoalProjection>;
 }
 
+export type GoalMonteCarloResult = components["schemas"]["MonteCarloResultResponse"];
+
+export async function getGoalMonteCarlo(goalId: string): Promise<GoalMonteCarloResult | null> {
+  const response = await fetch(`${API_BASE_URL}/goals/${encodeURIComponent(goalId)}/monte-carlo`);
+  if (response.status === 404) {
+    return null; // no risk profile set yet -- an expected state, not an error
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to run Monte Carlo simulation: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<GoalMonteCarloResult>;
+}
+
 export type YearlyReport = components["schemas"]["YearlyReportResponse"];
 
 export async function getYearlyReport(fy: string): Promise<YearlyReport> {
