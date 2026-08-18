@@ -91,10 +91,10 @@ class BenchmarkComparison:
 class BenchmarkValueSource:
     """Abstracts "what was this benchmark worth on/before date X" away from
     where the values come from — a real BenchmarkHistory row per
-    benchmark_id (_real_value_source, unchanged behavior from before this
+    benchmark_id (real_value_source, unchanged behavior from before this
     was extracted), or a synthetic in-memory blended series
     (_synthetic_value_source, build_blended_series below). Everything in
-    _simulate_benchmark_cash_flows is indifferent to which."""
+    simulate_benchmark_cash_flows is indifferent to which."""
 
     value_on_or_before: Callable[[date], Decimal | None]
     latest_value: Callable[[], tuple[Decimal, date] | None]
@@ -123,7 +123,7 @@ def _latest_benchmark_value(
     return (row.value, row.nav_date) if row is not None else None
 
 
-def _real_value_source(session: Session, benchmark_id: BenchmarkId) -> BenchmarkValueSource:
+def real_value_source(session: Session, benchmark_id: BenchmarkId) -> BenchmarkValueSource:
     return BenchmarkValueSource(
         value_on_or_before=lambda on_date: _benchmark_value_on_or_before(
             session, benchmark_id, on_date
@@ -147,11 +147,22 @@ def _synthetic_value_source(series: list[tuple[date, Decimal]]) -> BenchmarkValu
     return BenchmarkValueSource(value_on_or_before=value_on_or_before, latest_value=latest_value)
 
 
-def _simulate_benchmark_cash_flows(
+def simulate_benchmark_cash_flows(
     transactions: list[RawTransaction],
     open_holding: HoldingView | None,
     value_source: BenchmarkValueSource,
 ) -> tuple[list[CashFlow], str | None]:
+    """Public (also used by compute/yearly_report.py for its "since
+    inception, as of report_end" benchmark comparison). Requires the FULL
+    transaction history for a position, not a truncated window: it replays
+    `transactions` from scratch to build up `fund_units_held`, which the
+    partial-redemption fraction-sold math depends on being correct from
+    inception — passing only a date-windowed slice would silently
+    miscompute that fraction for any position that already existed before
+    the window started. Callers needing a bounded-end (but not
+    bounded-start) view should filter `transactions` to `txn_date <=
+    as_of_date` only, never floor by a start date.
+    """
     benchmark_units = Decimal("0")
     fund_units_held = Decimal("0")
     cash_flows: list[CashFlow] = []
@@ -237,8 +248,8 @@ def compute_position_benchmark_comparison(
             alpha_pct=None,
         )
 
-    benchmark_flows, reason = _simulate_benchmark_cash_flows(
-        transactions, open_holding, _real_value_source(session, benchmark_id)
+    benchmark_flows, reason = simulate_benchmark_cash_flows(
+        transactions, open_holding, real_value_source(session, benchmark_id)
     )
     if reason is None:
         benchmark_result = compute_xirr(benchmark_flows)
@@ -327,12 +338,12 @@ def compute_portfolio_benchmark_comparison(
 
     open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
     txns_by_position = positions_with_transactions(session, positions)
-    value_source = _real_value_source(session, benchmark_id)
+    value_source = real_value_source(session, benchmark_id)
 
     all_benchmark_flows: list[CashFlow] = []
     unavailable = False
     for folio, key in positions:
-        flows, reason = _simulate_benchmark_cash_flows(
+        flows, reason = simulate_benchmark_cash_flows(
             txns_by_position.get((folio, key), []),
             open_holdings.get((folio, key)),
             value_source,
@@ -577,7 +588,7 @@ def compute_portfolio_equity_blended_benchmark_comparison(
         pos = build_position_cash_flows(session, txns, holding)
         fund_cash_flows.extend(pos.cash_flows)
 
-        flows, reason = _simulate_benchmark_cash_flows(txns, holding, value_source)
+        flows, reason = simulate_benchmark_cash_flows(txns, holding, value_source)
         if reason is not None:
             any_unavailable = True
             continue

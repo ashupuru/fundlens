@@ -17,6 +17,8 @@ dependencies = [
     "httpx>=0.27",
     "scipy>=1.13",
     "anthropic>=0.75",
+    "weasyprint>=63.0",
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,9 @@ select = ["E", "F", "I", "UP", "B"]
 # Real-shaped market-data fixtures mirror actual feed lines verbatim, which
 # run long — readability from matching the real format wins here.
 "tests/market_data/*" = ["E501"]
+# Embedded Jinja2/HTML template markup — wrapping mid-tag would hurt template
+# readability more than it helps line length.
+"src/fundlens/reports/yearly_report_html.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI's dependency-injection idiom (Depends()/File()/Form() as defaults)

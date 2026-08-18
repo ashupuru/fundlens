@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 
 from fundlens.compute import service
 from fundlens.compute.benchmark import (
-    _real_value_source,
-    _simulate_benchmark_cash_flows,
     build_blended_series,
     compute_portfolio_benchmark_comparison,
     compute_portfolio_equity_blended_benchmark_comparison,
     compute_position_benchmark_comparison,
     get_all_benchmark_comparisons,
+    real_value_source,
+    simulate_benchmark_cash_flows,
 )
 from fundlens.compute.holdings import HoldingView
 from fundlens.db.models import (
@@ -194,8 +194,8 @@ def test_partial_redemption_liquidates_only_the_sold_fraction(session: Session) 
     _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2023, 4, 1), "120")
     session.commit()
 
-    flows, reason = _simulate_benchmark_cash_flows(
-        [buy, sell], _open_holding("50"), _real_value_source(session, BenchmarkId.NIFTY50_TRI)
+    flows, reason = simulate_benchmark_cash_flows(
+        [buy, sell], _open_holding("50"), real_value_source(session, BenchmarkId.NIFTY50_TRI)
     )
 
     assert reason is None
@@ -218,8 +218,8 @@ def test_dividend_payout_excluded_from_benchmark_timeline(session: Session) -> N
     _add_benchmark_value(session, BenchmarkId.NIFTY50_TRI, date(2024, 1, 1), "130")
     session.commit()
 
-    flows, reason = _simulate_benchmark_cash_flows(
-        [buy, dividend], _open_holding("100"), _real_value_source(session, BenchmarkId.NIFTY50_TRI)
+    flows, reason = simulate_benchmark_cash_flows(
+        [buy, dividend], _open_holding("100"), real_value_source(session, BenchmarkId.NIFTY50_TRI)
     )
 
     assert reason is None

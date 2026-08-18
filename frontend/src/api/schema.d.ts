@@ -293,6 +293,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/yearly.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Yearly Report Json */
+        get: operations["yearly_report_json_reports_yearly_json_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/yearly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Yearly Report Pdf */
+        get: operations["yearly_report_pdf_reports_yearly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/data-quality/summary": {
         parameters: {
             query?: never;
@@ -671,6 +705,19 @@ export interface components {
             equity_cap_breakdown: components["schemas"]["EquityCapBreakdownResponse"];
             /** Schemes Missing Metadata */
             schemes_missing_metadata: number;
+        };
+        /** AllocationDriftSummaryResponse */
+        AllocationDriftSummaryResponse: {
+            /** Persona */
+            persona: string;
+            /** Target Equity Pct */
+            target_equity_pct: number;
+            /** Target Debt Pct */
+            target_debt_pct: number;
+            /** Actual Equity Pct */
+            actual_equity_pct: number | null;
+            /** Actual Debt Pct */
+            actual_debt_pct: number | null;
         };
         /** AmcHoldingResponse */
         AmcHoldingResponse: {
@@ -1051,6 +1098,21 @@ export interface components {
             cost_basis_paise: number;
             /** Average Cost Per Unit */
             average_cost_per_unit: string;
+        };
+        /** FundPerformanceResponse */
+        FundPerformanceResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Amc */
+            amc: string;
+            /** Xirr */
+            xirr: number | null;
+            /** Xirr Reason */
+            xirr_reason: string | null;
         };
         /** FundPositionResponse */
         FundPositionResponse: {
@@ -1501,6 +1563,45 @@ export interface components {
             blocked_reason: string | null;
             /** Omitted Components */
             omitted_components: string[];
+        };
+        /** YearlyReportResponse */
+        YearlyReportResponse: {
+            /** Financial Year */
+            financial_year: string;
+            /** Fy Start */
+            fy_start: string;
+            /** Report End */
+            report_end: string;
+            /** Opening Value Paise */
+            opening_value_paise: number;
+            /** Closing Value Paise */
+            closing_value_paise: number;
+            /** Portfolio Xirr This Year */
+            portfolio_xirr_this_year: number | null;
+            /** Portfolio Xirr This Year Reason */
+            portfolio_xirr_this_year_reason: string | null;
+            /** Portfolio Xirr Since Inception */
+            portfolio_xirr_since_inception: number | null;
+            /** Portfolio Xirr Since Inception Reason */
+            portfolio_xirr_since_inception_reason: string | null;
+            /** Benchmark Id */
+            benchmark_id: string;
+            /** Benchmark Xirr Since Inception */
+            benchmark_xirr_since_inception: number | null;
+            /** Benchmark Xirr Since Inception Reason */
+            benchmark_xirr_since_inception_reason: string | null;
+            /** Alpha Pct Since Inception */
+            alpha_pct_since_inception: number | null;
+            /** Best Funds */
+            best_funds: components["schemas"]["FundPerformanceResponse"][];
+            /** Worst Funds */
+            worst_funds: components["schemas"]["FundPerformanceResponse"][];
+            allocation_drift: components["schemas"]["AllocationDriftSummaryResponse"] | null;
+            /** Estimated Annual Fee Paise */
+            estimated_annual_fee_paise: number;
+            /** Fee Funds Excluded */
+            fee_funds_excluded: number;
+            capital_gains: components["schemas"]["CapitalGainsReportResponse"];
         };
         /** CoverageGapResponse */
         fundlens__api__routers__data_quality__CoverageGapResponse: {
@@ -1964,6 +2065,70 @@ export interface operations {
                 };
                 content: {
                     "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    yearly_report_json_reports_yearly_json_get: {
+        parameters: {
+            query: {
+                /** @description Financial year, e.g. '2024-25' */
+                fy: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YearlyReportResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    yearly_report_pdf_reports_yearly_get: {
+        parameters: {
+            query: {
+                /** @description Financial year, e.g. '2024-25' */
+                fy: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
