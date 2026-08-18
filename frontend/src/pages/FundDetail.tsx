@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Link, useParams } from "react-router-dom";
 import { getFundDetail, type FundDetail } from "../api/client";
+
+const ROLLING_WINDOW_LABELS: Record<number, string> = { 1: "1 year", 3: "3 years", 5: "5 years" };
 
 function formatPaise(paise: number | null | undefined): string {
   if (paise === null || paise === undefined) return "—";
@@ -27,6 +30,16 @@ function formatAum(value: string | null | undefined): string {
 function formatRating(value: number | null | undefined, max: number): string {
   if (value === null || value === undefined) return "—";
   return `${value}/${max}`;
+}
+
+function formatAlphaPp(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}pp`;
+}
+
+function formatConsistency(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `${value.toFixed(0)}%`;
 }
 
 export default function FundDetail() {
@@ -179,6 +192,80 @@ export default function FundDetail() {
                 ))}
               </tbody>
             </table>
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Rolling returns</h2>
+        {detail.rolling_returns.length === 0 ? (
+          <p className="muted">
+            Not enough data to compute rolling returns — needs scheme category metadata and NAV
+            history.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginBottom: 12 }}>
+              Fund CAGR vs category benchmark across monthly-sampled trailing windows. 1-year is
+              informational only — the hold/sell verdict is based on 3yr and 5yr consistency only.
+            </p>
+            <table style={{ marginBottom: 16 }}>
+              <thead>
+                <tr>
+                  <th>Window</th>
+                  <th>Mean alpha</th>
+                  <th>Consistency</th>
+                  <th>Samples</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.rolling_returns.map((w) => (
+                  <tr key={w.years}>
+                    <td>{ROLLING_WINDOW_LABELS[w.years] ?? `${w.years}yr`}</td>
+                    <td>
+                      {w.mean_alpha_pct !== null
+                        ? formatAlphaPp(w.mean_alpha_pct)
+                        : `— (${w.reason ?? "unavailable"})`}
+                    </td>
+                    <td>{formatConsistency(w.consistency_pct)}</td>
+                    <td>{w.sample_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {(() => {
+              const threeYear = detail.rolling_returns.find((w) => w.years === 3);
+              const chartData = (threeYear?.samples ?? []).filter((s) => s.alpha_pct !== null);
+              if (chartData.length < 2) return null;
+              return (
+                <div>
+                  <p className="muted" style={{ marginBottom: 8 }}>
+                    3-year rolling alpha over time
+                  </p>
+                  <div style={{ width: "100%", height: 220 }}>
+                    <ResponsiveContainer>
+                      <LineChart data={chartData}>
+                        <XAxis dataKey="as_of_date" tick={{ fontSize: 11 }} minTickGap={40} />
+                        <YAxis
+                          tickFormatter={(v: number) => `${v.toFixed(0)}pp`}
+                          tick={{ fontSize: 11 }}
+                          width={50}
+                        />
+                        <Tooltip formatter={(value) => formatAlphaPp(Number(value))} />
+                        <Line
+                          type="monotone"
+                          dataKey="alpha_pct"
+                          name="Alpha"
+                          stroke="var(--brand)"
+                          dot={false}
+                          strokeWidth={2}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              );
+            })()}
           </>
         )}
       </div>

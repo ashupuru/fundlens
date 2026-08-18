@@ -6,8 +6,14 @@ building this — see the P1.3 planning discussion): real data only supports
 4 of the original 5 components today.
 
     Component        Original weight   This phase
-    Rolling alpha     30%               kept (compute/rolling_returns.py)
-    Consistency       20%               kept (simplified 2-window proxy)
+    Rolling alpha     30%               kept (compute/rolling_returns.py, true
+                                         monthly-sampled rolling windows as of
+                                         P3 — see that module's docstring)
+    Consistency       20%               kept (win-rate across the same rolling
+                                         windows, pooled over 3yr+5yr only —
+                                         1yr is informational-only, never fed
+                                         into this rubric, see
+                                         rolling_returns.py)
     Cost              20%               narrowed to a binary Direct-vs-
                                          Regular flag (compute/plan_audit.py)
                                          — no free expense-ratio source
@@ -61,8 +67,8 @@ from fundlens.compute.holdings import get_current_holdings
 from fundlens.compute.plan_audit import PlanType, detect_plan_type
 from fundlens.compute.rolling_returns import (
     RollingReturnSummary,
-    compute_trailing_windows,
-    summarize_rolling_returns,
+    compute_rolling_returns,
+    summarize_for_rubric,
 )
 from fundlens.db.models import SchemeMetadata
 from fundlens.tax.friction import TaxFrictionStatement, compute_tax_friction
@@ -149,10 +155,14 @@ def compute_verdict(
 
     rolling: RollingReturnSummary | None = None
     if amfi_code is not None and metadata is not None:
-        windows = compute_trailing_windows(
-            session, amfi_code, metadata.category_raw, metadata.tax_asset_class
+        windows = compute_rolling_returns(
+            session,
+            amfi_code,
+            metadata.category_raw,
+            metadata.tax_asset_class,
+            window_years=(3, 5),
         )
-        rolling = summarize_rolling_returns(windows)
+        rolling = summarize_for_rubric(windows)
 
     if rolling is not None and rolling.mean_alpha_pct is not None:
         # Alpha is a return-delta in percentage points, not a 0-100 score —

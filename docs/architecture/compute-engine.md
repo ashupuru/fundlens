@@ -369,8 +369,8 @@ originally-specified components:
 
 | Component | Original design | What shipped | Weight (default, tunable) |
 |---|---|---|---|
-| Rolling alpha | mean(rolling-window fund XIRR − benchmark XIRR) via §4 | scheme-level 3yr/5yr point-to-point NAV CAGR vs benchmark CAGR (`compute/rolling_returns.py`) — see below for why | 30 |
-| Consistency | % of rolling windows where fund beat benchmark | fraction of the (at most 2) available 3yr/5yr windows beaten | 20 |
+| Rolling alpha | mean(rolling-window fund XIRR − benchmark XIRR) via §4 | scheme-level 3yr/5yr **true rolling** NAV CAGR vs benchmark CAGR (`compute/rolling_returns.py`, upgraded P3/FR-3.3) — see below for why | 30 |
+| Consistency | % of rolling windows where fund beat benchmark | genuine win-rate across every monthly-sampled 3yr/5yr window (P3 upgrade) | 20 |
 | Category fit | actual-vs-target allocation drift contribution (§7) | unchanged — needs P1.4's drift, which is why P1.4 was built first | 15 |
 | Cost | expense ratio percentile vs category peers; direct-vs-regular flag | **narrowed to the binary direct-vs-regular flag alone** (§6) — inherits cost's original weight | 20 |
 | Overlap/redundancy | pairwise holding overlap vs rest of portfolio (FR-5.3) | **omitted entirely** — needs monthly AMC portfolio disclosures, a data source this app doesn't integrate | — |
@@ -378,9 +378,35 @@ originally-specified components:
 **Why NAV-based CAGR, not XIRR, for rolling alpha**: this is scheme-level performance (how has
 the fund itself done over the trailing window), not investor-position performance (which would
 conflate the fund's skill with the specific investor's entry-timing luck) — the same number a
-fund fact sheet reports as "3Y/5Y returns." A true moving-window methodology (many overlapping
-windows, not one snapshot per length) is deferred; this computes a single window ending today for
-each of 3yr/5yr, so "consistency" is a simplified 2-point proxy, not a real rolling win-rate.
+fund fact sheet reports as "3Y/5Y returns."
+
+**Rolling methodology, shipped P3 (FR-3.3)**: `compute/rolling_returns.py::compute_rolling_returns`
+now samples end dates at ~monthly cadence (`dateutil.relativedelta(months=1)`, not
+`timedelta(days=30)`, to avoid calendar drift over decades) from the earliest date at least
+`years` after the scheme's first NAV to the latest available NAV date, computing fund/benchmark
+CAGR at every sample — a genuine rolling series, not the single point-to-point snapshot per
+window-length this module shipped with in P1.3. `consistency_pct` is now a real win-rate across
+however many windows were sampled, not a 2-point proxy. Each scheme's full NAV/benchmark series is
+bulk-fetched once and bisected per sample (same template as §9's `_nav_series_by_scheme` /
+compute/benchmark.py's synthetic value source), so even 20 years of daily NAV data (~240 samples
+per window length) is cheap.
+
+Also ships **1yr** as a third window length (`window_years=(1, 3, 5)` by default) — but
+**1yr is informational only, on the fund detail page, never fed into this rubric**
+(`compute/verdict.py` calls `compute_rolling_returns(..., window_years=(3, 5))` explicitly). The
+rubric's weights were designed around exactly two rolling components (3yr+5yr sharing the 30%
+"rolling_alpha" slot); folding in a noisier, short-horizon window would mean redesigning that
+weight structure for a signal poorly suited to a long-horizon hold/sell judgment. Judgment call,
+confirmed with the user given real verdict-shifting consequences (see next paragraph) — documented
+here rather than silently decided.
+
+**Real-portfolio impact, verified at ship time**: this methodology upgrade — better numbers behind
+the *same* two components, same weights, same renormalization — was checked by diffing
+`GET /verdicts` on the real portfolio before and after: 19 of 33 held funds had `overall_score`
+shift (methodology precision changing, exactly as expected), but **zero verdicts changed HOLD ↔
+SELL**, and the lowest post-change score (46.2) stayed well clear of the 35% sell threshold. Not a
+guarantee this will always be true after future assumption/weight edits — just the honest,
+checked answer for this specific ship.
 
 Weights (and the SELL threshold) live in the `assumption` table (`assumptions/service.py::RubricWeights`),
 not code — user-tunable and versioned per PRD §5.7 — and are **renormalized per-verdict** across
