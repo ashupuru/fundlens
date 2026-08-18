@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { postImportTri, postIngestCas, postIngestCsv, postRebuildLots } from "../api/client";
+import {
+  postImportTri,
+  postIngestCas,
+  postIngestCsv,
+  postRebuildLots,
+  postRefreshNav,
+  type NavRefreshResponse,
+} from "../api/client";
 import type { components } from "../api/schema";
 
 type IngestResult = components["schemas"]["IngestResponse"];
@@ -23,9 +30,22 @@ type Status =
   | { state: "idle" }
   | { state: "working" }
   | { state: "error"; message: string }
-  | { state: "done"; ingest: IngestResult; rebuild: RebuildResult | null };
+  | {
+      state: "done";
+      ingest: IngestResult;
+      rebuild: RebuildResult | null;
+      refresh: NavRefreshResponse | null;
+    };
 
-function IngestSummary({ ingest, rebuild }: { ingest: IngestResult; rebuild: RebuildResult | null }) {
+function IngestSummary({
+  ingest,
+  rebuild,
+  refresh,
+}: {
+  ingest: IngestResult;
+  rebuild: RebuildResult | null;
+  refresh: NavRefreshResponse | null;
+}) {
   return (
     <div style={{ marginTop: 12 }}>
       <p>
@@ -82,6 +102,15 @@ function IngestSummary({ ingest, rebuild }: { ingest: IngestResult; rebuild: Reb
           )}
         </p>
       )}
+      {refresh && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          NAV refresh: {refresh.backfilled_schemes} new scheme
+          {refresh.backfilled_schemes === 1 ? "" : "s"} backfilled ({refresh.backfilled_rows} row
+          {refresh.backfilled_rows === 1 ? "" : "s"}), {refresh.amfi_refresh_rows} latest-NAV row
+          {refresh.amfi_refresh_rows === 1 ? "" : "s"} updated
+          {!refresh.amfi_refresh_ok && ` — AMFI refresh failed: ${refresh.amfi_error}`}.
+        </p>
+      )}
     </div>
   );
 }
@@ -107,7 +136,8 @@ export default function Upload() {
     try {
       const ingest = await postIngestCas(casFile, casPassword);
       const rebuild = await postRebuildLots().catch(() => null);
-      setCasStatus({ state: "done", ingest, rebuild });
+      const refresh = await postRefreshNav().catch(() => null);
+      setCasStatus({ state: "done", ingest, rebuild, refresh });
       setCasPassword("");
       setCasFile(null);
     } catch (err) {
@@ -125,7 +155,8 @@ export default function Upload() {
     try {
       const ingest = await postIngestCsv(csvFile);
       const rebuild = await postRebuildLots().catch(() => null);
-      setCsvStatus({ state: "done", ingest, rebuild });
+      const refresh = await postRefreshNav().catch(() => null);
+      setCsvStatus({ state: "done", ingest, rebuild, refresh });
       setCsvFile(null);
     } catch (err) {
       setCsvStatus({
@@ -186,7 +217,11 @@ export default function Upload() {
           <p style={{ color: "var(--negative)", marginTop: 8 }}>{casStatus.message}</p>
         )}
         {casStatus.state === "done" && (
-          <IngestSummary ingest={casStatus.ingest} rebuild={casStatus.rebuild} />
+          <IngestSummary
+            ingest={casStatus.ingest}
+            rebuild={casStatus.rebuild}
+            refresh={casStatus.refresh}
+          />
         )}
       </div>
 
@@ -213,7 +248,11 @@ export default function Upload() {
           <p style={{ color: "var(--negative)", marginTop: 8 }}>{csvStatus.message}</p>
         )}
         {csvStatus.state === "done" && (
-          <IngestSummary ingest={csvStatus.ingest} rebuild={csvStatus.rebuild} />
+          <IngestSummary
+            ingest={csvStatus.ingest}
+            rebuild={csvStatus.rebuild}
+            refresh={csvStatus.refresh}
+          />
         )}
       </div>
 

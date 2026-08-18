@@ -3,8 +3,10 @@ import {
   postDezervCommit,
   postDezervPreview,
   postRebuildLots,
+  postRefreshNav,
   type DezervCommitResult,
   type DezervPreview,
+  type NavRefreshResponse,
 } from "../api/client";
 import type { components } from "../api/schema";
 
@@ -17,7 +19,12 @@ type Stage =
   | { step: "previewing" }
   | { step: "preview"; file: File; preview: DezervPreview; mapping: Mapping }
   | { step: "committing"; file: File; preview: DezervPreview; mapping: Mapping }
-  | { step: "done"; commit: DezervCommitResult; rebuild: RebuildLotsResult | null }
+  | {
+      step: "done";
+      commit: DezervCommitResult;
+      rebuild: RebuildLotsResult | null;
+      refresh: NavRefreshResponse | null;
+    }
   | { step: "error"; message: string };
 
 function initialMapping(preview: DezervPreview): Mapping {
@@ -50,10 +57,12 @@ export default function DezervImport() {
       }
       const commit = await postDezervCommit(file, asNullable);
       let rebuild: RebuildLotsResult | null = null;
+      let refresh: NavRefreshResponse | null = null;
       if (commit.inserted_count > 0) {
         rebuild = await postRebuildLots();
+        refresh = await postRefreshNav().catch(() => null);
       }
-      setStage({ step: "done", commit, rebuild });
+      setStage({ step: "done", commit, rebuild, refresh });
     } catch (err: unknown) {
       setStage({ step: "error", message: err instanceof Error ? err.message : "Unknown error" });
     }
@@ -93,7 +102,9 @@ export default function DezervImport() {
         <MappingReview stage={stage} onConfirm={handleConfirm} />
       )}
 
-      {stage.step === "done" && <ImportSummary commit={stage.commit} rebuild={stage.rebuild} />}
+      {stage.step === "done" && (
+        <ImportSummary commit={stage.commit} rebuild={stage.rebuild} refresh={stage.refresh} />
+      )}
     </div>
   );
 }
@@ -194,9 +205,11 @@ function MappingReview({
 function ImportSummary({
   commit,
   rebuild,
+  refresh,
 }: {
   commit: DezervCommitResult;
   rebuild: RebuildLotsResult | null;
+  refresh: NavRefreshResponse | null;
 }) {
   const skippedReasons = Object.entries(commit.skipped_reasons);
   const crossSourceDuplicates = Object.entries(commit.cross_source_duplicates);
@@ -279,6 +292,15 @@ function ImportSummary({
             ` ${rebuild.gap_filled.length} scheme(s) had an assumed opening position ` +
               "(this export doesn't cover the scheme's full history; cost basis flagged " +
               "unknown for that portion)."}
+        </p>
+      )}
+      {refresh && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          NAV refresh: {refresh.backfilled_schemes} new scheme
+          {refresh.backfilled_schemes === 1 ? "" : "s"} backfilled ({refresh.backfilled_rows} row
+          {refresh.backfilled_rows === 1 ? "" : "s"}), {refresh.amfi_refresh_rows} latest-NAV row
+          {refresh.amfi_refresh_rows === 1 ? "" : "s"} updated
+          {!refresh.amfi_refresh_ok && ` — AMFI refresh failed: ${refresh.amfi_error}`}.
         </p>
       )}
     </div>
