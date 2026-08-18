@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Area,
   AreaChart,
@@ -91,6 +92,9 @@ function formatDriftPct(value: number | null | undefined): string {
 }
 
 function AssetAllocationSection({ groups }: { groups: CategoryGroup[] | null }) {
+  const navigate = useNavigate();
+  const goToFunds = (label: string) => navigate(`/funds?category=${encodeURIComponent(label)}`);
+
   if (groups === null) {
     return (
       <div className="card">
@@ -125,7 +129,12 @@ function AssetAllocationSection({ groups }: { groups: CategoryGroup[] | null }) 
                 paddingAngle={2}
               >
                 {groups.map((g, i) => (
-                  <Cell key={g.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  <Cell
+                    key={g.label}
+                    fill={CHART_COLORS[i % CHART_COLORS.length]}
+                    cursor="pointer"
+                    onClick={() => goToFunds(g.label)}
+                  />
                 ))}
               </Pie>
               <Tooltip formatter={(value) => `${Number(value).toFixed(1)}%`} />
@@ -142,7 +151,12 @@ function AssetAllocationSection({ groups }: { groups: CategoryGroup[] | null }) 
           </thead>
           <tbody>
             {groups.map((g, i) => (
-              <tr key={g.label}>
+              <tr
+                key={g.label}
+                onClick={() => goToFunds(g.label)}
+                style={{ cursor: "pointer" }}
+                title={`View funds in ${g.label}`}
+              >
                 <td>
                   <span
                     style={{
@@ -170,6 +184,9 @@ function AssetAllocationSection({ groups }: { groups: CategoryGroup[] | null }) 
 }
 
 function CategoryAllocationSection({ groups }: { groups: CategoryGroup[] | null }) {
+  const navigate = useNavigate();
+  const goToFunds = (label: string) => navigate(`/funds?category=${encodeURIComponent(label)}`);
+
   if (groups === null) {
     return (
       <div className="card">
@@ -201,11 +218,14 @@ function CategoryAllocationSection({ groups }: { groups: CategoryGroup[] | null 
         {groups.map((g, i) => (
           <div
             key={g.label}
+            onClick={() => goToFunds(g.label)}
+            title={`View funds in ${g.label}`}
             style={{
               background: CHART_COLORS[i % CHART_COLORS.length],
               borderRadius: "var(--radius-sm)",
               padding: "12px 14px",
               color: "#fff",
+              cursor: "pointer",
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.9 }}>{g.label}</div>
@@ -760,6 +780,9 @@ function FundAllocationSection({
 }
 
 function AmcAllocationSection({ groups, loaded }: { groups: CategoryGroup[] | null; loaded: boolean }) {
+  const navigate = useNavigate();
+  const goToFunds = (label: string) => navigate(`/funds?amc=${encodeURIComponent(label)}`);
+
   if (!loaded) {
     return (
       <div className="card">
@@ -791,7 +814,12 @@ function AmcAllocationSection({ groups, loaded }: { groups: CategoryGroup[] | nu
             <Tooltip formatter={(value) => formatPaise(Number(value))} />
             <Bar dataKey="current_value_paise">
               {sorted.map((g, i) => (
-                <Cell key={g.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell
+                  key={g.label}
+                  fill={CHART_COLORS[i % CHART_COLORS.length]}
+                  cursor="pointer"
+                  onClick={() => goToFunds(g.label)}
+                />
               ))}
             </Bar>
           </BarChart>

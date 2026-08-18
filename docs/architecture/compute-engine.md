@@ -530,6 +530,17 @@ for free. Deliberately lives in `compute/metrics.py` next to `compute_category_b
 `metrics.py`, so pulling `metrics.py`'s NAV-pricing logic the other way would create a circular
 import; `metrics.py` already owns both `latest_nav` and the grouped-breakdown pattern this needed.
 
+**Per-fund category labels** (`HoldingMetricsResponse.category_broad`/`category_specific`,
+`GET /portfolio/metrics`) reuse the same Groww-then-AMFI resolution as `compute_category_breakdown`
+via two shared helpers (`_category_lookup_maps`, `_resolve_category_label`) and a new
+`fund_category_labels(session, holdings)` that batch-resolves both levels per `(folio,
+scheme_key)` in one pass — not a second, independent lookup. Added so the Dashboard's Asset/
+Category/AMC breakdown charts can drill down to `/funds?category=<label>` /
+`/funds?amc=<label>` and have the Funds page filter on the exact same label the chart showed,
+rather than two code paths that could silently drift. Scoped to currently-open holdings only,
+same limitation as `compute_category_breakdown` (§9 above) — a fully-exited position has no
+`open_holding` to read an `amfi_code` from, so it reports `"Uncategorized"` rather than guessing.
+
 ## 10. Goal Planning (PRD FR-8.1/8.2, shipped P2.4 — `compute/goal.py`, `goals/`)
 
 `Goal` is persisted CRUD (name, target amount, target date — like `RiskProfile`, current state

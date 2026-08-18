@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   getDirectVsRegularAudit,
   getHoldingMetrics,
@@ -89,6 +89,9 @@ export default function Funds() {
     key: "currentValue",
     direction: "desc",
   });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const amcFilter = searchParams.get("amc");
+  const categoryFilter = searchParams.get("category");
 
   useEffect(() => {
     Promise.all([
@@ -165,7 +168,23 @@ export default function Funds() {
     );
   }
 
-  const sorted = [...rows].sort((a, b) => {
+  // Pre-filtering from a Dashboard chart drill-down (?amc= / ?category=) --
+  // category matches either the broad or specific label, since both the
+  // Asset Allocation (broad) and Category Allocation (specific) charts link
+  // here and the URL alone doesn't say which level a label came from.
+  const filteredRows = rows.filter((r) => {
+    if (amcFilter && r.metrics?.amc !== amcFilter) return false;
+    if (
+      categoryFilter &&
+      r.metrics?.category_broad !== categoryFilter &&
+      r.metrics?.category_specific !== categoryFilter
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filteredRows].sort((a, b) => {
     const av = sortValue(a, sort.key);
     const bv = sortValue(b, sort.key);
     const cmp = av < bv ? -1 : av > bv ? 1 : 0;
@@ -187,6 +206,22 @@ export default function Funds() {
   return (
     <div>
       <h1>Funds</h1>
+
+      {(amcFilter || categoryFilter) && (
+        <p className="muted" style={{ marginBottom: 16 }}>
+          Filtered to {amcFilter ? `AMC "${amcFilter}"` : `category "${categoryFilter}"`} —{" "}
+          {filteredRows.length} of {rows.length} funds.{" "}
+          <a
+            href="/funds"
+            onClick={(e) => {
+              e.preventDefault();
+              setSearchParams({});
+            }}
+          >
+            Clear filter
+          </a>
+        </p>
+      )}
 
       <div className="card-grid">
         <div className="stat">
@@ -211,9 +246,11 @@ export default function Funds() {
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {sorted.length === 0 ? (
         <div className="card">
-          <p className="muted">No holdings found.</p>
+          <p className="muted">
+            {rows.length === 0 ? "No holdings found." : "No funds match this filter."}
+          </p>
         </div>
       ) : (
         <div className="card">

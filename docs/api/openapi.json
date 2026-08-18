@@ -3390,6 +3390,14 @@
             "type": "string",
             "title": "Amc"
           },
+          "category_broad": {
+            "type": "string",
+            "title": "Category Broad"
+          },
+          "category_specific": {
+            "type": "string",
+            "title": "Category Specific"
+          },
           "invested_paise": {
             "type": "integer",
             "title": "Invested Paise"
@@ -3497,6 +3505,8 @@
           "folio",
           "scheme_name",
           "amc",
+          "category_broad",
+          "category_specific",
           "invested_paise",
           "received_paise",
           "current_value_paise",

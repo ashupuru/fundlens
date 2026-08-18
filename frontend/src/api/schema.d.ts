@@ -1252,6 +1252,10 @@ export interface components {
             scheme_name: string;
             /** Amc */
             amc: string;
+            /** Category Broad */
+            category_broad: string;
+            /** Category Specific */
+            category_specific: string;
             /** Invested Paise */
             invested_paise: number;
             /** Received Paise */

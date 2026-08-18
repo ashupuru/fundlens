@@ -111,6 +111,8 @@ class HoldingMetricsResponse(BaseModel):
     folio: str
     scheme_name: str
     amc: str
+    category_broad: str
+    category_specific: str
     invested_paise: int
     received_paise: int
     current_value_paise: int | None
@@ -142,6 +144,8 @@ def holding_metrics(session: Session = Depends(get_session)) -> list[HoldingMetr
             folio=m.folio,
             scheme_name=m.scheme_name,
             amc=m.amc,
+            category_broad=m.category_broad,
+            category_specific=m.category_specific,
             invested_paise=m.invested_paise,
             received_paise=m.received_paise,
             current_value_paise=m.current_value_paise,
