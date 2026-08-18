@@ -706,6 +706,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/retirement/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Retirement Profile */
+        get: operations["get_retirement_profile_retirement_profile_get"];
+        put?: never;
+        /** Post Retirement Profile */
+        post: operations["post_retirement_profile_retirement_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retirement/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Retirement Projection */
+        get: operations["get_retirement_projection_retirement_projection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1480,6 +1515,96 @@ export interface components {
             amfi_refresh_ok: boolean;
             /** Amfi Error */
             amfi_error: string | null;
+        };
+        /** RetirementProfileRequest */
+        RetirementProfileRequest: {
+            /** Current Age */
+            current_age?: number | null;
+            /** Retirement Age */
+            retirement_age?: number | null;
+            /** Life Expectancy */
+            life_expectancy?: number | null;
+            /** Annual Investment Rupees */
+            annual_investment_rupees?: string | null;
+            /** Annual Investment Step Up Pct */
+            annual_investment_step_up_pct?: string | null;
+            /** Monthly Withdrawal Today Rupees */
+            monthly_withdrawal_today_rupees?: string | null;
+            /** Post Retirement Return Pct */
+            post_retirement_return_pct?: string | null;
+        };
+        /** RetirementProfileResponse */
+        RetirementProfileResponse: {
+            /** Current Age */
+            current_age: number | null;
+            /** Retirement Age */
+            retirement_age: number | null;
+            /** Life Expectancy */
+            life_expectancy: number | null;
+            /** Annual Investment Paise */
+            annual_investment_paise: number | null;
+            /** Annual Investment Step Up Pct */
+            annual_investment_step_up_pct: string | null;
+            /** Monthly Withdrawal Today Paise */
+            monthly_withdrawal_today_paise: number | null;
+            /** Post Retirement Return Pct */
+            post_retirement_return_pct: string | null;
+        };
+        /** RetirementProjectionResponse */
+        RetirementProjectionResponse: {
+            /** Reason */
+            reason: string | null;
+            /** Current Age */
+            current_age: number | null;
+            /** Retirement Age */
+            retirement_age: number | null;
+            /** Life Expectancy */
+            life_expectancy: number | null;
+            /** Years To Retirement */
+            years_to_retirement: number | null;
+            /** Starting Corpus Paise */
+            starting_corpus_paise: number | null;
+            /** Blended Return Pct */
+            blended_return_pct: string | null;
+            /** Post Retirement Return Pct */
+            post_retirement_return_pct: string | null;
+            /** Inflation Pct */
+            inflation_pct: string | null;
+            /** Corpus At Retirement Paise */
+            corpus_at_retirement_paise: number | null;
+            /** Required Corpus At Retirement Paise */
+            required_corpus_at_retirement_paise: number | null;
+            /** Surplus Or Shortfall Paise */
+            surplus_or_shortfall_paise: number | null;
+            /** Readiness Pct */
+            readiness_pct: number | null;
+            /** Monthly Withdrawal Today Paise */
+            monthly_withdrawal_today_paise: number | null;
+            /** First Year Monthly Withdrawal Paise */
+            first_year_monthly_withdrawal_paise: number | null;
+            /** Depletion Age */
+            depletion_age: number | null;
+            /** Terminal Corpus Paise */
+            terminal_corpus_paise: number | null;
+            /** Years */
+            years: components["schemas"]["RetirementYearResponse"][];
+        };
+        /** RetirementYearResponse */
+        RetirementYearResponse: {
+            /** Age */
+            age: number;
+            /** Phase */
+            phase: string;
+            /** Opening Corpus Paise */
+            opening_corpus_paise: number;
+            /** Investment Paise */
+            investment_paise: number;
+            /** Return Paise */
+            return_paise: number;
+            /** Withdrawal Paise */
+            withdrawal_paise: number;
+            /** Closing Corpus Paise */
+            closing_corpus_paise: number;
         };
         /** RiskAdjustedWindowResponse */
         RiskAdjustedWindowResponse: {
@@ -3048,6 +3173,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retirement_profile_retirement_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementProfileResponse"];
+                };
+            };
+        };
+    };
+    post_retirement_profile_retirement_profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetirementProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retirement_projection_retirement_projection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementProjectionResponse"];
                 };
             };
         };

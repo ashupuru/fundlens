@@ -386,6 +386,22 @@ class RiskProfile(Base):
     drawdown_tolerance: Mapped[str | None] = mapped_column(String(20))
     income_stability: Mapped[str | None] = mapped_column(String(20))
     has_dependents: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Retirement projection (compute/retirement.py, compute-engine.md §16).
+    # All nullable: the projection reports reason="retirement_profile_incomplete"
+    # rather than guessing at any of these, matching compute/glide_path.py's
+    # "no_horizon_set" precedent.
+    current_age: Mapped[int | None] = mapped_column(Integer)
+    retirement_age: Mapped[int | None] = mapped_column(Integer)
+    life_expectancy: Mapped[int | None] = mapped_column(Integer)
+    annual_investment_paise: Mapped[int | None] = mapped_column(Integer)
+    annual_investment_step_up_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # In *today's* rupees -- inflated to the retirement year by the engine, so
+    # the UI can show today's purchasing power alongside the nominal figure.
+    monthly_withdrawal_today_paise: Mapped[int | None] = mapped_column(Integer)
+    # None => fall back to the blended pre-retirement rate.
+    post_retirement_return_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )

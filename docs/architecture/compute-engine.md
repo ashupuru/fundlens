@@ -824,3 +824,63 @@ identical-looking transactions need an arbitrary insertion-order tiebreak), this
 `trade_id` is genuinely unique per row (real-data-verified: no repeats across 172 real rows).
 Records are processed in `(isin, txn_date, trade_id)` order, so sequence/ordinal assignment is
 deterministic and re-derivable from the source data itself, not just stable-by-accident.
+
+## 16. Retirement Projection (shipped — `compute/retirement.py`)
+
+A year-by-year simulation of the **whole portfolio** through two phases — accumulation
+(`current_age` → `retirement_age`) then decumulation (`retirement_age` → `life_expectancy`) —
+answering "is the current investment rate enough to fund retirement, and until what age does the
+corpus last?"
+
+**Why this is a separate engine from §10 Goal Planning**, rather than another Goal type. Goal
+planning evaluates a *closed-form* future value at a single point in time. Retirement is
+inherently *sequential*: each year's closing balance is the next year's opening balance, and a
+withdrawal permanently reduces the base every later year compounds on. No closed form expresses
+that, so the two are genuinely different computations. They do share their return assumption via
+the extracted `compute/goal.py::blended_expected_return_pct` (target-allocation-weighted), so the
+two engines can never disagree about what rate a given profile implies — the same
+"extract on second caller" move §9 and §15 already made.
+
+**Inputs live on the existing `RiskProfile` singleton** (new nullable columns, migration
+`7d1eea46c88e`) rather than a new table — it's already the app's "about you" record. All
+nullable, and the projection returns `reason="retirement_profile_incomplete"` with every
+numeric field `None` rather than projecting from guessed inputs, matching §13 glide-path's
+`"no_horizon_set"` precedent. Two further refusal cases are reported the same way rather than
+producing nonsense: current age at/past retirement age, and life expectancy not after retirement
+age. **`POST /retirement/profile` deliberately does not touch persona/target allocation, and
+`POST /risk-profile` does not touch the retirement fields** — the two forms write to the same row,
+so folding them into one setter would let saving either one silently wipe the other's inputs.
+
+**Starting corpus is the real portfolio**, read from `compute/metrics.py::compute_portfolio_metrics`
+— not a manually re-entered number that would immediately go stale against actual holdings.
+
+**Ordering convention within each year**: returns accrue on the *opening* balance only, then the
+year's investment is added (or withdrawal taken). Contributions are therefore effectively
+end-of-year (ordinary annuity), matching `compute/goal.py::_required_monthly_sip_paise`'s own
+convention — the conservative reading, since crediting a full year's return to money invested
+during that year would overstate the corpus.
+
+**Today's money vs. the nominal retirement-year figure** are reported as two distinct numbers
+(`monthly_withdrawal_today_paise` / `first_year_monthly_withdrawal_paise`): the user enters what
+they'd need per month *today*, and the engine inflates it over `years_to_retirement`. Conflating
+the two is the single most misleading thing a retirement projection can do, so both are surfaced.
+
+**Required corpus** is the present value at the post-retirement return of the whole
+inflation-escalating withdrawal stream — the growing-annuity PV,
+`W/(r−g) · (1 − ((1+g)/(1+r))^n)`. That closed form divides by zero when `r == g`, which is a
+perfectly plausible input (post-retirement return set equal to inflation), so that case is
+branched explicitly to its correct finite value `n·W/(1+r)` rather than crashing. Both branches
+are cross-checked in tests against an independently-written discounting loop.
+
+**Depletion** clamps the corpus at zero, records `depletion_age`, and stops projecting — a
+negative corpus isn't a meaningful figure to display, and every later year would just repeat
+"still zero". `surplus_or_shortfall` is the difference of the *rounded* projected and required
+figures (not the rounding of their difference) so the three numbers shown together reconcile
+exactly on screen, the same requirement the Funds page's headline stats already hold to.
+
+**Deliberately deferred**, each its own follow-up phase: lump-sum life events against the same
+corpus (existing `Goal` rows feed in as withdrawals rather than inventing a second event
+concept), conservative/base/optimistic scenarios, reverse planning ("what SIP do I need?"),
+interactive what-if, Monte Carlo sequence-of-returns risk on the retirement corpus, and the
+healthcare / emergency-reserve / tax / terminal-corpus layers. The projection is pre-tax, and
+the UI says so alongside every assumption it used.

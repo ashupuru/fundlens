@@ -49,6 +49,19 @@ def _required_monthly_sip_paise(
     return _round_paise(gap_paise / growth_factor)
 
 
+def blended_expected_return_pct(
+    risk_profile: RiskProfile, assumptions: GoalAssumptions
+) -> Decimal:
+    """Portfolio-level expected return, weighted by the user's *target*
+    allocation (not current drift) -- shared with compute/retirement.py so
+    the two projection engines can never disagree on "what return are we
+    assuming" for the same profile."""
+    return (
+        risk_profile.target_equity_pct / 100 * assumptions.expected_equity_return_pct
+        + risk_profile.target_debt_pct / 100 * assumptions.expected_debt_return_pct
+    )
+
+
 @dataclass(frozen=True)
 class SensitivityPoint:
     return_pct: Decimal
@@ -93,10 +106,7 @@ def compute_goal_projection(
 
     years = Decimal(str((goal.target_date - date.today()).days / 365.0))
 
-    blended_return_pct = (
-        risk_profile.target_equity_pct / 100 * assumptions.expected_equity_return_pct
-        + risk_profile.target_debt_pct / 100 * assumptions.expected_debt_return_pct
-    )
+    blended_return_pct = blended_expected_return_pct(risk_profile, assumptions)
 
     inflated_target_paise = _round_paise(
         _fv_lump_sum(goal.target_amount_paise, assumptions.inflation_pct, years)

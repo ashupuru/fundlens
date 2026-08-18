@@ -103,6 +103,46 @@ export async function setRiskProfile(request: {
   return response.json() as Promise<RiskProfile>;
 }
 
+export type RetirementProfile = components["schemas"]["RetirementProfileResponse"];
+export type RetirementProjection = components["schemas"]["RetirementProjectionResponse"];
+export type RetirementYear = components["schemas"]["RetirementYearResponse"];
+
+export async function getRetirementProfile(): Promise<RetirementProfile> {
+  const response = await fetch(`${API_BASE_URL}/retirement/profile`);
+  if (!response.ok) {
+    throw new Error(`Failed to load retirement profile: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RetirementProfile>;
+}
+
+export async function setRetirementProfile(request: {
+  current_age?: number | null;
+  retirement_age?: number | null;
+  life_expectancy?: number | null;
+  annual_investment_rupees?: string | null;
+  annual_investment_step_up_pct?: string | null;
+  monthly_withdrawal_today_rupees?: string | null;
+  post_retirement_return_pct?: string | null;
+}): Promise<RetirementProfile> {
+  const response = await fetch(`${API_BASE_URL}/retirement/profile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to save retirement profile: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RetirementProfile>;
+}
+
+export async function getRetirementProjection(): Promise<RetirementProjection> {
+  const response = await fetch(`${API_BASE_URL}/retirement/projection`);
+  if (!response.ok) {
+    throw new Error(`Failed to load retirement projection: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RetirementProjection>;
+}
+
 type PortfolioBenchmarkComparisonResponse =
   operations["portfolio_comparison_benchmarks_comparison_portfolio_get"]["responses"][200]["content"]["application/json"];
 

@@ -19,6 +19,7 @@ from fundlens.api.routers import (
     market_data,
     portfolio,
     reports,
+    retirement,
     verdict,
     zerodha,
 )
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(verdict.router)
     app.include_router(ai.router)
     app.include_router(goals.router)
+    app.include_router(retirement.router)
     return app
 
 

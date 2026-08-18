@@ -1539,6 +1539,87 @@
           }
         }
       }
+    },
+    "/retirement/profile": {
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Get Retirement Profile",
+        "operationId": "get_retirement_profile_retirement_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementProfileResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Post Retirement Profile",
+        "operationId": "post_retirement_profile_retirement_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetirementProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/retirement/projection": {
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Get Retirement Projection",
+        "operationId": "get_retirement_projection_retirement_projection_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementProjectionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4157,6 +4238,444 @@
           "amfi_error"
         ],
         "title": "RefreshResponse"
+      },
+      "RetirementProfileRequest": {
+        "properties": {
+          "current_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Age"
+          },
+          "retirement_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retirement Age"
+          },
+          "life_expectancy": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Life Expectancy"
+          },
+          "annual_investment_rupees": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Investment Rupees"
+          },
+          "annual_investment_step_up_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Investment Step Up Pct"
+          },
+          "monthly_withdrawal_today_rupees": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Withdrawal Today Rupees"
+          },
+          "post_retirement_return_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Retirement Return Pct"
+          }
+        },
+        "type": "object",
+        "title": "RetirementProfileRequest"
+      },
+      "RetirementProfileResponse": {
+        "properties": {
+          "current_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Age"
+          },
+          "retirement_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retirement Age"
+          },
+          "life_expectancy": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Life Expectancy"
+          },
+          "annual_investment_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Investment Paise"
+          },
+          "annual_investment_step_up_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Investment Step Up Pct"
+          },
+          "monthly_withdrawal_today_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Withdrawal Today Paise"
+          },
+          "post_retirement_return_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Retirement Return Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_age",
+          "retirement_age",
+          "life_expectancy",
+          "annual_investment_paise",
+          "annual_investment_step_up_pct",
+          "monthly_withdrawal_today_paise",
+          "post_retirement_return_pct"
+        ],
+        "title": "RetirementProfileResponse"
+      },
+      "RetirementProjectionResponse": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "current_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Age"
+          },
+          "retirement_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retirement Age"
+          },
+          "life_expectancy": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Life Expectancy"
+          },
+          "years_to_retirement": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Years To Retirement"
+          },
+          "starting_corpus_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starting Corpus Paise"
+          },
+          "blended_return_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blended Return Pct"
+          },
+          "post_retirement_return_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Retirement Return Pct"
+          },
+          "inflation_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inflation Pct"
+          },
+          "corpus_at_retirement_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corpus At Retirement Paise"
+          },
+          "required_corpus_at_retirement_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Corpus At Retirement Paise"
+          },
+          "surplus_or_shortfall_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Surplus Or Shortfall Paise"
+          },
+          "readiness_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readiness Pct"
+          },
+          "monthly_withdrawal_today_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monthly Withdrawal Today Paise"
+          },
+          "first_year_monthly_withdrawal_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Year Monthly Withdrawal Paise"
+          },
+          "depletion_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depletion Age"
+          },
+          "terminal_corpus_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Corpus Paise"
+          },
+          "years": {
+            "items": {
+              "$ref": "#/components/schemas/RetirementYearResponse"
+            },
+            "type": "array",
+            "title": "Years"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "current_age",
+          "retirement_age",
+          "life_expectancy",
+          "years_to_retirement",
+          "starting_corpus_paise",
+          "blended_return_pct",
+          "post_retirement_return_pct",
+          "inflation_pct",
+          "corpus_at_retirement_paise",
+          "required_corpus_at_retirement_paise",
+          "surplus_or_shortfall_paise",
+          "readiness_pct",
+          "monthly_withdrawal_today_paise",
+          "first_year_monthly_withdrawal_paise",
+          "depletion_age",
+          "terminal_corpus_paise",
+          "years"
+        ],
+        "title": "RetirementProjectionResponse"
+      },
+      "RetirementYearResponse": {
+        "properties": {
+          "age": {
+            "type": "integer",
+            "title": "Age"
+          },
+          "phase": {
+            "type": "string",
+            "title": "Phase"
+          },
+          "opening_corpus_paise": {
+            "type": "integer",
+            "title": "Opening Corpus Paise"
+          },
+          "investment_paise": {
+            "type": "integer",
+            "title": "Investment Paise"
+          },
+          "return_paise": {
+            "type": "integer",
+            "title": "Return Paise"
+          },
+          "withdrawal_paise": {
+            "type": "integer",
+            "title": "Withdrawal Paise"
+          },
+          "closing_corpus_paise": {
+            "type": "integer",
+            "title": "Closing Corpus Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "age",
+          "phase",
+          "opening_corpus_paise",
+          "investment_paise",
+          "return_paise",
+          "withdrawal_paise",
+          "closing_corpus_paise"
+        ],
+        "title": "RetirementYearResponse"
       },
       "RiskAdjustedWindowResponse": {
         "properties": {

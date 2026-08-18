@@ -57,6 +57,45 @@ def set_risk_profile(
     profile.drawdown_tolerance = drawdown_tolerance
     profile.income_stability = income_stability
     profile.has_dependents = has_dependents
+    # Deliberately does NOT touch the retirement fields: they're owned by
+    # set_retirement_profile below and edited from a different form. This
+    # endpoint replaces every field it owns, so folding them in here would
+    # silently wipe a filled-in retirement plan whenever the allocation
+    # form was saved.
+    profile.updated_at = datetime.now(UTC).replace(tzinfo=None)
+    session.commit()
+    return profile
+
+
+def set_retirement_profile(
+    session: Session,
+    current_age: int | None = None,
+    retirement_age: int | None = None,
+    life_expectancy: int | None = None,
+    annual_investment_paise: int | None = None,
+    annual_investment_step_up_pct: Decimal | None = None,
+    monthly_withdrawal_today_paise: int | None = None,
+    post_retirement_return_pct: Decimal | None = None,
+) -> RiskProfile:
+    """Updates only the retirement-projection inputs (compute/retirement.py),
+    leaving persona/target allocation untouched -- the two live on the same
+    singleton row but are edited from separate forms.
+
+    Requires a risk profile to already exist: target allocation is what the
+    projection's expected return is derived from, so there's nothing
+    meaningful to project against without it.
+    """
+    profile = session.get(RiskProfile, _SINGLETON_ID)
+    if profile is None:
+        raise ValueError("Set a risk profile first — the return assumption is derived from it")
+
+    profile.current_age = current_age
+    profile.retirement_age = retirement_age
+    profile.life_expectancy = life_expectancy
+    profile.annual_investment_paise = annual_investment_paise
+    profile.annual_investment_step_up_pct = annual_investment_step_up_pct
+    profile.monthly_withdrawal_today_paise = monthly_withdrawal_today_paise
+    profile.post_retirement_return_pct = post_retirement_return_pct
     profile.updated_at = datetime.now(UTC).replace(tzinfo=None)
     session.commit()
     return profile
