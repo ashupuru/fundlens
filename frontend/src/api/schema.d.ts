@@ -1087,6 +1087,8 @@ export interface components {
             holdings: components["schemas"]["FundHoldingResponse"][];
             /** Similar Funds */
             similar_funds: components["schemas"]["SimilarFundResponse"][];
+            /** Rolling Returns */
+            rolling_returns: components["schemas"]["RollingReturnWindowResponse"][];
         };
         /** FundHoldingResponse */
         FundHoldingResponse: {
@@ -1393,6 +1395,28 @@ export interface components {
             has_dependents: boolean | null;
             /** Updated At */
             updated_at: string;
+        };
+        /** RollingReturnWindowResponse */
+        RollingReturnWindowResponse: {
+            /** Years */
+            years: number;
+            /** Mean Alpha Pct */
+            mean_alpha_pct: number | null;
+            /** Consistency Pct */
+            consistency_pct: number | null;
+            /** Sample Count */
+            sample_count: number;
+            /** Reason */
+            reason: string | null;
+            /** Samples */
+            samples: components["schemas"]["RollingWindowSampleResponse"][];
+        };
+        /** RollingWindowSampleResponse */
+        RollingWindowSampleResponse: {
+            /** As Of Date */
+            as_of_date: string;
+            /** Alpha Pct */
+            alpha_pct: number | null;
         };
         /** RubricComponentResponse */
         RubricComponentResponse: {

@@ -2873,6 +2873,13 @@
             },
             "type": "array",
             "title": "Similar Funds"
+          },
+          "rolling_returns": {
+            "items": {
+              "$ref": "#/components/schemas/RollingReturnWindowResponse"
+            },
+            "type": "array",
+            "title": "Rolling Returns"
           }
         },
         "type": "object",
@@ -2897,7 +2904,8 @@
           "metadata_available",
           "your_position",
           "holdings",
-          "similar_funds"
+          "similar_funds",
+          "rolling_returns"
         ],
         "title": "FundDetailResponse"
       },
@@ -3925,6 +3933,93 @@
           "updated_at"
         ],
         "title": "RiskProfileResponse"
+      },
+      "RollingReturnWindowResponse": {
+        "properties": {
+          "years": {
+            "type": "integer",
+            "title": "Years"
+          },
+          "mean_alpha_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Alpha Pct"
+          },
+          "consistency_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consistency Pct"
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/RollingWindowSampleResponse"
+            },
+            "type": "array",
+            "title": "Samples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "years",
+          "mean_alpha_pct",
+          "consistency_pct",
+          "sample_count",
+          "reason",
+          "samples"
+        ],
+        "title": "RollingReturnWindowResponse"
+      },
+      "RollingWindowSampleResponse": {
+        "properties": {
+          "as_of_date": {
+            "type": "string",
+            "title": "As Of Date"
+          },
+          "alpha_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of_date",
+          "alpha_pct"
+        ],
+        "title": "RollingWindowSampleResponse"
       },
       "RubricComponentResponse": {
         "properties": {

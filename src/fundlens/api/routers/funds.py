@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from fundlens.api.deps import get_session
 from fundlens.compute import metrics
 from fundlens.compute.holdings import get_holdings_for_scheme
+from fundlens.compute.rolling_returns import RollingReturnWindow, compute_rolling_returns
 from fundlens.db.models import GrowwFundMetadata, SchemeMetadata
 
 router = APIRouter(prefix="/funds", tags=["funds"])
@@ -44,6 +45,20 @@ class SimilarFundResponse(BaseModel):
     return_3y: str | None
 
 
+class RollingWindowSampleResponse(BaseModel):
+    as_of_date: str
+    alpha_pct: float | None
+
+
+class RollingReturnWindowResponse(BaseModel):
+    years: int
+    mean_alpha_pct: float | None
+    consistency_pct: float | None
+    sample_count: int
+    reason: str | None
+    samples: list[RollingWindowSampleResponse]
+
+
 class FundDetailResponse(BaseModel):
     amfi_code: str
     scheme_name: str | None
@@ -66,6 +81,7 @@ class FundDetailResponse(BaseModel):
     your_position: FundPositionResponse | None
     holdings: list[FundHoldingResponse]
     similar_funds: list[SimilarFundResponse]
+    rolling_returns: list[RollingReturnWindowResponse]
 
 
 @router.get("/{amfi_code}", response_model=FundDetailResponse)
@@ -100,6 +116,28 @@ def fund_detail(amfi_code: str, session: Session = Depends(get_session)) -> Fund
             average_cost_per_unit=str(h.average_cost_per_unit),
         )
         for h in fund_holdings
+    ]
+
+    rolling_windows: list[RollingReturnWindow] = []
+    if scheme_meta is not None:
+        rolling_windows = compute_rolling_returns(
+            session, amfi_code, scheme_meta.category_raw, scheme_meta.tax_asset_class
+        )
+    rolling_returns = [
+        RollingReturnWindowResponse(
+            years=w.years,
+            mean_alpha_pct=w.mean_alpha_pct,
+            consistency_pct=w.consistency_pct,
+            sample_count=len(w.samples),
+            reason=w.reason,
+            samples=[
+                RollingWindowSampleResponse(
+                    as_of_date=s.as_of_date.isoformat(), alpha_pct=s.alpha_pct
+                )
+                for s in w.samples
+            ],
+        )
+        for w in rolling_windows
     ]
 
     similar_funds: list[SimilarFundResponse] = []
@@ -151,4 +189,5 @@ def fund_detail(amfi_code: str, session: Session = Depends(get_session)) -> Fund
         your_position=your_position,
         holdings=holdings,
         similar_funds=similar_funds,
+        rolling_returns=rolling_returns,
     )

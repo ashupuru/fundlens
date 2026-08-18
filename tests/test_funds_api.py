@@ -1,3 +1,6 @@
+from datetime import date
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -173,3 +176,99 @@ def test_fund_detail_for_completely_unknown_code(client: TestClient) -> None:
     assert body["your_position"] is None
     assert body["holdings"] == []
     assert body["similar_funds"] == []
+    assert body["rolling_returns"] == []
+
+
+def test_fund_detail_rolling_returns_empty_without_scheme_metadata(client: TestClient) -> None:
+    _seed_groww_metadata(client)
+    _ingest_holding(client, "111", "Acme Small Cap Fund Direct Growth")
+
+    response = client.get("/funds/111")
+
+    # No SchemeMetadata row seeded in this test's DB -- category/tax_asset_class
+    # are unknown, so rolling returns can't be computed. Flagged as empty, not
+    # fabricated with a guessed category.
+    assert response.json()["rolling_returns"] == []
+
+
+def test_fund_detail_rolling_returns_populated_with_scheme_metadata() -> None:
+    """SchemeMetadata/NavHistory/BenchmarkHistory have no ingest endpoint to
+    seed them through, so this test builds its own client + shared in-memory
+    DB (same construction as the `client` fixture in conftest.py) to seed
+    them directly alongside using the real API surface."""
+    from collections.abc import Iterator
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from sqlalchemy.pool import StaticPool
+
+    from fundlens.api.deps import get_session
+    from fundlens.api.main import app
+    from fundlens.db.models import (
+        Base,
+        BenchmarkHistory,
+        BenchmarkId,
+        NavHistory,
+        NavSource,
+        SchemeMetadata,
+    )
+    from fundlens.tax.asset_class import TaxAssetClass
+
+    engine = create_engine(
+        "sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+
+    def override_get_session() -> Iterator[Session]:
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    try:
+        with Session(engine) as seed_session:
+            seed_session.add(
+                SchemeMetadata(
+                    amfi_code="111",
+                    category_raw="Open Ended Schemes(Equity Scheme - Small Cap Fund)",
+                    tax_asset_class=TaxAssetClass.EQUITY,
+                )
+            )
+            seed_session.add(
+                NavHistory(
+                    amfi_code="111", nav_date=date(2020, 1, 1), nav=Decimal("100"),
+                    source=NavSource.MANUAL,
+                )
+            )
+            seed_session.add(
+                NavHistory(
+                    amfi_code="111", nav_date=date(2021, 6, 1), nav=Decimal("130"),
+                    source=NavSource.MANUAL,
+                )
+            )
+            seed_session.add(
+                BenchmarkHistory(
+                    benchmark_id=BenchmarkId.NIFTY_SMALLCAP250_TRI, nav_date=date(2020, 1, 1),
+                    value=Decimal("100"), proxy=True, proxy_note="test",
+                )
+            )
+            seed_session.add(
+                BenchmarkHistory(
+                    benchmark_id=BenchmarkId.NIFTY_SMALLCAP250_TRI, nav_date=date(2021, 6, 1),
+                    value=Decimal("115"), proxy=True, proxy_note="test",
+                )
+            )
+            seed_session.commit()
+
+        with TestClient(app) as local_client:
+            _seed_groww_metadata(local_client)
+            _ingest_holding(local_client, "111", "Acme Small Cap Fund Direct Growth")
+            response = local_client.get("/funds/111")
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    body = response.json()
+    assert len(body["rolling_returns"]) == 3
+    window_1y = next(w for w in body["rolling_returns"] if w["years"] == 1)
+    assert window_1y["sample_count"] > 0
+    assert window_1y["mean_alpha_pct"] is not None
