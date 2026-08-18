@@ -11,8 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fundlens.api.deps import get_session
+from fundlens.assumptions.service import get_current_risk_metrics_assumptions
 from fundlens.compute import metrics
 from fundlens.compute.holdings import get_holdings_for_scheme
+from fundlens.compute.risk_metrics import (
+    RiskAdjustedWindow,
+    SeriesRiskStats,
+    compute_risk_adjusted_metrics,
+)
 from fundlens.compute.rolling_returns import RollingReturnWindow, compute_rolling_returns
 from fundlens.db.models import GrowwFundMetadata, SchemeMetadata
 
@@ -59,6 +65,19 @@ class RollingReturnWindowResponse(BaseModel):
     samples: list[RollingWindowSampleResponse]
 
 
+class SeriesRiskStatsResponse(BaseModel):
+    sharpe: float | None
+    sortino: float | None
+    max_drawdown_pct: float | None
+
+
+class RiskAdjustedWindowResponse(BaseModel):
+    years: int
+    fund: SeriesRiskStatsResponse | None
+    benchmark: SeriesRiskStatsResponse | None
+    reason: str | None
+
+
 class FundDetailResponse(BaseModel):
     amfi_code: str
     scheme_name: str | None
@@ -82,6 +101,7 @@ class FundDetailResponse(BaseModel):
     holdings: list[FundHoldingResponse]
     similar_funds: list[SimilarFundResponse]
     rolling_returns: list[RollingReturnWindowResponse]
+    risk_metrics: list[RiskAdjustedWindowResponse]
 
 
 @router.get("/{amfi_code}", response_model=FundDetailResponse)
@@ -140,6 +160,34 @@ def fund_detail(amfi_code: str, session: Session = Depends(get_session)) -> Fund
         for w in rolling_windows
     ]
 
+    risk_windows: list[RiskAdjustedWindow] = []
+    if scheme_meta is not None:
+        risk_free_rate_pct = get_current_risk_metrics_assumptions(session).risk_free_rate_pct
+        risk_windows = compute_risk_adjusted_metrics(
+            session,
+            amfi_code,
+            scheme_meta.category_raw,
+            scheme_meta.tax_asset_class,
+            risk_free_rate_pct,
+        )
+
+    def _stats_response(stats: SeriesRiskStats | None) -> SeriesRiskStatsResponse | None:
+        if stats is None:
+            return None
+        return SeriesRiskStatsResponse(
+            sharpe=stats.sharpe, sortino=stats.sortino, max_drawdown_pct=stats.max_drawdown_pct
+        )
+
+    risk_metrics = [
+        RiskAdjustedWindowResponse(
+            years=w.years,
+            fund=_stats_response(w.fund),
+            benchmark=_stats_response(w.benchmark),
+            reason=w.reason,
+        )
+        for w in risk_windows
+    ]
+
     similar_funds: list[SimilarFundResponse] = []
     if groww is not None and groww.sub_category:
         rows = session.scalars(
@@ -190,4 +238,5 @@ def fund_detail(amfi_code: str, session: Session = Depends(get_session)) -> Fund
         holdings=holdings,
         similar_funds=similar_funds,
         rolling_returns=rolling_returns,
+        risk_metrics=risk_metrics,
     )

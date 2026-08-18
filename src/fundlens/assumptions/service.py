@@ -58,6 +58,9 @@ class AssumptionKey(enum.StrEnum):
     INFLATION_PCT = "inflation_pct"
     EXPECTED_EQUITY_RETURN_PCT = "expected_equity_return_pct"
     EXPECTED_DEBT_RETURN_PCT = "expected_debt_return_pct"
+    # Risk-adjusted metrics (compute-engine.md §12, FR-3.4): Sharpe ratio's
+    # excess-return numerator.
+    RISK_FREE_RATE_PCT = "risk_free_rate_pct"
 
 
 DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
@@ -84,6 +87,10 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     AssumptionKey.INFLATION_PCT: "6",
     AssumptionKey.EXPECTED_EQUITY_RETURN_PCT: "12",
     AssumptionKey.EXPECTED_DEBT_RETURN_PCT: "7",
+    # Roughly a 10yr G-Sec / bank FD rate — the conventional Sharpe-ratio
+    # "risk-free" proxy for Indian markets. Editable, not asserted as
+    # canonical.
+    AssumptionKey.RISK_FREE_RATE_PCT: "7",
 }
 
 
@@ -110,7 +117,21 @@ def get_values(session: Session, version_id: str) -> dict[str, str]:
 
 
 def get_current_values(session: Session) -> dict[str, str]:
-    return get_values(session, get_current_version(session).id)
+    """Current-version values, with any AssumptionKey added to
+    DEFAULT_ASSUMPTIONS *after* this DB's version was first seeded
+    backfilled transparently (never persisted, never overriding an
+    explicitly-stored value) -- otherwise every new key silently
+    KeyErrors on any pre-existing database until the user happens to
+    POST /assumptions a new version. Deliberately NOT applied in
+    get_values() for an arbitrary (e.g. historical) version_id: a past
+    version legitimately not having a key that didn't exist yet is
+    correct, and backfilling there would misrepresent what that version
+    actually pinned, breaking the reproducibility guarantee versions
+    exist for.
+    """
+    defaults = {k.value: v for k, v in DEFAULT_ASSUMPTIONS.items()}
+    stored = get_values(session, get_current_version(session).id)
+    return {**defaults, **stored}
 
 
 def list_versions(session: Session) -> list[AssumptionVersion]:
@@ -219,4 +240,16 @@ def get_current_goal_assumptions(session: Session) -> GoalAssumptions:
             values[AssumptionKey.EXPECTED_EQUITY_RETURN_PCT.value]
         ),
         expected_debt_return_pct=Decimal(values[AssumptionKey.EXPECTED_DEBT_RETURN_PCT.value]),
+    )
+
+
+@dataclass(frozen=True)
+class RiskMetricsAssumptions:
+    risk_free_rate_pct: Decimal
+
+
+def get_current_risk_metrics_assumptions(session: Session) -> RiskMetricsAssumptions:
+    values = get_current_values(session)
+    return RiskMetricsAssumptions(
+        risk_free_rate_pct=Decimal(values[AssumptionKey.RISK_FREE_RATE_PCT.value])
     )

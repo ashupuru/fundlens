@@ -177,6 +177,7 @@ def test_fund_detail_for_completely_unknown_code(client: TestClient) -> None:
     assert body["holdings"] == []
     assert body["similar_funds"] == []
     assert body["rolling_returns"] == []
+    assert body["risk_metrics"] == []
 
 
 def test_fund_detail_rolling_returns_empty_without_scheme_metadata(client: TestClient) -> None:
@@ -188,7 +189,9 @@ def test_fund_detail_rolling_returns_empty_without_scheme_metadata(client: TestC
     # No SchemeMetadata row seeded in this test's DB -- category/tax_asset_class
     # are unknown, so rolling returns can't be computed. Flagged as empty, not
     # fabricated with a guessed category.
-    assert response.json()["rolling_returns"] == []
+    body = response.json()
+    assert body["rolling_returns"] == []
+    assert body["risk_metrics"] == []
 
 
 def test_fund_detail_rolling_returns_populated_with_scheme_metadata() -> None:
@@ -272,3 +275,9 @@ def test_fund_detail_rolling_returns_populated_with_scheme_metadata() -> None:
     window_1y = next(w for w in body["rolling_returns"] if w["years"] == 1)
     assert window_1y["sample_count"] > 0
     assert window_1y["mean_alpha_pct"] is not None
+
+    assert len(body["risk_metrics"]) == 3
+    risk_1y = next(w for w in body["risk_metrics"] if w["years"] == 1)
+    assert risk_1y["fund"] is not None
+    assert risk_1y["fund"]["max_drawdown_pct"] is not None
+    assert risk_1y["benchmark"] is not None

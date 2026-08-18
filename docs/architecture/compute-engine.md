@@ -637,3 +637,46 @@ WeasyPrint needs Pango/cairo installed via Homebrew (`brew install pango`) and
 `DYLD_FALLBACK_LIBRARY_PATH` pointed at Homebrew's lib dir on macOS — the latter is silently
 stripped from any process launched through `nohup`, which is why `scripts/start.sh` backgrounds
 the backend via plain `&` + `disown` instead (see that script's own comment).
+
+## 12. Risk-Adjusted Metrics (PRD FR-3.4, shipped P3 — `compute/risk_metrics.py`)
+
+Sharpe ratio, Sortino ratio, and max drawdown for a held scheme's own NAV, for trailing 1/3/5yr
+windows (a single window per length, ending today — like a fund fact sheet's "3Y Sharpe," not the
+rolling multi-sample series §"Rolling Returns" (below) computes). Purely informational on the fund
+detail page; never fed into the verdict rubric (§5).
+
+**"vs category peers" reinterpreted as "vs category benchmark"** (judgment call, confirmed with
+the user): this app only ingests NAV history for held schemes
+(`market_data/service.py::refresh_all_held_schemes`), not for other funds in the same category, so
+literal peer-fund comparison isn't possible — the same underlying data gap as the blocked P2.2
+fund overlap. Every other "vs category" comparison already shipped here substitutes the category
+benchmark index for literal peers (Rolling Returns' consistency check, the verdict rubric's rolling
+alpha), so this follows that established precedent, using `BenchmarkHistory` data the app already
+has.
+
+**Methodology**: Sharpe/Sortino computed from ~monthly-sampled returns within the window (same
+`relativedelta(months=1)` cadence Rolling Returns established) —
+`Sharpe = (mean(excess_return) * 12) / (stdev(excess_return) * sqrt(12))`,
+`excess_return = monthly_return - risk_free_rate_pct/100/12`; Sortino replaces the denominator
+with annualized downside deviation (`sqrt(mean(min(0, excess_return)^2)) * sqrt(12)`), returning
+`None` rather than a fabricated/infinite value when there are no negative excess-return periods to
+compute a downside deviation from. Max drawdown is a single-pass peak-to-trough calculation over
+the window's *daily* series, not monthly-sampled — drawdown is path-dependent, so monthly sampling
+would understate real intra-month declines, and an O(n) pass is cheap regardless of resolution.
+Computed identically for the fund and the category benchmark so the frontend can show them side by
+side.
+
+**New assumption key**: `risk_free_rate_pct` (default `7`, roughly a 10yr G-Sec/FD proxy,
+`assumptions/service.py`) for Sharpe's excess-return numerator.
+
+**Bug found and fixed while shipping this**: `assumptions/service.py::get_current_values` did a
+raw dict lookup with no fallback, so any `AssumptionKey` added *after* a database's "Default"
+version was first seeded (true for every real, pre-existing local DB, including this app's own)
+raised `KeyError` the moment something tried to read it — a latent bug since P2.4's goal-planning
+keys, only surfaced now because this phase was the first to actually hit it against the real local
+DB during manual verification. Fixed by having `get_current_values` merge `DEFAULT_ASSUMPTIONS`
+underneath whatever's actually stored for the current version (stored values always win; nothing
+persisted or mutated) — deliberately **not** applied in `get_values(session, version_id)` for an
+arbitrary version, since a past version legitimately not having a key that didn't exist yet is
+correct, and backfilling there would misrepresent what that version actually pinned, breaking the
+reproducibility guarantee versions exist for.

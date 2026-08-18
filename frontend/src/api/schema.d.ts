@@ -1089,6 +1089,8 @@ export interface components {
             similar_funds: components["schemas"]["SimilarFundResponse"][];
             /** Rolling Returns */
             rolling_returns: components["schemas"]["RollingReturnWindowResponse"][];
+            /** Risk Metrics */
+            risk_metrics: components["schemas"]["RiskAdjustedWindowResponse"][];
         };
         /** FundHoldingResponse */
         FundHoldingResponse: {
@@ -1377,6 +1379,15 @@ export interface components {
             /** Amfi Error */
             amfi_error: string | null;
         };
+        /** RiskAdjustedWindowResponse */
+        RiskAdjustedWindowResponse: {
+            /** Years */
+            years: number;
+            fund: components["schemas"]["SeriesRiskStatsResponse"] | null;
+            benchmark: components["schemas"]["SeriesRiskStatsResponse"] | null;
+            /** Reason */
+            reason: string | null;
+        };
         /** RiskProfileResponse */
         RiskProfileResponse: {
             /** Persona */
@@ -1455,6 +1466,15 @@ export interface components {
             return_pct: string;
             /** Required Monthly Sip Paise */
             required_monthly_sip_paise: number;
+        };
+        /** SeriesRiskStatsResponse */
+        SeriesRiskStatsResponse: {
+            /** Sharpe */
+            sharpe: number | null;
+            /** Sortino */
+            sortino: number | null;
+            /** Max Drawdown Pct */
+            max_drawdown_pct: number | null;
         };
         /** SetRiskProfileRequest */
         SetRiskProfileRequest: {
