@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from fundlens.allocation.service import get_risk_profile, set_risk_profile
 from fundlens.api.deps import get_session
 from fundlens.compute.allocation import compute_allocation_drift
+from fundlens.compute.glide_path import compute_glide_path_suggestion
 from fundlens.db.models import Persona, RiskProfile
 
 router = APIRouter(tags=["allocation"])
@@ -96,6 +97,16 @@ class EquityCapBreakdownResponse(BaseModel):
     other_paise: int
 
 
+class GlidePathSuggestionResponse(BaseModel):
+    years_remaining: float | None
+    current_target_equity_pct: float
+    current_target_debt_pct: float
+    suggested_target_equity_pct: float | None
+    suggested_target_debt_pct: float | None
+    drift_pp: float | None
+    reason: str | None
+
+
 class AllocationDriftResponse(BaseModel):
     persona: str
     target_equity_pct: float
@@ -112,6 +123,7 @@ class AllocationDriftResponse(BaseModel):
     value_unavailable_paise: int
     equity_cap_breakdown: EquityCapBreakdownResponse
     schemes_missing_metadata: int
+    glide_path: GlidePathSuggestionResponse
 
 
 @router.get("/allocation/drift", response_model=AllocationDriftResponse)
@@ -124,6 +136,7 @@ def drift(session: Session = Depends(get_session)) -> AllocationDriftResponse:
         )
 
     d = compute_allocation_drift(session, profile)
+    g = compute_glide_path_suggestion(profile)
     return AllocationDriftResponse(
         persona=d.persona.value,
         target_equity_pct=d.target_equity_pct,
@@ -146,4 +159,13 @@ def drift(session: Session = Depends(get_session)) -> AllocationDriftResponse:
             other_paise=d.equity_cap_breakdown.other_paise,
         ),
         schemes_missing_metadata=d.schemes_missing_metadata,
+        glide_path=GlidePathSuggestionResponse(
+            years_remaining=g.years_remaining,
+            current_target_equity_pct=g.current_target_equity_pct,
+            current_target_debt_pct=g.current_target_debt_pct,
+            suggested_target_equity_pct=g.suggested_target_equity_pct,
+            suggested_target_debt_pct=g.suggested_target_debt_pct,
+            drift_pp=g.drift_pp,
+            reason=g.reason,
+        ),
     )

@@ -680,3 +680,37 @@ persisted or mutated) — deliberately **not** applied in `get_values(session, v
 arbitrary version, since a past version legitimately not having a key that didn't exist yet is
 correct, and backfilling there would misrepresent what that version actually pinned, breaking the
 reproducibility guarantee versions exist for.
+
+## 13. Glide-Path Suggestions (PRD FR-7.3, shipped P3 — `compute/glide_path.py`)
+
+Advisory suggestion to gradually shift target allocation from equity-heavy toward debt-heavy as
+the investor nears their goal horizon — standard glide-path practice. Extends `GET
+/allocation/drift` (`api/routers/allocation.py`), not a new endpoint, following the same
+"extend the existing aggregating endpoint" precedent as `GET /funds/{amfi_code}` (twice) and
+`GET /reports/yearly.json`. Never mutates `RiskProfile` automatically — advisory only, like every
+other suggestion in this app (verdicts, alternatives); the user acts on it via the existing
+`POST /risk-profile` if they choose to.
+
+**"Years remaining" is derived, not stored**: `RiskProfile` (`db/models.py:369-391`) has no
+birthdate or fixed target date — only `horizon_years` (set once at onboarding) and `updated_at`.
+`years_remaining = horizon_years - (years since updated_at)`. Judgment call, confirmed with the
+user: uses only fields that already exist, no new required onboarding input. Disclosed limitation:
+this only counts down correctly if the user doesn't touch other `RiskProfile` fields without also
+updating `horizon_years` — there's no fixed target date to anchor against instead (`Goal` entities
+from P2.4 are per-goal, not the portfolio-wide horizon this feature is about).
+
+**Formula** (documented judgment call, no canonical PRD number available — same "documented, not
+asserted as canonical" treatment as `compute/allocation.py::compute_category_fit_score`'s
+scaling): `years_remaining >= 15` → suggest no change (glide-down hasn't started yet);
+`years_remaining <= 0` → suggest a 20% equity floor; in between, linear interpolation between the
+current target and the floor. A resulting `<2pp` drift is suppressed as "on track," not surfaced
+as an actionable suggestion, to avoid nagging over noise. Explicitly never suggests *more* equity
+than the current target — guards an edge case where an already-below-floor custom profile would
+otherwise have the interpolation pull it back up toward the floor as the horizon approaches,
+backwards for a glide path.
+
+**Still-missing gap, not solved here**: there is no risk-profile *settings* UI anywhere in this
+app — `POST /risk-profile` remains API-only, set once at onboarding (P1.4) with no dedicated
+frontend form since. This feature surfaces the suggestion on the existing Dashboard allocation-
+drift card; acting on it (or setting a profile in the first place) still requires calling the API
+directly. A real, pre-existing gap, not introduced or silently worked around by this phase.

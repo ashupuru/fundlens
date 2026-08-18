@@ -51,3 +51,26 @@ def test_allocation_drift_after_onboarding_and_ingest(client: TestClient) -> Non
     assert body["priced_portfolio_value_paise"] == 0
     assert body["value_unavailable_paise"] > 0
     assert body["actual_equity_pct"] is None
+    # No horizon_years set at onboarding -- flagged, not fabricated from a
+    # guessed horizon.
+    assert body["glide_path"]["reason"] == "no_horizon_set"
+    assert body["glide_path"]["years_remaining"] is None
+
+
+def test_allocation_drift_glide_path_suggestion_with_horizon_set(client: TestClient) -> None:
+    client.post(
+        "/risk-profile", json={"persona": "aggressive", "horizon_years": 10}
+    )
+
+    response = client.get("/allocation/drift")
+
+    assert response.status_code == 200
+    glide = response.json()["glide_path"]
+    assert glide["reason"] is None
+    assert glide["years_remaining"] is not None
+    assert abs(glide["years_remaining"] - 10.0) < 0.01  # set just now, so ~= horizon_years
+    # Aggressive persona (80% equity), 10yr horizon, well within the glide
+    # window -- expect a real downward suggestion, not "on track."
+    assert glide["suggested_target_equity_pct"] is not None
+    assert glide["suggested_target_equity_pct"] < 80.0
+    assert glide["drift_pp"] is not None and glide["drift_pp"] < 0
