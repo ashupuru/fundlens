@@ -922,7 +922,17 @@ function EquityBlendedBenchmarkSection({
   );
 }
 
+const DASHBOARD_TABS = [
+  { key: "overview", label: "Overview" },
+  { key: "allocation", label: "Allocation" },
+  { key: "performance", label: "Performance" },
+  { key: "risk", label: "Risk & Planning" },
+] as const;
+
+type DashboardTabKey = (typeof DASHBOARD_TABS)[number]["key"];
+
 export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState<DashboardTabKey>("overview");
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
   const [metrics, setMetrics] = useState<PortfolioMetrics | null>(null);
   const [comparison, setComparison] = useState<PortfolioBenchmarkComparison | null>(null);
@@ -1046,86 +1056,122 @@ export default function Dashboard() {
 
       {metrics && (
         <>
-          <h2>Portfolio</h2>
-          <div className="card-grid">
-            <div className="stat">
-              <div className="stat-label">Current value</div>
-              <div className="stat-value">{formatPaise(metrics.current_value_paise)}</div>
-            </div>
-            <div className="stat">
-              <div className="stat-label">Portfolio XIRR</div>
-              <div className="stat-value">
-                {metrics.xirr !== null ? formatPct(metrics.xirr) : "n/a"}
-              </div>
-              {metrics.xirr === null && <div className="muted">{metrics.xirr_reason}</div>}
-            </div>
-            {comparison && (
-              <>
+          <div className="dashboard-tabs" role="tablist">
+            {DASHBOARD_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                className={`dashboard-tab${activeTab === tab.key ? " active" : ""}`}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === "overview" && (
+            <>
+              <h2>Portfolio</h2>
+              <div className="card-grid">
                 <div className="stat">
-                  <div className="stat-label">Benchmark XIRR</div>
+                  <div className="stat-label">Current value</div>
+                  <div className="stat-value">{formatPaise(metrics.current_value_paise)}</div>
+                </div>
+                <div className="stat">
+                  <div className="stat-label">Portfolio XIRR</div>
                   <div className="stat-value">
-                    {comparison.benchmark_xirr !== null
-                      ? formatPct(comparison.benchmark_xirr)
-                      : "n/a"}
+                    {metrics.xirr !== null ? formatPct(metrics.xirr) : "n/a"}
                   </div>
-                  <div className="muted">{comparison.benchmark_id}</div>
+                  {metrics.xirr === null && <div className="muted">{metrics.xirr_reason}</div>}
                 </div>
-                <div className="stat">
-                  <div className="stat-label">Alpha</div>
-                  <div className={`stat-value ${alphaClass}`}>
-                    {formatAlpha(comparison.alpha_pct)}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+                {comparison && (
+                  <>
+                    <div className="stat">
+                      <div className="stat-label">Benchmark XIRR</div>
+                      <div className="stat-value">
+                        {comparison.benchmark_xirr !== null
+                          ? formatPct(comparison.benchmark_xirr)
+                          : "n/a"}
+                      </div>
+                      <div className="muted">{comparison.benchmark_id}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="stat-label">Alpha</div>
+                      <div className={`stat-value ${alphaClass}`}>
+                        {formatAlpha(comparison.alpha_pct)}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
-          <div className="card">
-            <h3>Details</h3>
-            <table>
-              <tbody>
-                <tr>
-                  <td>Invested</td>
-                  <td>{formatPaise(metrics.invested_paise)}</td>
-                </tr>
-                <tr>
-                  <td>Received (redemptions/dividends)</td>
-                  <td>{formatPaise(metrics.received_paise)}</td>
-                </tr>
-                <tr>
-                  <td>Positions missing NAV</td>
-                  <td>{metrics.positions_missing_nav}</td>
-                </tr>
-              </tbody>
-            </table>
-            {comparison && <p className="muted" style={{ marginTop: 12 }}>{comparison.proxy_note}</p>}
-          </div>
+              <div className="card">
+                <h3>Details</h3>
+                <table>
+                  <tbody>
+                    <tr>
+                      <td>Invested</td>
+                      <td>{formatPaise(metrics.invested_paise)}</td>
+                    </tr>
+                    <tr>
+                      <td>Received (redemptions/dividends)</td>
+                      <td>{formatPaise(metrics.received_paise)}</td>
+                    </tr>
+                    <tr>
+                      <td>Positions missing NAV</td>
+                      <td>{metrics.positions_missing_nav}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                {comparison && (
+                  <p className="muted" style={{ marginTop: 12 }}>
+                    {comparison.proxy_note}
+                  </p>
+                )}
+              </div>
 
-          <EquityBlendedBenchmarkSection
-            comparison={blendedComparison}
-            loaded={blendedComparisonLoaded}
-          />
+              <PortfolioValueSection points={valueHistory} loaded={valueHistoryLoaded} />
+              <DrawdownSection points={valueHistory} loaded={valueHistoryLoaded} />
+            </>
+          )}
 
-          <AssetAllocationSection groups={categoryGroups} />
-          <CategoryAllocationSection groups={subCategoryGroups} />
-          <RiskProfileSection
-            profile={riskProfile}
-            loaded={riskProfileLoaded}
-            onSaved={(p) => {
-              setRiskProfileState(p);
-              refreshDrift();
-            }}
-          />
-          <AllocationDriftSection drift={drift} loaded={driftLoaded} />
+          {activeTab === "allocation" && (
+            <>
+              <AssetAllocationSection groups={categoryGroups} />
+              <CategoryAllocationSection groups={subCategoryGroups} />
+              <FundAllocationSection holdings={holdingMetrics} loaded={holdingMetricsLoaded} />
+              <AmcAllocationSection groups={amcGroups} loaded={amcGroupsLoaded} />
+            </>
+          )}
 
-          <PortfolioValueSection points={valueHistory} loaded={valueHistoryLoaded} />
-          <DrawdownSection points={valueHistory} loaded={valueHistoryLoaded} />
-          <FundAllocationSection holdings={holdingMetrics} loaded={holdingMetricsLoaded} />
-          <AmcAllocationSection groups={amcGroups} loaded={amcGroupsLoaded} />
-          <AlphaVsBenchmarkSection
-            comparisons={benchmarkComparisons}
-            loaded={benchmarkComparisonsLoaded}
-          />
+          {activeTab === "performance" && (
+            <>
+              <EquityBlendedBenchmarkSection
+                comparison={blendedComparison}
+                loaded={blendedComparisonLoaded}
+              />
+              <AlphaVsBenchmarkSection
+                comparisons={benchmarkComparisons}
+                loaded={benchmarkComparisonsLoaded}
+              />
+            </>
+          )}
+
+          {activeTab === "risk" && (
+            <>
+              <RiskProfileSection
+                profile={riskProfile}
+                loaded={riskProfileLoaded}
+                onSaved={(p) => {
+                  setRiskProfileState(p);
+                  refreshDrift();
+                }}
+              />
+              <AllocationDriftSection drift={drift} loaded={driftLoaded} />
+            </>
+          )}
         </>
       )}
     </div>
