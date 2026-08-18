@@ -289,6 +289,17 @@ export async function postImportTri(benchmarkId: string, file: File): Promise<TR
   return response.json() as Promise<TRIImportResponse>;
 }
 
+export type NavRefreshResponse =
+  operations["refresh_market_data_refresh_post"]["responses"][200]["content"]["application/json"];
+
+export async function postRefreshNav(): Promise<NavRefreshResponse> {
+  const response = await fetch(`${API_BASE_URL}/market-data/refresh`, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`Failed to refresh NAV data: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<NavRefreshResponse>;
+}
+
 type GrowwRefreshResponse =
   operations["refresh_groww_market_data_refresh_groww_post"]["responses"][200]["content"]["application/json"];
 
