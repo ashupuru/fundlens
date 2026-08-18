@@ -54,6 +54,48 @@ def test_projection_without_risk_profile_returns_404(client: TestClient) -> None
     assert "risk profile" in response.json()["detail"].lower()
 
 
+def test_monte_carlo_without_risk_profile_returns_404(client: TestClient) -> None:
+    target_date = str(date.today() + timedelta(days=365))
+    goal = client.post(
+        "/goals",
+        json={"name": "Goal", "target_amount_rupees": "100000", "target_date": target_date},
+    ).json()
+
+    response = client.get(f"/goals/{goal['id']}/monte-carlo")
+
+    assert response.status_code == 404
+    assert "risk profile" in response.json()["detail"].lower()
+
+
+def test_monte_carlo_unknown_goal_returns_404(client: TestClient) -> None:
+    client.post("/risk-profile", json={"persona": "aggressive"})
+    response = client.get("/goals/not-a-real-id/monte-carlo")
+    assert response.status_code == 404
+
+
+def test_monte_carlo_shape(client: TestClient) -> None:
+    client.post("/risk-profile", json={"persona": "aggressive"})
+    target_date = str(date.today() + timedelta(days=3650))
+    goal = client.post(
+        "/goals",
+        json={"name": "Goal", "target_amount_rupees": "1000000", "target_date": target_date},
+    ).json()
+
+    response = client.get(f"/goals/{goal['id']}/monte-carlo")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["goal_id"] == goal["id"]
+    assert body["simulations_run"] == 5000
+    assert 0.0 <= body["success_probability_no_contribution_pct"] <= 100.0
+    assert 0.0 <= body["success_probability_with_required_sip_pct"] <= 100.0
+    assert (
+        body["percentile_10_corpus_paise"]
+        <= body["percentile_50_corpus_paise"]
+        <= body["percentile_90_corpus_paise"]
+    )
+
+
 def test_tag_holdings_and_fetch_projection(client: TestClient) -> None:
     client.post("/risk-profile", json={"persona": "aggressive"})
     csv_content = (

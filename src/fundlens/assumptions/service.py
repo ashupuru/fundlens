@@ -61,6 +61,11 @@ class AssumptionKey(enum.StrEnum):
     # Risk-adjusted metrics (compute-engine.md §12, FR-3.4): Sharpe ratio's
     # excess-return numerator.
     RISK_FREE_RATE_PCT = "risk_free_rate_pct"
+    # Monte Carlo goal simulation (compute-engine.md §14, FR-8.3): annualized
+    # return volatility (stdev) per asset class, blended the same simple
+    # weighted-average way expected returns already are.
+    EQUITY_VOLATILITY_PCT = "equity_volatility_pct"
+    DEBT_VOLATILITY_PCT = "debt_volatility_pct"
 
 
 DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
@@ -91,6 +96,11 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     # "risk-free" proxy for Indian markets. Editable, not asserted as
     # canonical.
     AssumptionKey.RISK_FREE_RATE_PCT: "7",
+    # Reasonable Indian-market annualized-volatility defaults (broad equity
+    # index / debt fund NAV stdev order of magnitude), editable — not
+    # asserted as a forecast.
+    AssumptionKey.EQUITY_VOLATILITY_PCT: "18",
+    AssumptionKey.DEBT_VOLATILITY_PCT: "3",
 }
 
 
@@ -252,4 +262,18 @@ def get_current_risk_metrics_assumptions(session: Session) -> RiskMetricsAssumpt
     values = get_current_values(session)
     return RiskMetricsAssumptions(
         risk_free_rate_pct=Decimal(values[AssumptionKey.RISK_FREE_RATE_PCT.value])
+    )
+
+
+@dataclass(frozen=True)
+class MonteCarloAssumptions:
+    equity_volatility_pct: Decimal
+    debt_volatility_pct: Decimal
+
+
+def get_current_monte_carlo_assumptions(session: Session) -> MonteCarloAssumptions:
+    values = get_current_values(session)
+    return MonteCarloAssumptions(
+        equity_volatility_pct=Decimal(values[AssumptionKey.EQUITY_VOLATILITY_PCT.value]),
+        debt_volatility_pct=Decimal(values[AssumptionKey.DEBT_VOLATILITY_PCT.value]),
     )
