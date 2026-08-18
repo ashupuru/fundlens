@@ -23,7 +23,7 @@ fi
 # Refresh Python dependencies if uv is available.
 if command -v uv >/dev/null 2>&1; then
   echo "==> Syncing Python dependencies"
-  (cd "$ROOT_DIR" && uv sync --dev)
+  (cd "$ROOT_DIR" && uv sync --extra dev)
 else
   echo "==> uv not found; skipping Python dependency sync"
 fi
