@@ -42,6 +42,16 @@ function formatConsistency(value: number | null | undefined): string {
   return `${value.toFixed(0)}%`;
 }
 
+function formatRatio(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return value.toFixed(2);
+}
+
+function formatDrawdown(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  return `${value.toFixed(1)}%`;
+}
+
 export default function FundDetail() {
   const { amfiCode } = useParams<{ amfiCode: string }>();
   const [detail, setDetail] = useState<FundDetail | null>(null);
@@ -266,6 +276,57 @@ export default function FundDetail() {
                 </div>
               );
             })()}
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Risk-adjusted metrics</h2>
+        {detail.risk_metrics.length === 0 ? (
+          <p className="muted">
+            Not enough data to compute risk-adjusted metrics — needs scheme category metadata and
+            NAV history.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginBottom: 12 }}>
+              Fund vs category benchmark (not literal peer funds — this app doesn't have NAV
+              history for funds you don't hold).
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Window</th>
+                  <th>Sharpe (fund)</th>
+                  <th>Sharpe (benchmark)</th>
+                  <th>Sortino (fund)</th>
+                  <th>Sortino (benchmark)</th>
+                  <th>Max drawdown (fund)</th>
+                  <th>Max drawdown (benchmark)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.risk_metrics.map((w) => (
+                  <tr key={w.years}>
+                    <td>{ROLLING_WINDOW_LABELS[w.years] ?? `${w.years}yr`}</td>
+                    {w.fund === null ? (
+                      <td colSpan={6} className="muted">
+                        {w.reason ?? "unavailable"}
+                      </td>
+                    ) : (
+                      <>
+                        <td>{formatRatio(w.fund.sharpe)}</td>
+                        <td>{formatRatio(w.benchmark?.sharpe)}</td>
+                        <td>{formatRatio(w.fund.sortino)}</td>
+                        <td>{formatRatio(w.benchmark?.sortino)}</td>
+                        <td>{formatDrawdown(w.fund.max_drawdown_pct)}</td>
+                        <td>{formatDrawdown(w.benchmark?.max_drawdown_pct)}</td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </>
         )}
       </div>

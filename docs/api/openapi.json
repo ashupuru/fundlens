@@ -2880,6 +2880,13 @@
             },
             "type": "array",
             "title": "Rolling Returns"
+          },
+          "risk_metrics": {
+            "items": {
+              "$ref": "#/components/schemas/RiskAdjustedWindowResponse"
+            },
+            "type": "array",
+            "title": "Risk Metrics"
           }
         },
         "type": "object",
@@ -2905,7 +2912,8 @@
           "your_position",
           "holdings",
           "similar_funds",
-          "rolling_returns"
+          "rolling_returns",
+          "risk_metrics"
         ],
         "title": "FundDetailResponse"
       },
@@ -3858,6 +3866,53 @@
         ],
         "title": "RefreshResponse"
       },
+      "RiskAdjustedWindowResponse": {
+        "properties": {
+          "years": {
+            "type": "integer",
+            "title": "Years"
+          },
+          "fund": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesRiskStatsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "benchmark": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesRiskStatsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "years",
+          "fund",
+          "benchmark",
+          "reason"
+        ],
+        "title": "RiskAdjustedWindowResponse"
+      },
       "RiskProfileResponse": {
         "properties": {
           "persona": {
@@ -4131,6 +4186,50 @@
           "required_monthly_sip_paise"
         ],
         "title": "SensitivityPointResponse"
+      },
+      "SeriesRiskStatsResponse": {
+        "properties": {
+          "sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe"
+          },
+          "sortino": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortino"
+          },
+          "max_drawdown_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sharpe",
+          "sortino",
+          "max_drawdown_pct"
+        ],
+        "title": "SeriesRiskStatsResponse"
       },
       "SetRiskProfileRequest": {
         "properties": {
