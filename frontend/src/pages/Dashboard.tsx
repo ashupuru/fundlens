@@ -45,15 +45,15 @@ type BenchmarkComparison = components["schemas"]["BenchmarkComparisonResponse"];
 const POSITIVE_COLOR = "#2f6b4f";
 const NEGATIVE_COLOR = "#b3402c";
 
-// Cycles across chart slices/tiles — chosen to harmonize with the existing
-// Monarch-style green/cream theme rather than the raw palette of any
-// particular reference design.
+// Cycles across chart slices/tiles — chosen to harmonize with the Deep
+// Navy + Teal + Warm Neutral theme (index.css) rather than the raw palette
+// of any particular reference design.
 const CHART_COLORS = [
-  "#1b4332", // brand green
-  "#3a6ea5", // blue
+  "#1c2b4a", // brand navy
+  "#2f8f83", // brand teal (accent)
   "#c98a2c", // amber
   "#6b4f8a", // purple
-  "#2f8a7a", // teal
+  "#3a6ea5", // blue
   "#b3402c", // rust
   "#8a7a2f", // olive
   "#5c6470", // slate

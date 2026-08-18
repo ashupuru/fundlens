@@ -1,25 +1,28 @@
 :root {
-  /* Monarch-inspired: warm cream canvas, deep forest-green brand,
-     card-based dashboard with soft shadows and generous rounding. */
-  --bg: #faf8f3;
-  --bg-sidebar: #16302a;
-  --bg-sidebar-hover: #1f3f37;
-  --sidebar-text: #cfe0d6;
+  /* Deep Navy + Teal + Warm Neutral: warm off-white canvas, navy brand/chrome,
+     teal accent for active/interactive states, card-based dashboard with
+     soft shadows and generous rounding. */
+  --bg: #f7f4ee;
+  --bg-sidebar: #14213d;
+  --bg-sidebar-hover: #1f3155;
+  --sidebar-text: #b9c6dd;
   --sidebar-text-active: #ffffff;
   --card-bg: #ffffff;
-  --text: #5b5c56;
-  --text-h: #1a1d1b;
-  --text-muted: #8b8d86;
-  --brand: #1b4332;
-  --brand-light: #2f6b4f;
-  --brand-bg: rgba(27, 67, 50, 0.08);
+  --text: #58554e;
+  --text-h: #161d2e;
+  --text-muted: #8c887f;
+  --brand: #1c2b4a;
+  --brand-light: #34517f;
+  --brand-bg: rgba(28, 43, 74, 0.08);
+  --accent: #2f8f83;
+  --accent-bg: rgba(47, 143, 131, 0.12);
   --positive: #2f6b4f;
   --positive-bg: rgba(47, 107, 79, 0.1);
   --negative: #b3402c;
   --negative-bg: rgba(179, 64, 44, 0.1);
-  --border: #e8e4d9;
-  --shadow-sm: 0 1px 2px rgba(20, 41, 31, 0.06);
-  --shadow-md: 0 4px 16px rgba(20, 41, 31, 0.08);
+  --border: #e6e1d4;
+  --shadow-sm: 0 1px 2px rgba(20, 30, 51, 0.06);
+  --shadow-md: 0 4px 16px rgba(20, 30, 51, 0.08);
   --radius-card: 16px;
   --radius-sm: 8px;
 
@@ -41,25 +44,30 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #141e19;
-    --bg-sidebar: #0e1712;
-    --bg-sidebar-hover: #1a251f;
-    --sidebar-text: #a9bdb2;
+    /* Navy suits a dark theme natively -- this isn't a plain inversion of
+       the light values, it leans further into near-black navy with the
+       teal accent popping more against it. */
+    --bg: #0d1420;
+    --bg-sidebar: #070c16;
+    --bg-sidebar-hover: #16233d;
+    --sidebar-text: #9fb0cc;
     --sidebar-text-active: #ffffff;
-    --card-bg: #1b2822;
-    --text: #a8b0a9;
-    --text-h: #f0f2ef;
-    --text-muted: #76807a;
-    --brand: #4a9d74;
-    --brand-light: #6bbf94;
-    --brand-bg: rgba(74, 157, 116, 0.15);
+    --card-bg: #141c2c;
+    --text: #adb4c2;
+    --text-h: #eef1f6;
+    --text-muted: #737d92;
+    --brand: #6f93c9;
+    --brand-light: #8fb0dd;
+    --brand-bg: rgba(111, 147, 201, 0.15);
+    --accent: #4fd6c3;
+    --accent-bg: rgba(79, 214, 195, 0.15);
     --positive: #5fb98a;
     --positive-bg: rgba(95, 185, 138, 0.15);
     --negative: #e08469;
     --negative-bg: rgba(224, 132, 105, 0.15);
-    --border: #2a3830;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+    --border: #232f45;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -158,6 +166,7 @@ code {
 .sidebar-link.active {
   background: var(--bg-sidebar-hover);
   color: var(--sidebar-text-active);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .sidebar-link svg {
