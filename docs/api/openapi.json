@@ -191,6 +191,88 @@
         }
       }
     },
+    "/ingest/zerodha/preview": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Preview",
+        "operationId": "preview_ingest_zerodha_preview_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_ingest_zerodha_preview_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZerodhaPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/zerodha/commit": {
+      "post": {
+        "tags": [
+          "ingestion"
+        ],
+        "summary": "Commit",
+        "operationId": "commit_ingest_zerodha_commit_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_commit_ingest_zerodha_commit_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZerodhaCommitResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/funds/{amfi_code}": {
       "get": {
         "tags": [
@@ -1895,6 +1977,25 @@
         ],
         "title": "Body_commit_ingest_dezerv_commit_post"
       },
+      "Body_commit_ingest_zerodha_commit_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "mapping": {
+            "type": "string",
+            "title": "Mapping"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "mapping"
+        ],
+        "title": "Body_commit_ingest_zerodha_commit_post"
+      },
       "Body_import_tri_benchmarks_import_tri_post": {
         "properties": {
           "file": {
@@ -1960,6 +2061,20 @@
           "file"
         ],
         "title": "Body_preview_ingest_dezerv_preview_post"
+      },
+      "Body_preview_ingest_zerodha_preview_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_preview_ingest_zerodha_preview_post"
       },
       "CapitalGainsLineResponse": {
         "properties": {
@@ -5042,6 +5157,172 @@
           "capital_gains"
         ],
         "title": "YearlyReportResponse"
+      },
+      "ZerodhaCommitResponse": {
+        "properties": {
+          "upload_id": {
+            "type": "string",
+            "title": "Upload Id"
+          },
+          "inserted_count": {
+            "type": "integer",
+            "title": "Inserted Count"
+          },
+          "duplicate_count": {
+            "type": "integer",
+            "title": "Duplicate Count"
+          },
+          "skipped_count": {
+            "type": "integer",
+            "title": "Skipped Count"
+          },
+          "skipped_reasons": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Skipped Reasons"
+          },
+          "cross_source_duplicate_count": {
+            "type": "integer",
+            "title": "Cross Source Duplicate Count"
+          },
+          "cross_source_duplicates": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Cross Source Duplicates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload_id",
+          "inserted_count",
+          "duplicate_count",
+          "skipped_count",
+          "skipped_reasons",
+          "cross_source_duplicate_count",
+          "cross_source_duplicates"
+        ],
+        "title": "ZerodhaCommitResponse"
+      },
+      "ZerodhaPreviewResponse": {
+        "properties": {
+          "schemes": {
+            "items": {
+              "$ref": "#/components/schemas/ZerodhaSchemePreviewResponse"
+            },
+            "type": "array",
+            "title": "Schemes"
+          },
+          "unrecognized_trade_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unrecognized Trade Types"
+          },
+          "rows_missing_isin": {
+            "type": "integer",
+            "title": "Rows Missing Isin"
+          },
+          "total_mf_rows": {
+            "type": "integer",
+            "title": "Total Mf Rows"
+          },
+          "date_range_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Range Start"
+          },
+          "date_range_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Range End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schemes",
+          "unrecognized_trade_types",
+          "rows_missing_isin",
+          "total_mf_rows",
+          "date_range_start",
+          "date_range_end"
+        ],
+        "title": "ZerodhaPreviewResponse"
+      },
+      "ZerodhaSchemePreviewResponse": {
+        "properties": {
+          "isin": {
+            "type": "string",
+            "title": "Isin"
+          },
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "txn_count": {
+            "type": "integer",
+            "title": "Txn Count"
+          },
+          "matched_amfi_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Amfi Code"
+          },
+          "matched_scheme_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Scheme Name"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "isin",
+          "symbol",
+          "txn_count",
+          "matched_amfi_code",
+          "matched_scheme_name",
+          "reason"
+        ],
+        "title": "ZerodhaSchemePreviewResponse"
       },
       "fundlens__api__routers__data_quality__CoverageGapResponse": {
         "properties": {

@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import type { components } from "../api/schema";
 import { DezervImportCard } from "./DezervImport";
+import { ZerodhaImportCard } from "./ZerodhaImport";
 
 type IngestResult = components["schemas"]["IngestResponse"];
 type RebuildResult = components["schemas"]["RebuildResponse"];
@@ -262,6 +263,7 @@ export default function Upload() {
       <h2>From your broker / platform</h2>
 
       <DezervImportCard />
+      <ZerodhaImportCard />
 
       <h2>Benchmark data</h2>
 

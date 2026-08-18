@@ -782,3 +782,45 @@ different cost tier, and bundling it in would tax every plain projection fetch. 
 precedent of `POST /ai/analyze` being its own explicitly-triggered endpoint for the same reason —
 `GET /goals/{goal_id}/monte-carlo`, button-triggered on the frontend, not auto-fetched on page
 load.
+
+## 15. Zerodha Tradebook Importer (shipped Phase 4b — `ingestion/zerodha_*.py`)
+
+Third broker/platform import path alongside CAS/CSV and Dezerv, built against a real Console
+"Tradebook" export filtered to the MF segment — the only format doubt this session ever had to
+resolve from live data rather than documentation, since neither Zerodha's docs nor web search gave
+a verified column schema.
+
+**ISIN-exact matching, not fuzzy** — the real structural difference from Dezerv
+(`ingestion/dezerv_matching.py`'s Jaccard-scored name matching). This format carries ISIN directly
+per row, so `zerodha_matching.py::resolve_isin` is a plain lookup against AMFI's own
+`isin_growth`/`isin_div_reinvestment` fields, not a similarity score — real-data-verified this
+matters: the same fund's `symbol` text is *not* stable over time in this export (e.g. "MIRAE ASSET
+FLEXI CAP FUND - DIRECT PLAN" early in the file, "MIRAE ASSET FLEXI CAP FUND DIRECT PLAN - GROWTH"
+later, same ISIN both times), so grouping/matching by ISIN rather than symbol text is required, not
+just simpler.
+
+**No NAV back-computation needed** — unlike Dezerv (a rupee amount only, units back-computed from
+NAV-on-date via `tax/grandfathering.py::fmv_per_unit_on_or_before`), this format gives `quantity`
+and `price` directly per row. `amount_paise = money.py::to_paise_strict(quantity * price)`, and the
+resulting `TransactionRecord.nav` is simply that row's own `price` — the transaction's real
+per-unit price, same convention the CAS and CSV-escape-hatch paths already use.
+
+**Constant synthetic folio `"ZERODHA"`** — documented judgment call, not a guarantee. This export
+format has no account/folio column at all (unlike Dezerv's `Custodian Account`); a Zerodha
+tradebook download is inherently scoped to one account per file (Zerodha doesn't support
+multi-account exports), so every row from one file genuinely belongs to the same account. A user
+with more than one Zerodha account would have both land under the same folio — accepted as the
+simplest correct design given the format's real constraints, rather than fragile filename-based
+client-ID parsing (users rename downloaded files).
+
+**Cross-source duplicate detection and AMC-name resolution extracted to
+`ingestion/broker_import_shared.py`** — this is now the second real caller of logic that started
+Dezerv-specific (`existing_cross_source_transaction`, `resolve_amc_names`), matching this session's
+established "extract on second caller" precedent (e.g. §9's category-label sharing). Dezerv's
+tests were re-run unmodified after the extraction to confirm it's behavior-preserving.
+
+**`trade_id` as a real ordering key** — unlike Dezerv (no per-row identifier at all, so same-day
+identical-looking transactions need an arbitrary insertion-order tiebreak), this format's
+`trade_id` is genuinely unique per row (real-data-verified: no repeats across 172 real rows).
+Records are processed in `(isin, txn_date, trade_id)` order, so sequence/ordinal assignment is
+deterministic and re-derivable from the source data itself, not just stable-by-accident.

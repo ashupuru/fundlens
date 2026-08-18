@@ -20,6 +20,7 @@ from fundlens.api.routers import (
     portfolio,
     reports,
     verdict,
+    zerodha,
 )
 from fundlens.db.migrate import run_migrations
 from fundlens.db.session import get_engine
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(ingestion.router)
     app.include_router(dezerv.router)
+    app.include_router(zerodha.router)
     app.include_router(funds.router)
     app.include_router(market_data.router)
     app.include_router(portfolio.router)

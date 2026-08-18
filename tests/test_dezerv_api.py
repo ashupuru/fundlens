@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from fundlens.ingestion import dezerv_service
+from fundlens.ingestion import broker_import_shared, dezerv_service
 from fundlens.market_data import service as market_data_service
 
 _HEADER = (
@@ -57,7 +57,7 @@ _MFAPI_PAYLOAD = {
 @pytest.fixture(autouse=True)
 def _patch_market_data(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dezerv_service, "fetch_navall_text", lambda: _NAVALL_TEXT)
-    monkeypatch.setattr(dezerv_service, "fetch_scheme_history", lambda code: _MFAPI_PAYLOAD)
+    monkeypatch.setattr(broker_import_shared, "fetch_scheme_history", lambda code: _MFAPI_PAYLOAD)
     monkeypatch.setattr(
         market_data_service, "fetch_scheme_history", lambda code: _MFAPI_PAYLOAD
     )

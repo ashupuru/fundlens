@@ -89,6 +89,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ingest/zerodha/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview */
+        post: operations["preview_ingest_zerodha_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ingest/zerodha/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Commit */
+        post: operations["commit_ingest_zerodha_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/funds/{amfi_code}": {
         parameters: {
             query?: never;
@@ -800,6 +834,13 @@ export interface components {
             /** Mapping */
             mapping: string;
         };
+        /** Body_commit_ingest_zerodha_commit_post */
+        Body_commit_ingest_zerodha_commit_post: {
+            /** File */
+            file: string;
+            /** Mapping */
+            mapping: string;
+        };
         /** Body_import_tri_benchmarks_import_tri_post */
         Body_import_tri_benchmarks_import_tri_post: {
             /** File */
@@ -821,6 +862,11 @@ export interface components {
         };
         /** Body_preview_ingest_dezerv_preview_post */
         Body_preview_ingest_dezerv_preview_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_preview_ingest_zerodha_preview_post */
+        Body_preview_ingest_zerodha_preview_post: {
             /** File */
             file: string;
         };
@@ -1703,6 +1749,57 @@ export interface components {
             fee_funds_excluded: number;
             capital_gains: components["schemas"]["CapitalGainsReportResponse"];
         };
+        /** ZerodhaCommitResponse */
+        ZerodhaCommitResponse: {
+            /** Upload Id */
+            upload_id: string;
+            /** Inserted Count */
+            inserted_count: number;
+            /** Duplicate Count */
+            duplicate_count: number;
+            /** Skipped Count */
+            skipped_count: number;
+            /** Skipped Reasons */
+            skipped_reasons: {
+                [key: string]: number;
+            };
+            /** Cross Source Duplicate Count */
+            cross_source_duplicate_count: number;
+            /** Cross Source Duplicates */
+            cross_source_duplicates: {
+                [key: string]: number;
+            };
+        };
+        /** ZerodhaPreviewResponse */
+        ZerodhaPreviewResponse: {
+            /** Schemes */
+            schemes: components["schemas"]["ZerodhaSchemePreviewResponse"][];
+            /** Unrecognized Trade Types */
+            unrecognized_trade_types: string[];
+            /** Rows Missing Isin */
+            rows_missing_isin: number;
+            /** Total Mf Rows */
+            total_mf_rows: number;
+            /** Date Range Start */
+            date_range_start: string | null;
+            /** Date Range End */
+            date_range_end: string | null;
+        };
+        /** ZerodhaSchemePreviewResponse */
+        ZerodhaSchemePreviewResponse: {
+            /** Isin */
+            isin: string;
+            /** Symbol */
+            symbol: string;
+            /** Txn Count */
+            txn_count: number;
+            /** Matched Amfi Code */
+            matched_amfi_code: string | null;
+            /** Matched Scheme Name */
+            matched_scheme_name: string | null;
+            /** Reason */
+            reason: string | null;
+        };
         /** CoverageGapResponse */
         fundlens__api__routers__data_quality__CoverageGapResponse: {
             /** Folio */
@@ -1879,6 +1976,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DezervCommitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_ingest_zerodha_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_ingest_zerodha_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZerodhaPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_ingest_zerodha_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_commit_ingest_zerodha_commit_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZerodhaCommitResponse"];
                 };
             };
             /** @description Validation Error */

@@ -238,6 +238,40 @@ export async function postDezervCommit(
   return response.json() as Promise<DezervCommitResult>;
 }
 
+export type ZerodhaPreview = components["schemas"]["ZerodhaPreviewResponse"];
+export type ZerodhaSchemePreview = components["schemas"]["ZerodhaSchemePreviewResponse"];
+export type ZerodhaCommitResult = components["schemas"]["ZerodhaCommitResponse"];
+
+export async function postZerodhaPreview(file: File): Promise<ZerodhaPreview> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_BASE_URL}/ingest/zerodha/preview`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Zerodha preview failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<ZerodhaPreview>;
+}
+
+export async function postZerodhaCommit(
+  file: File,
+  mapping: Record<string, string | null>,
+): Promise<ZerodhaCommitResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mapping", JSON.stringify(mapping));
+  const response = await fetch(`${API_BASE_URL}/ingest/zerodha/commit`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!response.ok) {
+    throw new Error(`Zerodha commit failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<ZerodhaCommitResult>;
+}
+
 export type Holding = components["schemas"]["HoldingResponse"];
 type HoldingsResponse =
   operations["holdings_portfolio_holdings_get"]["responses"][200]["content"]["application/json"];
