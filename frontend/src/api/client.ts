@@ -73,6 +73,36 @@ export async function getAllocationDrift(): Promise<AllocationDriftResponse | nu
   return response.json() as Promise<AllocationDriftResponse>;
 }
 
+export type RiskProfile = components["schemas"]["RiskProfileResponse"];
+
+export async function getRiskProfile(): Promise<RiskProfile | null> {
+  const response = await fetch(`${API_BASE_URL}/risk-profile`);
+  if (!response.ok) {
+    throw new Error(`Failed to load risk profile: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RiskProfile | null>;
+}
+
+export async function setRiskProfile(request: {
+  persona: string;
+  target_equity_pct?: string | null;
+  target_debt_pct?: string | null;
+  horizon_years?: number | null;
+  drawdown_tolerance?: string | null;
+  income_stability?: string | null;
+  has_dependents?: boolean | null;
+}): Promise<RiskProfile> {
+  const response = await fetch(`${API_BASE_URL}/risk-profile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to save risk profile: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RiskProfile>;
+}
+
 type PortfolioBenchmarkComparisonResponse =
   operations["portfolio_comparison_benchmarks_comparison_portfolio_get"]["responses"][200]["content"]["application/json"];
 
