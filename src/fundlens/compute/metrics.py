@@ -92,6 +92,8 @@ class HoldingMetrics:
     scheme_key: str
     scheme_name: str
     amc: str
+    category_broad: str
+    category_specific: str
     invested_paise: int
     received_paise: int  # gross proceeds already redeemed, excluding current value
     current_value_paise: int | None  # None only if still held and NAV unavailable
@@ -228,6 +230,8 @@ def compute_holding_metrics(
     key: str,
     transactions: list[RawTransaction],
     open_holding: HoldingView | None,
+    category_broad: str = "Uncategorized",
+    category_specific: str = "Uncategorized",
 ) -> HoldingMetrics:
     scheme_name = transactions[0].scheme_name if transactions else key
     amc = transactions[0].amc if transactions else ""
@@ -279,6 +283,8 @@ def compute_holding_metrics(
         scheme_key=key,
         scheme_name=scheme_name,
         amc=amc,
+        category_broad=category_broad,
+        category_specific=category_specific,
         invested_paise=pos.invested_paise,
         received_paise=pos.received_paise,
         current_value_paise=pos.current_value_paise,
@@ -300,8 +306,14 @@ def get_all_holding_metrics(session: Session) -> list[HoldingMetrics]:
     if not positions:
         return []
 
-    open_holdings = {(h.folio, h.scheme_key): h for h in get_current_holdings(session)}
+    current_holdings = get_current_holdings(session)
+    open_holdings = {(h.folio, h.scheme_key): h for h in current_holdings}
     txns_by_position = positions_with_transactions(session, positions)
+    # Fully-exited positions have no open_holding to read an amfi_code from
+    # (same limitation compute_category_breakdown documents), so they fall
+    # through to the "Uncategorized" default below rather than being looked
+    # up here.
+    category_labels = fund_category_labels(session, current_holdings)
 
     return [
         compute_holding_metrics(
@@ -310,6 +322,12 @@ def get_all_holding_metrics(session: Session) -> list[HoldingMetrics]:
             key=key,
             transactions=txns_by_position.get((folio, key), []),
             open_holding=open_holdings.get((folio, key)),
+            category_broad=category_labels.get((folio, key), ("Uncategorized", "Uncategorized"))[
+                0
+            ],
+            category_specific=category_labels.get(
+                (folio, key), ("Uncategorized", "Uncategorized")
+            )[1],
         )
         for folio, key in positions
     ]
@@ -487,6 +505,65 @@ def _compute_grouped_breakdown(
     return sorted(results, key=lambda r: r.current_value_paise, reverse=True)
 
 
+def _category_lookup_maps(
+    session: Session, amfi_codes: set[str]
+) -> tuple[dict[str, GrowwFundMetadata], dict[str, SchemeMetadata]]:
+    groww_by_code = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(GrowwFundMetadata).where(GrowwFundMetadata.amfi_code.in_(amfi_codes))
+        )
+    }
+    amfi_by_code = {
+        m.amfi_code: m
+        for m in session.scalars(
+            select(SchemeMetadata).where(SchemeMetadata.amfi_code.in_(amfi_codes))
+        )
+    }
+    return groww_by_code, amfi_by_code
+
+
+def _resolve_category_label(
+    amfi_code: str | None,
+    groww_by_code: dict[str, GrowwFundMetadata],
+    amfi_by_code: dict[str, SchemeMetadata],
+    level: Literal["category", "sub_category"],
+) -> str:
+    if amfi_code is None:
+        return "Uncategorized"
+
+    groww = groww_by_code.get(amfi_code)
+    groww_label = getattr(groww, level) if groww is not None else None
+    if groww_label:
+        return groww_label
+
+    amfi_meta = amfi_by_code.get(amfi_code)
+    if amfi_meta is not None:
+        broad, specific = parse_category_raw(amfi_meta.category_raw)
+        return broad if level == "category" else specific
+
+    return "Uncategorized"
+
+
+def fund_category_labels(
+    session: Session, holdings: list[HoldingView]
+) -> dict[tuple[str, str], tuple[str, str]]:
+    """Per-fund (category_broad, category_specific) labels for currently-open
+    holdings, keyed by (folio, scheme_key) -- same Groww-then-AMFI
+    resolution as compute_category_breakdown's label_for (via the shared
+    helpers above), reused here so a fund's row on the Funds page always
+    carries the same label a breakdown chart's drill-down link points at."""
+    amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
+    groww_by_code, amfi_by_code = _category_lookup_maps(session, amfi_codes)
+    return {
+        (h.folio, h.scheme_key): (
+            _resolve_category_label(h.amfi_code, groww_by_code, amfi_by_code, "category"),
+            _resolve_category_label(h.amfi_code, groww_by_code, amfi_by_code, "sub_category"),
+        )
+        for h in holdings
+    }
+
+
 def compute_category_breakdown(
     session: Session, level: Literal["category", "sub_category"]
 ) -> list[CategoryGroupMetrics]:
@@ -521,34 +598,10 @@ def compute_category_breakdown(
         return []
 
     amfi_codes = {h.amfi_code for h in holdings if h.amfi_code}
-    groww_by_code = {
-        m.amfi_code: m
-        for m in session.scalars(
-            select(GrowwFundMetadata).where(GrowwFundMetadata.amfi_code.in_(amfi_codes))
-        )
-    }
-    amfi_by_code = {
-        m.amfi_code: m
-        for m in session.scalars(
-            select(SchemeMetadata).where(SchemeMetadata.amfi_code.in_(amfi_codes))
-        )
-    }
+    groww_by_code, amfi_by_code = _category_lookup_maps(session, amfi_codes)
 
     def label_for(h: HoldingView) -> str:
-        if h.amfi_code is None:
-            return "Uncategorized"
-
-        groww = groww_by_code.get(h.amfi_code)
-        groww_label = getattr(groww, level) if groww is not None else None
-        if groww_label:
-            return groww_label
-
-        amfi_meta = amfi_by_code.get(h.amfi_code)
-        if amfi_meta is not None:
-            broad, specific = parse_category_raw(amfi_meta.category_raw)
-            return broad if level == "category" else specific
-
-        return "Uncategorized"
+        return _resolve_category_label(h.amfi_code, groww_by_code, amfi_by_code, level)
 
     return _compute_grouped_breakdown(session, holdings, label_for)
 

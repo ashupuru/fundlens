@@ -250,6 +250,81 @@ def test_less_than_one_year_flag_set_for_recent_investment(session: Session) -> 
     assert all_metrics[0].less_than_one_year is True
 
 
+def test_holding_metrics_resolves_category_from_groww(session: Session) -> None:
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="111", txn_type=TransactionType.PURCHASE,
+        txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("100"), amount_paise=1_000_000,
+    )
+    _add_groww_metadata(session, "111", category="Equity", sub_category="Large Cap")
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "111", date.today(), Decimal("110"))
+    session.commit()
+
+    m = metrics.get_all_holding_metrics(session)[0]
+
+    assert m.category_broad == "Equity"
+    assert m.category_specific == "Large Cap"
+
+
+def test_holding_metrics_falls_back_to_amfi_category_when_groww_has_no_row(
+    session: Session,
+) -> None:
+    """Mirrors compute_category_breakdown's own Groww-then-AMFI fallback
+    (tests/compute/test_metrics.py::test_compute_category_breakdown_falls_back_to_amfi_when_groww_has_no_row)
+    -- a Funds-page row for a Regular-plan holding must resolve the same
+    label a breakdown chart's drill-down link would point at."""
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="999", txn_type=TransactionType.PURCHASE,
+        txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("100"), amount_paise=1_000_000,
+    )
+    _add_scheme_metadata(
+        session, "999",
+        category_raw="Open Ended Schemes(Equity Scheme - Small Cap Fund)",
+        tax_asset_class=TaxAssetClass.EQUITY,
+    )
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    _add_nav(session, "999", date.today(), Decimal("110"))
+    session.commit()
+
+    m = metrics.get_all_holding_metrics(session)[0]
+
+    assert m.category_broad == "Equity"
+    assert m.category_specific == "Small Cap Fund"
+
+
+def test_holding_metrics_uncategorized_for_fully_exited_position(session: Session) -> None:
+    """A fully-exited position has no open_holding to read an amfi_code
+    from, so category resolution can't run -- same documented limitation
+    as compute_category_breakdown, which excludes exited positions
+    entirely; get_all_holding_metrics still includes the position (for its
+    realized XIRR) but reports it Uncategorized rather than guessing."""
+    upload = _make_upload(session)
+    _add_txn(
+        session, upload.id, amfi_code="111", txn_type=TransactionType.PURCHASE,
+        txn_date=date(2020, 1, 1), units=Decimal("50"), nav=Decimal("10"),
+    )
+    _add_txn(
+        session, upload.id, amfi_code="111", txn_type=TransactionType.REDEMPTION,
+        txn_date=date(2021, 1, 1), units=Decimal("-50"), nav=Decimal("15"),
+    )
+    _add_groww_metadata(session, "111", category="Equity", sub_category="Large Cap")
+    session.commit()
+    service.rebuild_lots_for_folio(session, "F1")
+    session.commit()
+
+    m = metrics.get_all_holding_metrics(session)[0]
+
+    assert m.is_fully_exited is True
+    assert m.category_broad == "Uncategorized"
+    assert m.category_specific == "Uncategorized"
+
+
 def test_no_positions_returns_empty_list(session: Session) -> None:
     assert metrics.get_all_holding_metrics(session) == []
 
