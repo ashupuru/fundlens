@@ -14,26 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from fundlens.allocation.service import (
-    detached_profile_with,
-    get_risk_profile,
-    set_retirement_profile,
-)
+from fundlens.allocation.service import get_risk_profile, set_retirement_profile
 from fundlens.api.deps import get_session
-from fundlens.assumptions.service import (
-    get_current_goal_assumptions,
-    get_current_healthcare_assumptions,
-    get_current_monte_carlo_assumptions,
-    get_current_scenario_assumptions,
-)
-from fundlens.compute.monte_carlo import run_retirement_monte_carlo
-from fundlens.compute.retirement import (
-    RetirementProjection,
-    compute_retirement_projection,
-    compute_retirement_scenarios,
-)
+from fundlens.compute.retirement import RetirementProjection
 from fundlens.db.models import RiskProfile
 from fundlens.money import to_paise_strict
+from fundlens.planning import service as planning
 
 router = APIRouter(prefix="/retirement", tags=["retirement"])
 
@@ -298,48 +284,36 @@ def get_retirement_projection(
     must not quietly become "I retire at 62". Omit them all for the saved
     plan as-is.
     """
-    profile = get_risk_profile(session)
-    if profile is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No risk profile set — complete onboarding first (POST /risk-profile)",
-        )
-
-    overrides: dict[str, object] = {}
     try:
-        if retirement_age is not None:
-            overrides["retirement_age"] = retirement_age
-        if annual_investment_rupees is not None:
-            overrides["annual_investment_paise"] = to_paise_strict(
-                Decimal(annual_investment_rupees)
-            )
-        if monthly_withdrawal_today_rupees is not None:
-            overrides["monthly_withdrawal_today_paise"] = to_paise_strict(
-                Decimal(monthly_withdrawal_today_rupees)
-            )
-        deltas = (
-            Decimal(return_delta_pct) if return_delta_pct is not None else Decimal(0),
-            Decimal(inflation_delta_pct) if inflation_delta_pct is not None else Decimal(0),
+        investment_paise = (
+            to_paise_strict(Decimal(annual_investment_rupees))
+            if annual_investment_rupees is not None
+            else None
+        )
+        withdrawal_paise = (
+            to_paise_strict(Decimal(monthly_withdrawal_today_rupees))
+            if monthly_withdrawal_today_rupees is not None
+            else None
+        )
+        returns_delta = Decimal(return_delta_pct) if return_delta_pct is not None else Decimal(0)
+        inflation_delta = (
+            Decimal(inflation_delta_pct) if inflation_delta_pct is not None else Decimal(0)
         )
     except InvalidOperation as exc:
         raise HTTPException(status_code=422, detail=f"Invalid numeric override: {exc}") from exc
 
-    if overrides:
-        profile = detached_profile_with(session, profile, **overrides)
-
-    assumptions = get_current_goal_assumptions(session)
-    return _to_response(
-        compute_retirement_projection(
+    try:
+        projection = planning.project_retirement(
             session,
-            profile,
-            assumptions,
-            return_delta_pct=deltas[0],
-            inflation_delta_pct=deltas[1],
-            healthcare_inflation_pct=get_current_healthcare_assumptions(
-                session
-            ).healthcare_inflation_pct,
+            retirement_age=retirement_age,
+            annual_investment_paise=investment_paise,
+            monthly_withdrawal_today_paise=withdrawal_paise,
+            return_delta_pct=returns_delta,
+            inflation_delta_pct=inflation_delta,
         )
-    )
+    except planning.PlanningUnavailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _to_response(projection)
 
 
 class RetirementScenarioResponse(BaseModel):
@@ -354,14 +328,10 @@ class RetirementScenarioResponse(BaseModel):
 def get_retirement_scenarios(
     session: Session = Depends(get_session),
 ) -> list[RetirementScenarioResponse]:
-    profile = get_risk_profile(session)
-    if profile is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No risk profile set — complete onboarding first (POST /risk-profile)",
-        )
-    assumptions = get_current_goal_assumptions(session)
-    scenario_assumptions = get_current_scenario_assumptions(session)
+    try:
+        scenarios = planning.retirement_scenarios(session)
+    except planning.PlanningUnavailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [
         RetirementScenarioResponse(
             key=s.key,
@@ -370,13 +340,7 @@ def get_retirement_scenarios(
             inflation_delta_pct=str(s.inflation_delta_pct),
             projection=_to_response(s.projection),
         )
-        for s in compute_retirement_scenarios(
-            session,
-            profile,
-            assumptions,
-            scenario_assumptions.return_delta_pct,
-            scenario_assumptions.inflation_delta_pct,
-        )
+        for s in scenarios
     ]
 
 
@@ -398,55 +362,12 @@ def get_retirement_monte_carlo(
     simulated paths is a different cost tier from the projection's few dozen
     rows of arithmetic, and the frontend triggers it explicitly (same
     precedent as the goal Monte Carlo and POST /ai/analyze)."""
-    profile = get_risk_profile(session)
-    if profile is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No risk profile set — complete onboarding first (POST /risk-profile)",
-        )
+    try:
+        simulation = planning.retirement_monte_carlo(session)
+    except planning.PlanningUnavailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    assumptions = get_current_goal_assumptions(session)
-    projection = compute_retirement_projection(
-        session,
-        profile,
-        assumptions,
-        healthcare_inflation_pct=get_current_healthcare_assumptions(
-            session
-        ).healthcare_inflation_pct,
-    )
-    if projection.reason is not None:
-        raise HTTPException(status_code=404, detail=projection.reason)
-
-    mc_assumptions = get_current_monte_carlo_assumptions(session)
-    # Blended the same weighted-average way the expected return is
-    # (compute-engine.md §14) -- one volatility for the whole portfolio.
-    volatility_pct = (
-        profile.target_equity_pct / 100 * mc_assumptions.equity_volatility_pct
-        + profile.target_debt_pct / 100 * mc_assumptions.debt_volatility_pct
-    )
-
-    lump_sum_by_age = {
-        e.age: e.inflated_cost_paise
-        for e in projection.events
-        if e.excluded_reason is None and e.age is not None and e.inflated_cost_paise is not None
-    }
-
-    result = run_retirement_monte_carlo(
-        starting_corpus_paise=projection.starting_corpus_paise or 0,
-        annual_investment_paise=profile.annual_investment_paise or 0,
-        step_up_pct=profile.annual_investment_step_up_pct or Decimal(0),
-        current_age=projection.current_age or 0,
-        retirement_age=projection.retirement_age or 0,
-        life_expectancy=projection.life_expectancy or 0,
-        first_year_withdrawal_paise=projection.first_year_annual_withdrawal_paise or 0,
-        first_year_healthcare_paise=projection.first_year_annual_healthcare_paise or 0,
-        healthcare_inflation_pct=projection.healthcare_inflation_pct,
-        lump_sum_by_age=lump_sum_by_age,
-        pre_return_pct=projection.blended_return_pct or Decimal(0),
-        post_return_pct=projection.post_retirement_return_pct or Decimal(0),
-        volatility_pct=volatility_pct,
-        inflation_pct=projection.inflation_pct or Decimal(0),
-    )
+    result, volatility_pct = simulation.result, simulation.volatility_pct
     return RetirementMonteCarloResponse(
         simulations_run=result.simulations_run,
         success_probability_pct=result.success_probability_pct,
