@@ -145,8 +145,26 @@ export async function getRetirementScenarios(): Promise<RetirementScenario[]> {
   return response.json() as Promise<RetirementScenario[]>;
 }
 
-export async function getRetirementProjection(): Promise<RetirementProjection> {
-  const response = await fetch(`${API_BASE_URL}/retirement/projection`);
+export type RetirementWhatIf = {
+  retirement_age?: number | null;
+  annual_investment_rupees?: string | null;
+  monthly_withdrawal_today_rupees?: string | null;
+  return_delta_pct?: string | null;
+};
+
+export async function getRetirementProjection(
+  whatIf?: RetirementWhatIf,
+): Promise<RetirementProjection> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(whatIf ?? {})) {
+    if (value !== null && value !== undefined && value !== "") {
+      params.append(key, String(value));
+    }
+  }
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/retirement/projection${query ? `?${query}` : ""}`,
+  );
   if (!response.ok) {
     throw new Error(`Failed to load retirement projection: ${await detailOrStatus(response)}`);
   }

@@ -731,7 +731,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Retirement Projection */
+        /**
+         * Get Retirement Projection
+         * @description What-if parameters (spec §25) are applied to a **detached** copy of the
+         *     stored plan and never written back -- exploring "what if I retired at 62"
+         *     must not quietly become "I retire at 62". Omit them all for the saved
+         *     plan as-is.
+         */
         get: operations["get_retirement_projection_retirement_projection_get"];
         put?: never;
         post?: never;
@@ -3313,7 +3319,13 @@ export interface operations {
     };
     get_retirement_projection_retirement_projection_get: {
         parameters: {
-            query?: never;
+            query?: {
+                retirement_age?: number | null;
+                annual_investment_rupees?: string | null;
+                monthly_withdrawal_today_rupees?: string | null;
+                return_delta_pct?: string | null;
+                inflation_delta_pct?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3327,6 +3339,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetirementProjectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

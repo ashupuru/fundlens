@@ -1606,7 +1606,90 @@
           "retirement"
         ],
         "summary": "Get Retirement Projection",
+        "description": "What-if parameters (spec \u00a725) are applied to a **detached** copy of the\nstored plan and never written back -- exploring \"what if I retired at 62\"\nmust not quietly become \"I retire at 62\". Omit them all for the saved\nplan as-is.",
         "operationId": "get_retirement_projection_retirement_projection_get",
+        "parameters": [
+          {
+            "name": "retirement_age",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Retirement Age"
+            }
+          },
+          {
+            "name": "annual_investment_rupees",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Annual Investment Rupees"
+            }
+          },
+          {
+            "name": "monthly_withdrawal_today_rupees",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Monthly Withdrawal Today Rupees"
+            }
+          },
+          {
+            "name": "return_delta_pct",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return Delta Pct"
+            }
+          },
+          {
+            "name": "inflation_delta_pct",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Inflation Delta Pct"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1614,6 +1697,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RetirementProjectionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

@@ -99,3 +99,25 @@ def set_retirement_profile(
     profile.updated_at = datetime.now(UTC).replace(tzinfo=None)
     session.commit()
     return profile
+
+
+def detached_profile_with(
+    session: Session, profile: RiskProfile, **overrides: object
+) -> RiskProfile:
+    """A copy of `profile` with some fields replaced, **deliberately not
+    attached to the session** -- for what-if exploration, where the user is
+    trying values out rather than saving them.
+
+    Mutating the attached instance instead would be silently destructive:
+    SQLAlchemy autoflushes pending changes before the next query, so a
+    read-only "what if I retired at 62" request would quietly rewrite the
+    stored plan. Constructing a fresh, unattached instance makes that
+    impossible by construction rather than by remembering to roll back.
+    """
+    fields = {c.name: getattr(profile, c.name) for c in RiskProfile.__table__.columns}
+    fields.update(overrides)
+    detached = RiskProfile(**fields)
+    # Belt and braces: even if a caller later hands this to session.add(),
+    # expunge-on-construct isn't possible, so assert it isn't tracked now.
+    assert detached not in session
+    return detached

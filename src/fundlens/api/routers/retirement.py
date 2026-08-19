@@ -8,13 +8,17 @@ arithmetic over one already-computed portfolio value, with no per-year
 database access.
 """
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from fundlens.allocation.service import get_risk_profile, set_retirement_profile
+from fundlens.allocation.service import (
+    detached_profile_with,
+    get_risk_profile,
+    set_retirement_profile,
+)
 from fundlens.api.deps import get_session
 from fundlens.assumptions.service import (
     get_current_goal_assumptions,
@@ -238,15 +242,56 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
 @router.get("/projection", response_model=RetirementProjectionResponse)
 def get_retirement_projection(
     session: Session = Depends(get_session),
+    retirement_age: int | None = None,
+    annual_investment_rupees: str | None = None,
+    monthly_withdrawal_today_rupees: str | None = None,
+    return_delta_pct: str | None = None,
+    inflation_delta_pct: str | None = None,
 ) -> RetirementProjectionResponse:
+    """What-if parameters (spec §25) are applied to a **detached** copy of the
+    stored plan and never written back -- exploring "what if I retired at 62"
+    must not quietly become "I retire at 62". Omit them all for the saved
+    plan as-is.
+    """
     profile = get_risk_profile(session)
     if profile is None:
         raise HTTPException(
             status_code=404,
             detail="No risk profile set — complete onboarding first (POST /risk-profile)",
         )
+
+    overrides: dict[str, object] = {}
+    try:
+        if retirement_age is not None:
+            overrides["retirement_age"] = retirement_age
+        if annual_investment_rupees is not None:
+            overrides["annual_investment_paise"] = to_paise_strict(
+                Decimal(annual_investment_rupees)
+            )
+        if monthly_withdrawal_today_rupees is not None:
+            overrides["monthly_withdrawal_today_paise"] = to_paise_strict(
+                Decimal(monthly_withdrawal_today_rupees)
+            )
+        deltas = (
+            Decimal(return_delta_pct) if return_delta_pct is not None else Decimal(0),
+            Decimal(inflation_delta_pct) if inflation_delta_pct is not None else Decimal(0),
+        )
+    except InvalidOperation as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid numeric override: {exc}") from exc
+
+    if overrides:
+        profile = detached_profile_with(session, profile, **overrides)
+
     assumptions = get_current_goal_assumptions(session)
-    return _to_response(compute_retirement_projection(session, profile, assumptions))
+    return _to_response(
+        compute_retirement_projection(
+            session,
+            profile,
+            assumptions,
+            return_delta_pct=deltas[0],
+            inflation_delta_pct=deltas[1],
+        )
+    )
 
 
 class RetirementScenarioResponse(BaseModel):

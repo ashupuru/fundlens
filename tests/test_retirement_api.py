@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 
@@ -105,3 +107,64 @@ def test_saving_the_risk_profile_does_not_wipe_retirement_fields(client: TestCli
     body = client.get("/retirement/profile").json()
     assert body["current_age"] == 51
     assert body["annual_investment_paise"] == 60_000_000
+
+
+def test_what_if_overrides_change_the_projection(client: TestClient) -> None:
+    _set_risk_profile(client)
+    client.post("/retirement/profile", json=_RETIREMENT_PROFILE)
+
+    base = client.get("/retirement/projection").json()
+    later = client.get("/retirement/projection", params={"retirement_age": 65}).json()
+
+    assert base["retirement_age"] == 60
+    assert later["retirement_age"] == 65
+    assert later["years_to_retirement"] == 14
+    # Five more years of compounding and contributions.
+    assert later["corpus_at_retirement_paise"] > base["corpus_at_retirement_paise"]
+
+
+def test_what_if_never_writes_the_override_back(client: TestClient) -> None:
+    """The whole point: exploring "what if I retired at 62" must not quietly
+    become "I retire at 62". SQLAlchemy autoflushes pending changes before
+    the next query, so mutating the attached profile would persist."""
+    _set_risk_profile(client)
+    client.post("/retirement/profile", json=_RETIREMENT_PROFILE)
+
+    client.get(
+        "/retirement/projection",
+        params={
+            "retirement_age": 70,
+            "annual_investment_rupees": "9999999",
+            "monthly_withdrawal_today_rupees": "1",
+        },
+    )
+
+    stored = client.get("/retirement/profile").json()
+    assert stored["retirement_age"] == 60
+    assert stored["annual_investment_paise"] == 60_000_000
+    assert stored["monthly_withdrawal_today_paise"] == 10_000_000
+
+    # ...and the un-parameterised projection still reflects the saved plan.
+    assert client.get("/retirement/projection").json()["retirement_age"] == 60
+
+
+def test_what_if_return_delta_shifts_the_rate(client: TestClient) -> None:
+    _set_risk_profile(client)
+    client.post("/retirement/profile", json=_RETIREMENT_PROFILE)
+
+    base = client.get("/retirement/projection").json()
+    worse = client.get("/retirement/projection", params={"return_delta_pct": "-3"}).json()
+
+    assert Decimal(worse["blended_return_pct"]) == Decimal(base["blended_return_pct"]) - 3
+    assert worse["corpus_at_retirement_paise"] < base["corpus_at_retirement_paise"]
+
+
+def test_what_if_rejects_a_non_numeric_override(client: TestClient) -> None:
+    _set_risk_profile(client)
+    client.post("/retirement/profile", json=_RETIREMENT_PROFILE)
+
+    response = client.get(
+        "/retirement/projection", params={"annual_investment_rupees": "lots"}
+    )
+
+    assert response.status_code == 422

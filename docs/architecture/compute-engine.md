@@ -982,3 +982,25 @@ at zero and `additional_annual_investment_paise` likewise floors at the gap abov
 planned. (This also made the first round-trip fixture meaningless — a starting corpus that already
 covered the target produced the correct answer 0, proving nothing about the algebra, so the
 fixtures deliberately start well short.)
+
+## 20. What-If Exploration (shipped — `GET /retirement/projection` query params)
+
+The spec's §25: *"what happens if I retire two years later?"*, *"…if I increase my SIP by
+₹25,000/month?"*, *"…if returns are only 8%?"*. No new engine — the projection already
+parameterizes every lever (§16) and scenarios already added return/inflation deltas (§18), so
+this is the same computation over an adjusted input.
+
+**The overrides must never persist**, and that's enforced structurally rather than by discipline.
+`allocation/service.py::detached_profile_with` builds an **unattached** `RiskProfile` copy;
+mutating the session-attached instance instead would be silently destructive, because SQLAlchemy
+autoflushes pending changes before the next query — a read-only "what if I retired at 62" request
+would quietly rewrite the saved plan. A test asserts the stored profile is byte-for-byte unchanged
+after a request that overrides three fields at once.
+
+Deltas (`return_delta_pct`) are passed straight through to the same parameters scenario analysis
+uses, so "shift returns down 3%" and "the conservative scenario" are the same code path with
+different numbers — they can't disagree.
+
+Real-portfolio sanity check, all four from one saved plan and leaving it untouched: retiring at 65
+lifts readiness 52% → 83% and pushes depletion 71 → 81; +₹25k/month SIP moves it to 55%; a 3%
+worse return drops it to 29% with the corpus gone by 67.
