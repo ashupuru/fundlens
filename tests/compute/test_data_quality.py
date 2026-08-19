@@ -274,7 +274,7 @@ def test_cross_source_duplicate_found_despite_differing_amounts(session: Session
     assert dups[0].units == Decimal("379.9850")
     assert {r.source for r in dups[0].rows} == {"Direct / AMC folio", "Zerodha"}
     # The broker copy is removable; the CAS copy is kept.
-    assert dups[0].removable is not None and dups[0].removable.folio == "ZERODHA"
+    assert [r.folio for r in dups[0].removable] == ["ZERODHA"]
     assert dups[0].keep is not None and dups[0].keep.folio == "AMC-1"
 
 

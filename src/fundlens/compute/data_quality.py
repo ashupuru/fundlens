@@ -138,10 +138,15 @@ class CrossSourceDuplicate:
     direction: str
     units: Decimal
     rows: list[DuplicateRow]
-    # The broker-side copy, i.e. the one cleanup would delete -- the CAS
-    # record is kept, being the richer one (real AMC folio, stamp-duty
-    # lines, history well beyond the broker export's window).
-    removable: DuplicateRow | None
+    # The broker-side copies cleanup would delete -- the CAS records are
+    # kept, being the richer ones (real AMC folio, stamp-duty lines, history
+    # well beyond the broker export's window).
+    #
+    # A *list*, because a group can legitimately hold several identical rows:
+    # three parallel Rs 1,000 SIPs into one fund on one day all buy the same
+    # number of units, so they are indistinguishable. Removing a single row
+    # per group left one duplicate behind on every such date in real data.
+    removable: list[DuplicateRow]
     keep: DuplicateRow | None
 
 
@@ -156,15 +161,19 @@ def get_cross_source_duplicates(session: Session) -> list[CrossSourceDuplicate]:
     from fundlens.compute.metrics import (
         BROKER_SOURCES,
         DIRECTION_BY_TXN_TYPE,
-        position_sources,
+        derived_position_sources,
     )
 
     txns = session.scalars(select(RawTransaction)).all()
-    # Effective sources, not derived ones: a user who has corrected a
-    # position's attribution (holding_source_override) must still have its
-    # duplicates detected -- reading only the derived value would make
-    # exactly the positions they'd already noticed were wrong invisible here.
-    sources = {key: source for key, (source, _) in position_sources(session).items()}
+    # **Derived** sources, deliberately -- provenance is "which import
+    # produced this row", and a user's `holding_source_override` says
+    # something different ("where do I hold this fund"). Reading effective
+    # sources here is self-defeating: resolving a duplicate writes an
+    # override naming the broker onto the surviving CAS position, which
+    # would then make that position look broker-sourced and hide any
+    # remaining duplicates on it. Real data hit exactly that -- a second
+    # pass reported zero while 49 duplicates were still present.
+    sources = derived_position_sources(session)
 
     grouped: dict[tuple[str, date, str, Decimal], list[RawTransaction]] = {}
     for txn in txns:
@@ -198,6 +207,11 @@ def get_cross_source_duplicates(session: Session) -> list[CrossSourceDuplicate]:
             # one over the other, so report nothing rather than guess.
             continue
 
+        # Remove at most as many broker rows as the CAS itself accounts for.
+        # If the broker reports MORE than the CAS (M > N), the surplus is not
+        # a duplicate -- the CAS simply doesn't cover it (its statement window,
+        # or a trade it never saw) -- and deleting it would destroy real
+        # history. Capping at N keeps the count right in both directions.
         duplicates.append(
             CrossSourceDuplicate(
                 amfi_code=amfi_code,
@@ -206,7 +220,7 @@ def get_cross_source_duplicates(session: Session) -> list[CrossSourceDuplicate]:
                 direction=direction,
                 units=units,
                 rows=detailed,
-                removable=broker_rows[0],
+                removable=broker_rows[: len(non_broker)],
                 keep=non_broker[0],
             )
         )

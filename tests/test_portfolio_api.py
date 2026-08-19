@@ -1,8 +1,17 @@
+import uuid
+from datetime import date
 from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
+from fundlens.db.models import (
+    RawCASUpload,
+    RawTransaction,
+    TransactionType,
+    UploadStatus,
+)
 from fundlens.market_data import groww_service
 
 _GROWW_PAYLOAD = {
@@ -259,56 +268,72 @@ def test_known_sources_include_builtins_and_user_labels(client: TestClient) -> N
     assert "Zerodha" in sources
 
 
-def _seed_cross_source_duplicate(client: TestClient) -> None:
-    """A CAS-style purchase and a broker-style purchase of the same trade:
-    identical units, amounts a few paise apart -- the real shape of the bug."""
-    cas = (
-        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
-        "AMC-FOLIO-1,ICICI,Acme Hybrid,PURCHASE,2021-10-06,49997.50,379.9850,INF001,120700\n"
-    )
-    client.post("/ingest/csv", files={"file": ("cas.csv", cas, "text/csv")})
-    client.post("/portfolio/rebuild-lots")
-    # Only the broker side is re-attributed; the CAS side keeps its derived
-    # source, as a real CAS position would (no override until a user sets one).
-    broker = (
-        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
-        "ZERODHA,ICICI,Acme Hybrid,PURCHASE,2021-10-06,49997.44,379.9850,INF001,120700\n"
-    )
-    client.post("/ingest/csv", files={"file": ("z.csv", broker, "text/csv")})
-    client.post("/portfolio/rebuild-lots")
-    zerodha = [h for h in client.get("/portfolio/holdings").json() if h["folio"] == "ZERODHA"][0]
-    client.put(
-        "/portfolio/holding-source",
-        json={
-            "folio": "ZERODHA",
-            "scheme_key": zerodha["scheme_key"],
-            "source": "Zerodha",
-        },
-    )
+def _seed_cross_source_duplicate(session: Session, *, broker_rows: int = 1,
+                                 cas_rows: int = 1) -> None:
+    """A CAS purchase and a broker purchase of the same trade: identical
+    units, amounts a few paise apart -- the real shape of the bug.
+
+    Seeded directly because provenance comes from the upload's
+    parser_version, which no API request can set.
+    """
+    for parser_version, folio, amount, count in (
+        ("1.3.0", "AMC-FOLIO-1", 4999750, cas_rows),
+        ("zerodha-tradebook-csv-v1", "ZERODHA", 4999744, broker_rows),
+    ):
+        upload = RawCASUpload(
+            file_hash=f"h-{uuid.uuid4().hex}",
+            parser_version=parser_version,
+            status=UploadStatus.PARSED,
+        )
+        session.add(upload)
+        session.flush()
+        for _ in range(count):
+            session.add(
+                RawTransaction(
+                    upload_id=upload.id,
+                    folio=folio,
+                    amc="ICICI",
+                    scheme_name="Acme Hybrid",
+                    isin="INF001",
+                    amfi_code="120700",
+                    txn_type=TransactionType.PURCHASE,
+                    txn_date=date(2021, 10, 6),
+                    units=Decimal("379.9850"),
+                    amount_paise=amount,
+                    natural_key=f"k-{uuid.uuid4().hex}",
+                )
+            )
+    session.commit()
 
 
-def test_duplicate_preview_finds_the_pair_without_deleting(client: TestClient) -> None:
-    _seed_cross_source_duplicate(client)
+def test_duplicate_preview_finds_the_pair_without_deleting(
+    client_with_session: tuple[TestClient, Session],
+) -> None:
+    client, session = client_with_session
+    _seed_cross_source_duplicate(session)
+    client.post("/portfolio/rebuild-lots")
 
     body = client.get("/portfolio/duplicates/preview").json()
 
     assert body["removable_count"] == 1
     dup = body["duplicates"][0]
     assert dup["units"] == "379.9850"
-    assert {r["source"] for r in dup["rows"]} == {"Manual CSV", "Zerodha"}
-    # The broker side is the one marked for removal, the CAS side is kept.
-    removable = next(r for r in dup["rows"] if r["txn_id"] == dup["removable_txn_id"])
+    assert {r["source"] for r in dup["rows"]} == {"Direct / AMC folio", "Zerodha"}
+    # The broker side is marked for removal, the CAS side kept.
+    removable = next(r for r in dup["rows"] if r["txn_id"] in dup["removable_txn_ids"])
     assert removable["source"] == "Zerodha"
     assert dup["keep_folio"] == "AMC-FOLIO-1"
 
-    # Nothing deleted by a preview.
-    assert len(client.get("/portfolio/metrics").json()) == 2
+    # A preview deletes nothing.
+    assert session.query(RawTransaction).count() == 2
 
 
 def test_duplicate_resolve_deletes_the_broker_copy_and_keeps_attribution(
-    client: TestClient,
+    client_with_session: tuple[TestClient, Session],
 ) -> None:
-    _seed_cross_source_duplicate(client)
+    client, session = client_with_session
+    _seed_cross_source_duplicate(session)
+    client.post("/portfolio/rebuild-lots")
 
     body = client.post("/portfolio/duplicates/resolve").json()
 
@@ -327,8 +352,12 @@ def test_duplicate_resolve_deletes_the_broker_copy_and_keeps_attribution(
     assert surviving["source_is_override"] is True
 
 
-def test_duplicate_resolve_is_idempotent(client: TestClient) -> None:
-    _seed_cross_source_duplicate(client)
+def test_duplicate_resolve_is_idempotent(
+    client_with_session: tuple[TestClient, Session],
+) -> None:
+    client, session = client_with_session
+    _seed_cross_source_duplicate(session)
+    client.post("/portfolio/rebuild-lots")
     client.post("/portfolio/duplicates/resolve")
 
     second = client.post("/portfolio/duplicates/resolve").json()
@@ -365,3 +394,77 @@ def test_two_non_broker_sources_are_reported_but_not_auto_resolved(
     client.post("/portfolio/rebuild-lots")
 
     assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 0
+
+
+def test_all_matched_broker_rows_are_removed_not_just_one(
+    client_with_session: tuple[TestClient, Session],
+) -> None:
+    """Regression: three parallel Rs 1,000 SIPs into one fund on one day all
+    buy the same units, so a group can hold several identical rows. Removing
+    one per group left a duplicate behind on every such date in real data --
+    caught only by reconciling against the broker's own app."""
+    client, session = client_with_session
+    _seed_cross_source_duplicate(session, cas_rows=3, broker_rows=2)
+    client.post("/portfolio/rebuild-lots")
+
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 2
+
+    client.post("/portfolio/duplicates/resolve")
+
+    # Both broker copies gone; all three CAS rows kept.
+    remaining = session.query(RawTransaction).all()
+    session.expire_all()
+    assert [r.folio for r in session.query(RawTransaction).all()] == ["AMC-FOLIO-1"] * 3
+    assert len(remaining) >= 3
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 0
+
+
+def test_broker_surplus_beyond_the_cas_is_never_deleted(
+    client_with_session: tuple[TestClient, Session],
+) -> None:
+    """If the broker reports MORE rows than the CAS, the surplus is real
+    history the CAS simply doesn't cover -- deleting it would lose data."""
+    client, session = client_with_session
+    _seed_cross_source_duplicate(session, cas_rows=1, broker_rows=3)
+    client.post("/portfolio/rebuild-lots")
+
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 1
+
+    client.post("/portfolio/duplicates/resolve")
+
+    folios = sorted(r.folio for r in session.query(RawTransaction).all())
+    assert folios == ["AMC-FOLIO-1", "ZERODHA", "ZERODHA"]
+
+
+def test_detection_survives_the_override_it_writes(
+    client_with_session: tuple[TestClient, Session],
+) -> None:
+    """Regression: resolve writes a broker-named source override onto the
+    surviving CAS position. If detection read *effective* sources it would
+    then see both sides as broker-sourced and report zero -- hiding any
+    duplicates still present. Real data hit exactly that."""
+    client, session = client_with_session
+    _seed_cross_source_duplicate(session, cas_rows=3, broker_rows=1)
+    client.post("/portfolio/rebuild-lots")
+
+    client.post("/portfolio/duplicates/resolve")  # writes the override
+
+    # Seed one more broker duplicate; it must still be visible afterwards.
+    upload = RawCASUpload(
+        file_hash=f"h-{uuid.uuid4().hex}",
+        parser_version="zerodha-tradebook-csv-v1",
+        status=UploadStatus.PARSED,
+    )
+    session.add(upload)
+    session.flush()
+    session.add(
+        RawTransaction(
+            upload_id=upload.id, folio="ZERODHA", amc="ICICI", scheme_name="Acme Hybrid",
+            isin="INF001", amfi_code="120700", txn_type=TransactionType.PURCHASE,
+            txn_date=date(2021, 10, 6), units=Decimal("379.9850"), amount_paise=4999744,
+            natural_key=f"k-{uuid.uuid4().hex}",
+        )
+    )
+    session.commit()
+
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 1

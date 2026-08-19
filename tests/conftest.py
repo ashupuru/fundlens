@@ -38,6 +38,33 @@ def session() -> Iterator[Session]:
 
 
 @pytest.fixture
+def client_with_session() -> Iterator[tuple[TestClient, Session]]:
+    """A client plus a Session on the *same* engine, for tests that must seed
+    rows the API can't create -- e.g. transactions attributed to a specific
+    importer, where provenance comes from the upload's parser_version rather
+    than anything a request can set."""
+    from fundlens.api.deps import get_session
+    from fundlens.api.main import app
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+
+    def override_get_session() -> Iterator[Session]:
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_get_session
+    with Session(engine) as seed_session:
+        yield TestClient(app), seed_session
+    app.dependency_overrides.clear()
+    engine.dispose()
+
+
+@pytest.fixture
 def client() -> Iterator[TestClient]:
     # Deferred imports: fundlens.api.main pulls in the whole app graph, which
     # only tests that actually need a live API should pay for.

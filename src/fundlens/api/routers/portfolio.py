@@ -320,7 +320,7 @@ class DuplicateResponse(BaseModel):
     direction: str
     units: str
     rows: list[DuplicateSideResponse]
-    removable_txn_id: str | None
+    removable_txn_ids: list[str]
     keep_folio: str | None
 
 
@@ -345,7 +345,7 @@ def _duplicate_responses(session: Session) -> list[DuplicateResponse]:
                 )
                 for r in d.rows
             ],
-            removable_txn_id=d.removable.txn_id if d.removable else None,
+            removable_txn_ids=[r.txn_id for r in d.removable],
             keep_folio=d.keep.folio if d.keep else None,
         )
         for d in get_cross_source_duplicates(session)
@@ -358,14 +358,12 @@ def preview_duplicates(session: Session = Depends(get_session)) -> DuplicatePrev
     shape the broker importers use, because the resolve step deletes real
     financial records."""
     duplicates = _duplicate_responses(session)
-    removable = [d for d in duplicates if d.removable_txn_id is not None]
+    by_id = {r.txn_id: r for d in duplicates for r in d.rows}
+    removable_ids = [i for d in duplicates for i in d.removable_txn_ids]
     return DuplicatePreviewResponse(
         duplicates=duplicates,
-        removable_count=len(removable),
-        removable_amount_paise=sum(
-            abs(next(r.amount_paise or 0 for r in d.rows if r.txn_id == d.removable_txn_id))
-            for d in removable
-        ),
+        removable_count=len(removable_ids),
+        removable_amount_paise=sum(abs(by_id[i].amount_paise or 0) for i in removable_ids),
     )
 
 
@@ -389,20 +387,23 @@ def resolve_duplicates(session: Session = Depends(get_session)) -> DuplicateReso
     what that table exists for.
     """
     duplicates = get_cross_source_duplicates(session)
-    resolvable = [d for d in duplicates if d.removable is not None and d.keep is not None]
+    resolvable = [d for d in duplicates if d.removable and d.keep is not None]
 
     deleted_amount = 0
+    deleted_count = 0
     overrides: dict[tuple[str, str], str] = {}
     for dup in resolvable:
-        assert dup.removable is not None and dup.keep is not None
-        txn = session.get(RawTransaction, dup.removable.txn_id)
-        if txn is None:
-            continue
-        deleted_amount += abs(txn.amount_paise or 0)
-        overrides[(dup.keep.folio, scheme_key(txn.isin, txn.amfi_code, txn.scheme_name))] = (
-            dup.removable.source
-        )
-        session.delete(txn)
+        assert dup.keep is not None
+        for removable in dup.removable:
+            txn = session.get(RawTransaction, removable.txn_id)
+            if txn is None:
+                continue
+            deleted_amount += abs(txn.amount_paise or 0)
+            deleted_count += 1
+            overrides[
+                (dup.keep.folio, scheme_key(txn.isin, txn.amfi_code, txn.scheme_name))
+            ] = removable.source
+            session.delete(txn)
 
     for (folio, key), source in overrides.items():
         # Never overwrite an override the user set themselves: an automated
@@ -415,7 +416,7 @@ def resolve_duplicates(session: Session = Depends(get_session)) -> DuplicateReso
     session.commit()
 
     return DuplicateResolveResponse(
-        deleted_count=len(resolvable),
+        deleted_count=deleted_count,
         deleted_amount_paise=deleted_amount,
         source_overrides_written=len(overrides),
         rebuild=rebuild_lots(session),
@@ -433,7 +434,7 @@ def resolve_duplicates(session: Session = Depends(get_session)) -> DuplicateReso
                     )
                     for r in d.rows
                 ],
-                removable_txn_id=d.removable.txn_id if d.removable else None,
+                removable_txn_ids=[r.txn_id for r in d.removable],
                 keep_folio=d.keep.folio if d.keep else None,
             )
             for d in resolvable

@@ -1203,7 +1203,24 @@ only Zerodha rows were duplicates would become "Direct / AMC folio"), so resolve
 exists for. It **never overwrites an override the user set themselves**: automated bookkeeping
 correcting its own mistake has no business relabelling a judgement someone already made.
 
-Run `scripts/backup-db.sh` first. Verified on the real portfolio: 113 transactions and ₹8.69 L
-removed, cost basis ₹3.16 Cr → ₹3.07 Cr, HDFC Flexi Cap reduced to a single 119.5080-unit holding,
-1,603 lots rebuilt with zero errors, re-running preview finds none, and the three affected funds
-still report as Zerodha.
+Run `scripts/backup-db.sh` first.
+
+**Two bugs here were caught only by reconciling against the broker's own app**, not by any test —
+worth recording because both produced confidently wrong output:
+
+1. **One removal per group.** A group is keyed on identical units, and three parallel ₹1,000 SIPs
+   into one fund on one day buy *identical* units — so a group legitimately holds several rows.
+   Removing a single broker row per group left one duplicate behind on every such date. The rule
+   is now "remove `min(broker_rows, cas_rows)`": capped, because a broker reporting *more* than the
+   CAS is real history the CAS doesn't cover, and deleting that would lose data.
+2. **Detection blinded by its own cleanup.** Resolve writes a broker-named `HoldingSourceOverride`
+   onto the surviving CAS position. Detection was reading *effective* sources, so that position
+   then looked broker-sourced, no non-broker side remained, and a second pass reported **zero while
+   49 duplicates were still present**. Detection now reads **derived** sources: provenance is
+   "which import produced this row", which an override — a statement about where a fund is *held* —
+   must never change.
+
+Verified on the real portfolio across both passes: 162 transactions and ₹9.18 L removed, cost basis
+₹3.16 Cr → ₹3.02 Cr, HDFC Flexi Cap reduced to a single 119.5080-unit holding, lots rebuilt with
+zero errors, and the Zerodha total reconciling to **₹24,22,578 against the Zerodha app's
+₹24,22,577** — a ₹1.16 rounding difference across 12 funds, every one matching individually.

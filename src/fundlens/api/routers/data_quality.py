@@ -147,7 +147,7 @@ def summary(session: Session = Depends(get_session)) -> DataQualitySummaryRespon
                     )
                     for r in d.rows
                 ],
-                resolvable=d.removable is not None,
+                resolvable=bool(d.removable),
             )
             for d in get_cross_source_duplicates(session)
         ],
