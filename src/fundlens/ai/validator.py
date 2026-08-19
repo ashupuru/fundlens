@@ -12,12 +12,29 @@ Only `NarrativeResponse.statements` (numeric claims) go through this.
 `news_context` items are deliberately never validated here: they cite the
 web via the `web_search` tool, not the snapshot, and the doc's own design
 is that this content type is *allowed* to reference the outside world.
+
+**Evidence, not just the snapshot.** Since the tool-calling layer shipped,
+what a statement may cite is the snapshot *plus* every deterministic tool
+result computed while answering (`build_evidence` below). The snapshot's
+own fields keep their original root-level paths, so nothing that validated
+before validates differently now; tool figures live under `tool_calls[i]`.
+
+One consequence is worth stating plainly rather than glossing:
+`scan_for_foreign_numbers` gets weaker as the evidence grows. With a dozen
+tool results in scope, most number-shaped tokens will land within tolerance
+of *something*, so it degrades from a real check toward a coarse backstop.
+The per-statement citation check is unaffected -- it verifies each cited
+path resolves *and* that its value appears in the text, which is a
+per-path test that more evidence cannot dilute -- and remains the primary
+gate.
 """
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any, Protocol
 
-from fundlens.ai.claude_client import GroundedStatement, NarrativeResponse
+from fundlens.ai.claude_client import GroundedStatement
 from fundlens.ai.snapshot import PortfolioMetricsSnapshot
 
 _NUMBER_RE = re.compile(r"-?\d+\.?\d*")
@@ -26,6 +43,31 @@ _PATH_SEGMENT_RE = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
 # Absolute tolerance for matching a snapshot value against a number-token in
 # text -- accounts for Claude rounding "68.5714%" to "68.6%" or "69%".
 _MATCH_TOLERANCE = 0.05
+
+Evidence = Mapping[str, Any]
+
+
+def build_evidence(
+    snapshot: PortfolioMetricsSnapshot, tool_calls: Sequence[Mapping[str, Any]] = ()
+) -> Evidence:
+    """Everything a statement is allowed to cite, as one walkable structure.
+
+    Snapshot fields stay at the root so existing paths like
+    "concentration.hhi" are unchanged. Each tool call contributes its
+    arguments as well as its result -- deliberately, so a sentence like
+    "retiring at 52 leaves you short" can cite the 52 it was actually
+    computed with rather than being rejected for naming it.
+    """
+    return {**snapshot.model_dump(mode="json"), "tool_calls": list(tool_calls)}
+
+
+class HasStatements(Protocol):
+    """All the validator ever needed from a response. Structural rather
+    than a concrete type because two different response shapes now flow
+    through the same gate -- the health narrative and a tool-chained
+    answer -- and the check is identical for both."""
+
+    statements: list[GroundedStatement]
 
 
 @dataclass(frozen=True)
@@ -40,12 +82,13 @@ class ValidatedNarrative:
     rejected: list[RejectedStatement]
 
 
-def resolve_path(snapshot: PortfolioMetricsSnapshot, path: str) -> object | None:
-    """Resolves a dotted/bracket path like "allocation.equity_drift_pct" or
-    "funds[2].expense_ratio" against the snapshot. Never raises -- any
-    unresolvable path (typo'd field, out-of-range index) returns None,
-    which the caller treats as a validation failure, not an error."""
-    current: object = snapshot.model_dump(mode="json")
+def resolve_path(evidence: Evidence, path: str) -> object | None:
+    """Resolves a dotted/bracket path like "allocation.equity_drift_pct",
+    "funds[2].expense_ratio" or "tool_calls[0].result.readiness_pct"
+    against the evidence. Never raises -- any unresolvable path (typo'd
+    field, out-of-range index) returns None, which the caller treats as a
+    validation failure, not an error."""
+    current: object = evidence
     for match in _PATH_SEGMENT_RE.finditer(path):
         key, index = match.group(1), match.group(2)
         if key is not None:
@@ -84,20 +127,20 @@ def _number_matches_text(value: float, text: str, tolerance: float = _MATCH_TOLE
 
 
 def validate_statement(
-    statement: GroundedStatement, snapshot: PortfolioMetricsSnapshot
+    statement: GroundedStatement, evidence: Evidence
 ) -> tuple[bool, str | None]:
     if not statement.cited_metric_paths:
         return False, "statement cites no metric paths"
     for path in statement.cited_metric_paths:
-        value = resolve_path(snapshot, path)
+        value = resolve_path(evidence, path)
         if value is None:
-            return False, f"cited path does not resolve in snapshot: {path!r}"
+            return False, f"cited path does not resolve in evidence: {path!r}"
         if not _value_matches_text(value, statement.text):
             return False, f"value for {path!r} ({value!r}) not found in statement text"
     return True, None
 
 
-def _all_snapshot_numbers(snapshot: PortfolioMetricsSnapshot) -> list[float]:
+def _all_evidence_numbers(evidence: Evidence) -> list[float]:
     numbers: list[float] = []
 
     def walk(node: object) -> None:
@@ -112,16 +155,16 @@ def _all_snapshot_numbers(snapshot: PortfolioMetricsSnapshot) -> list[float]:
             for value in node:
                 walk(value)
 
-    walk(snapshot.model_dump(mode="json"))
+    walk(evidence)
     return numbers
 
 
 def scan_for_foreign_numbers(
-    text: str, snapshot: PortfolioMetricsSnapshot, tolerance: float = _MATCH_TOLERANCE
+    text: str, evidence: Evidence, tolerance: float = _MATCH_TOLERANCE
 ) -> list[str]:
     """The doc's explicit second, blunter safety net: every number-shaped
     token in the *entire* statement text must match something that actually
-    appears somewhere in the snapshot. Catches a number introduced without
+    appears somewhere in the evidence. Catches a number introduced without
     any citation at all. Returns the offending tokens, or [] if clean.
 
     Deliberately blunt: an incidental number in prose (a year, a rank) that
@@ -129,36 +172,34 @@ def scan_for_foreign_numbers(
     -- over-rejection is the safe failure mode (the statement just doesn't
     render), matching the doc's own "blunter safety net" framing.
     """
-    snapshot_numbers = _all_snapshot_numbers(snapshot)
+    evidence_numbers = _all_evidence_numbers(evidence)
     foreign: list[str] = []
     for token in _NUMBER_RE.findall(text):
         try:
             candidate = float(token)
         except ValueError:
             continue
-        if not any(abs(candidate - n) <= tolerance for n in snapshot_numbers):
+        if not any(abs(candidate - n) <= tolerance for n in evidence_numbers):
             foreign.append(token)
     return foreign
 
 
-def validate_narrative(
-    response: NarrativeResponse, snapshot: PortfolioMetricsSnapshot
-) -> ValidatedNarrative:
+def validate_narrative(response: HasStatements, evidence: Evidence) -> ValidatedNarrative:
     accepted: list[GroundedStatement] = []
     rejected: list[RejectedStatement] = []
 
     for statement in response.statements:
-        ok, reason = validate_statement(statement, snapshot)
+        ok, reason = validate_statement(statement, evidence)
         if not ok:
             rejected.append(RejectedStatement(statement=statement, reason=reason or "unknown"))
             continue
 
-        foreign = scan_for_foreign_numbers(statement.text, snapshot)
+        foreign = scan_for_foreign_numbers(statement.text, evidence)
         if foreign:
             rejected.append(
                 RejectedStatement(
                     statement=statement,
-                    reason=f"text contains number(s) absent from the snapshot: {foreign}",
+                    reason=f"text contains number(s) absent from the evidence: {foreign}",
                 )
             )
             continue

@@ -465,6 +465,42 @@ class AiAnalysis(Base):
     error_message: Mapped[str | None] = mapped_column(String(500))
 
 
+class AiQuestion(Base):
+    """One row per POST /ai/ask (docs/architecture/ai-layer.md §6): a
+    user-typed question, the tool calls Claude chained to answer it, and the
+    statements that survived the determinism validator.
+
+    Separate table from `ai_analysis` rather than a nullable `question`
+    column on it: the two have genuinely different shapes (a tool ledger vs
+    a web-news list) and different trigger semantics (one is asked, the
+    other is a periodic health narrative), and `ai_analysis`'s "summarize
+    the previous row into the next prompt" memory rule must not start
+    pulling in unrelated ad-hoc questions.
+
+    `evidence_json` is the exact structure citation paths were resolved
+    against -- snapshot plus tool ledger -- kept so a rendered answer can be
+    re-verified later, not just trusted. `tool_calls_json` is the chain
+    itself, surfaced in the UI so the reasoning is inspectable rather than
+    magic.
+    """
+
+    __tablename__ = "ai_question"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None), index=True
+    )
+    question: Mapped[str] = mapped_column(Text)
+    answer_summary: Mapped[str] = mapped_column(Text)
+    evidence_json: Mapped[str] = mapped_column(Text)
+    tool_calls_json: Mapped[str] = mapped_column(Text)
+    accepted_json: Mapped[str] = mapped_column(Text)
+    rejected_json: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(50))
+    status: Mapped[AiAnalysisStatus] = mapped_column(Enum(AiAnalysisStatus))
+    error_message: Mapped[str | None] = mapped_column(String(500))
+
+
 class Goal(Base):
     """PRD FR-8.1/8.2, phase P2.4: a savings target with holdings tagged
     toward it. `target_amount_paise` is entered in today's rupees (inflated

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from fundlens.ai.claude_client import MODEL, GroundedStatement, NewsContextItem, call_claude
 from fundlens.ai.snapshot import build_portfolio_snapshot
-from fundlens.ai.validator import RejectedStatement, validate_narrative
+from fundlens.ai.validator import RejectedStatement, build_evidence, validate_narrative
 from fundlens.db.models import AiAnalysis, AiAnalysisStatus
 from fundlens.settings import get_settings
 
@@ -131,7 +131,7 @@ def run_portfolio_analysis(session: Session) -> AiAnalysisResult:
             error_message=str(exc),
         )
 
-    validated = validate_narrative(narrative, snapshot)
+    validated = validate_narrative(narrative, build_evidence(snapshot))
     status = (
         AiAnalysisStatus.ALL_REJECTED
         if narrative.statements and not validated.accepted
