@@ -166,6 +166,10 @@ class RetirementProjectionResponse(BaseModel):
     terminal_corpus_paise: int | None
     total_lump_sum_paise: int | None
     total_lump_sum_shortfall_paise: int | None
+    current_annual_investment_paise: int | None
+    required_annual_investment_paise: int | None
+    required_monthly_investment_paise: int | None
+    additional_annual_investment_paise: int | None
     events: list[PlannedEventResponse]
     years: list[RetirementYearResponse]
 
@@ -195,6 +199,10 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
         terminal_corpus_paise=p.terminal_corpus_paise,
         total_lump_sum_paise=p.total_lump_sum_paise,
         total_lump_sum_shortfall_paise=p.total_lump_sum_shortfall_paise,
+        current_annual_investment_paise=p.current_annual_investment_paise,
+        required_annual_investment_paise=p.required_annual_investment_paise,
+        required_monthly_investment_paise=p.required_monthly_investment_paise,
+        additional_annual_investment_paise=p.additional_annual_investment_paise,
         events=[
             PlannedEventResponse(
                 goal_id=e.goal_id,

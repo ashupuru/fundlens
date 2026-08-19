@@ -952,3 +952,33 @@ everything around it moves.
 `compute_retirement_projection`'s `starting_corpus_paise` parameter — it's the one genuinely
 expensive input (a full pass over every transaction) and is identical across scenarios, so
 pricing it per scenario would triple the cost for no difference in result.
+
+## 19. Reverse Planning (shipped — `compute/retirement.py`)
+
+The spec names this a primary output: not just "how much will I have?" but **"how much do I need
+to invest?"**. Solves the accumulation identity for the contribution instead of evaluating it:
+
+```
+corpus_at_retirement = C0·(1+r)^n + P0·A − Σ event·(1+r)^(years it compounds after)
+        ⇒      P0     = (required − C0·(1+r)^n + Σ FV(events)) / A
+```
+
+where `A` is the growing-annuity future-value factor for a contribution stepping up at the user's
+own annual increase — `((1+r)^n − (1+g)^n)/(r−g)`, with the **`r == g` singularity branched** to
+`n·(1+r)^(n−1)`. That case is ordinary, not pathological: a 10% step-up alongside a 10% expected
+return hits it exactly, and the unbranched form would divide by zero on a perfectly normal plan.
+(Same shape of branch the withdrawal-side growing annuity needed in §16.)
+
+**This is the forward loop's own arithmetic, rearranged** — which is precisely why the tests don't
+trust the algebra on its own. The correctness gate is a **round-trip**: solve for the
+contribution, feed it back through the *forward simulation*, and assert the corpus at retirement
+lands on the required figure to within a rupee. Any wrong term — a mis-stated compounding
+exponent, a dropped event, the singularity branch — fails to close. It's run three ways: plain,
+with pre-retirement lump-sum events draining the corpus, and at `r == g`.
+
+**An over-funded plan reports zero, not a negative contribution.** When the existing corpus alone
+clears the requirement the solve goes negative, which isn't a meaningful instruction; it's floored
+at zero and `additional_annual_investment_paise` likewise floors at the gap above what's already
+planned. (This also made the first round-trip fixture meaningless — a starting corpus that already
+covered the target produced the correct answer 0, proving nothing about the algebra, so the
+fixtures deliberately start well short.)

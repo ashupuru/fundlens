@@ -184,6 +184,46 @@ function ReadinessSection({ p }: { p: RetirementProjection }) {
         </div>
       </div>
 
+      {p.required_annual_investment_paise !== null &&
+        p.required_annual_investment_paise !== undefined && (
+          <div className="card">
+            <h3>What it takes to get there</h3>
+            <table>
+              <tbody>
+                <tr>
+                  <td>Required investment, first year</td>
+                  <td>
+                    {formatPaise(p.required_annual_investment_paise)}/yr
+                    <span className="muted">
+                      {" "}
+                      ({formatPaise(p.required_monthly_investment_paise ?? 0)}/month)
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td>You currently plan to invest</td>
+                  <td>{formatPaise(p.current_annual_investment_paise ?? 0)}/yr</td>
+                </tr>
+                <tr>
+                  <td>Gap</td>
+                  <td
+                    className={
+                      (p.additional_annual_investment_paise ?? 0) > 0 ? "negative" : "positive"
+                    }
+                  >
+                    {(p.additional_annual_investment_paise ?? 0) > 0
+                      ? `${formatPaise(p.additional_annual_investment_paise ?? 0)}/yr more needed`
+                      : "None — your current plan reaches the target"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="muted" style={{ marginTop: 8 }}>
+              The first-year figure; it steps up with your annual increase each year after.
+            </p>
+          </div>
+        )}
+
       <div className="card">
         <h3>Retirement income</h3>
         <table>

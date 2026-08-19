@@ -1637,6 +1637,14 @@ export interface components {
             total_lump_sum_paise: number | null;
             /** Total Lump Sum Shortfall Paise */
             total_lump_sum_shortfall_paise: number | null;
+            /** Current Annual Investment Paise */
+            current_annual_investment_paise: number | null;
+            /** Required Annual Investment Paise */
+            required_annual_investment_paise: number | null;
+            /** Required Monthly Investment Paise */
+            required_monthly_investment_paise: number | null;
+            /** Additional Annual Investment Paise */
+            additional_annual_investment_paise: number | null;
             /** Events */
             events: components["schemas"]["PlannedEventResponse"][];
             /** Years */

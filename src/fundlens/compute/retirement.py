@@ -113,6 +113,12 @@ class RetirementProjection:
     terminal_corpus_paise: int | None
     total_lump_sum_paise: int | None
     total_lump_sum_shortfall_paise: int | None
+    # Reverse planning: what the annual contribution would have to be to
+    # land exactly on `required_corpus_at_retirement_paise`.
+    current_annual_investment_paise: int | None  # what the plan says today
+    required_annual_investment_paise: int | None
+    required_monthly_investment_paise: int | None
+    additional_annual_investment_paise: int | None  # 0 when already on track
     events: list[PlannedEvent]
     years: list[RetirementYear]
 
@@ -138,6 +144,10 @@ def _incomplete(reason: str) -> RetirementProjection:
         terminal_corpus_paise=None,
         total_lump_sum_paise=None,
         total_lump_sum_shortfall_paise=None,
+        current_annual_investment_paise=None,
+        required_annual_investment_paise=None,
+        required_monthly_investment_paise=None,
+        additional_annual_investment_paise=None,
         events=[],
         years=[],
     )
@@ -228,6 +238,33 @@ def _plan_events(
             )
         )
     return events
+
+
+def _growing_annuity_fv_factor(
+    return_pct: Decimal, step_up_pct: Decimal, n_years: int
+) -> Decimal:
+    """Future value, at retirement, of investing 1 unit at the end of the
+    first year and stepping the contribution up by `step_up_pct` annually
+    for `n_years` -- i.e. the multiplier that turns a first-year
+    contribution into its accumulated total.
+
+    Sum over i of (1+g)^i * (1+r)^(n-1-i), which collapses to
+    ((1+r)^n - (1+g)^n) / (r - g). At r == g every term is identical
+    ((1+r)^(n-1)) and there are n of them, so the closed form's 0/0 is
+    branched to n * (1+r)^(n-1) -- the same singularity the withdrawal-side
+    growing annuity has, and just as reachable (a 10% step-up with a 10%
+    return is an ordinary plan, not a pathological one).
+    """
+    if n_years <= 0:
+        return Decimal(0)
+
+    r = return_pct / 100
+    g = step_up_pct / 100
+
+    if r == g:
+        return n_years * (1 + r) ** (n_years - 1)
+
+    return ((1 + r) ** n_years - (1 + g) ** n_years) / (r - g)
 
 
 def required_corpus_for_withdrawals(
@@ -443,6 +480,51 @@ def compute_retirement_projection(
     corpus_at_retirement_paise = _round_paise(corpus_at_retirement)
     required_corpus_paise = _round_paise(required_corpus)
     surplus_paise = corpus_at_retirement_paise - required_corpus_paise
+
+    # Reverse planning (spec §24): solve the accumulation identity for the
+    # first-year contribution instead of evaluating it.
+    #
+    #   corpus_at_retirement = C0*(1+r)^n
+    #                        + P0 * growing_annuity_fv_factor
+    #                        - sum(event * (1+r)^(years it compounds after))
+    #
+    # so P0 = (target - FV(C0) + FV(events)) / factor. Everything here is
+    # the *same* arithmetic the forward loop above performs, just rearranged
+    # -- which is exactly why the tests round-trip it back through that loop
+    # rather than trusting the algebra on its own.
+    fv_starting = Decimal(starting_corpus_paise) * (
+        1 + pre_return_pct / 100
+    ) ** years_to_retirement
+    fv_pre_retirement_events = sum(
+        (
+            amount * (1 + pre_return_pct / 100) ** (retirement_age - 1 - event_age)
+            for event_age, amount in lump_sum_by_age.items()
+            if event_age < retirement_age
+        ),
+        Decimal(0),
+    )
+    annuity_factor = _growing_annuity_fv_factor(
+        pre_return_pct, step_up_pct, years_to_retirement
+    )
+
+    if annuity_factor > 0:
+        required_first_year = (
+            required_corpus - fv_starting + fv_pre_retirement_events
+        ) / annuity_factor
+        # Already funded by the existing corpus alone -- report zero needed
+        # rather than a negative "contribution", which isn't a thing.
+        required_first_year = max(required_first_year, Decimal(0))
+        required_annual_investment_paise = _round_paise(required_first_year)
+        required_monthly_investment_paise = _round_paise(
+            required_first_year / _MONTHS_PER_YEAR
+        )
+        additional_annual_investment_paise = max(
+            required_annual_investment_paise - profile.annual_investment_paise, 0
+        )
+    else:
+        required_annual_investment_paise = None
+        required_monthly_investment_paise = None
+        additional_annual_investment_paise = None
     readiness = (
         float(corpus_at_retirement / required_corpus * 100) if required_corpus > 0 else None
     )
@@ -467,6 +549,10 @@ def compute_retirement_projection(
         terminal_corpus_paise=_round_paise(corpus),
         total_lump_sum_paise=_round_paise(sum(lump_sum_by_age.values(), Decimal(0))),
         total_lump_sum_shortfall_paise=_round_paise(total_shortfall),
+        current_annual_investment_paise=profile.annual_investment_paise,
+        required_annual_investment_paise=required_annual_investment_paise,
+        required_monthly_investment_paise=required_monthly_investment_paise,
+        additional_annual_investment_paise=additional_annual_investment_paise,
         events=events,
         years=years,
     )

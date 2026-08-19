@@ -4759,6 +4759,50 @@
             ],
             "title": "Total Lump Sum Shortfall Paise"
           },
+          "current_annual_investment_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Annual Investment Paise"
+          },
+          "required_annual_investment_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Annual Investment Paise"
+          },
+          "required_monthly_investment_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Monthly Investment Paise"
+          },
+          "additional_annual_investment_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Additional Annual Investment Paise"
+          },
           "events": {
             "items": {
               "$ref": "#/components/schemas/PlannedEventResponse"
@@ -4795,6 +4839,10 @@
           "terminal_corpus_paise",
           "total_lump_sum_paise",
           "total_lump_sum_shortfall_paise",
+          "current_annual_investment_paise",
+          "required_annual_investment_paise",
+          "required_monthly_investment_paise",
+          "additional_annual_investment_paise",
           "events",
           "years"
         ],

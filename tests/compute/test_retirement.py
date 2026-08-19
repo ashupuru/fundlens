@@ -687,3 +687,140 @@ def test_scenarios_return_incomplete_reason_without_a_retirement_plan(
         s.projection.reason == REASON_INCOMPLETE  # type: ignore[attr-defined]
         for s in by_key.values()
     )
+
+
+def _with_investment(profile: RiskProfile, annual_paise: int) -> RiskProfile:
+    fields = {
+        c.name: getattr(profile, c.name)
+        for c in profile.__table__.columns  # type: ignore[attr-defined]
+    }
+    fields["annual_investment_paise"] = annual_paise
+    return RiskProfile(**fields)
+
+
+def test_required_investment_round_trips_through_the_forward_simulation(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The strongest available check on the reverse algebra: solve for the
+    contribution, feed it back into the *forward* loop, and the corpus at
+    retirement must land on the required figure. If the rearrangement were
+    wrong in any term, this wouldn't close."""
+    # Rs 50L: deliberately well short of the requirement, so the solved
+    # contribution is genuinely positive and the round-trip has teeth. (A
+    # corpus that already covers the requirement makes the answer 0, which
+    # proves nothing about the algebra.)
+    _seed_corpus(session, monkeypatch, 500_000_000)
+    profile = _profile(
+        current_age=51,
+        retirement_age=60,
+        annual_investment_paise=60_000_000,
+        annual_investment_step_up_pct=Decimal("10"),
+    )
+    assumptions = _assumptions()
+
+    solved = compute_retirement_projection(session, profile, assumptions)
+    assert solved.required_annual_investment_paise is not None
+
+    replayed = compute_retirement_projection(
+        session, _with_investment(profile, solved.required_annual_investment_paise), assumptions
+    )
+
+    assert replayed.corpus_at_retirement_paise is not None
+    assert replayed.required_corpus_at_retirement_paise is not None
+    # Within a rupee, i.e. pure paise rounding of the solved contribution.
+    assert (
+        abs(replayed.corpus_at_retirement_paise - replayed.required_corpus_at_retirement_paise)
+        < 100
+    )
+
+
+def test_required_investment_round_trips_with_lump_sum_events(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same round-trip, but with pre-retirement events draining the corpus --
+    the solve has to fund those on top of the target."""
+    _seed_corpus(session, monkeypatch, 500_000_000)
+    _add_goal(session, "Education", rupees=2_500_000, years_from_now=4)
+    _add_goal(session, "Marriage", rupees=3_000_000, years_from_now=7)
+    profile = _profile(
+        current_age=51, retirement_age=60, annual_investment_step_up_pct=Decimal("10")
+    )
+    assumptions = _assumptions()
+
+    solved = compute_retirement_projection(session, profile, assumptions)
+    assert solved.required_annual_investment_paise is not None
+
+    replayed = compute_retirement_projection(
+        session, _with_investment(profile, solved.required_annual_investment_paise), assumptions
+    )
+
+    assert replayed.total_lump_sum_shortfall_paise == 0  # every event funded
+    assert (
+        abs(
+            (replayed.corpus_at_retirement_paise or 0)
+            - (replayed.required_corpus_at_retirement_paise or 0)
+        )
+        < 100
+    )
+
+
+def test_required_investment_round_trips_when_step_up_equals_return(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """r == g is the annuity-factor singularity, and an entirely ordinary
+    plan (a 10% step-up alongside a 10% return)."""
+    _seed_corpus(session, monkeypatch, 500_000_000)
+    profile = _profile(
+        current_age=51, retirement_age=60, annual_investment_step_up_pct=Decimal("10")
+    )
+    assumptions = _assumptions(equity="10", debt="10")  # blended 10% == step-up
+
+    solved = compute_retirement_projection(session, profile, assumptions)
+    assert solved.required_annual_investment_paise is not None
+
+    replayed = compute_retirement_projection(
+        session, _with_investment(profile, solved.required_annual_investment_paise), assumptions
+    )
+
+    assert (
+        abs(
+            (replayed.corpus_at_retirement_paise or 0)
+            - (replayed.required_corpus_at_retirement_paise or 0)
+        )
+        < 100
+    )
+
+
+def test_already_funded_plan_needs_no_contribution(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A corpus far beyond what the income stream needs -> the solve would go
+    # negative; report zero rather than a negative "contribution".
+    _seed_corpus(session, monkeypatch, 500_000_000_000)  # Rs 50 Cr
+    profile = _profile(current_age=51, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    assert result.required_annual_investment_paise == 0
+    assert result.additional_annual_investment_paise == 0
+
+
+def test_additional_investment_is_the_gap_above_what_is_already_planned(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 100_000_000)  # small corpus -> real gap
+    profile = _profile(
+        current_age=51, retirement_age=60, annual_investment_paise=60_000_000,
+        annual_investment_step_up_pct=Decimal("0"),
+    )
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    assert result.required_annual_investment_paise is not None
+    assert result.required_annual_investment_paise > 60_000_000
+    assert result.additional_annual_investment_paise == (
+        result.required_annual_investment_paise - 60_000_000
+    )
+    assert result.required_monthly_investment_paise == round(
+        result.required_annual_investment_paise / 12
+    )
