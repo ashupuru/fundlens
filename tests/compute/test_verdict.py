@@ -1,13 +1,15 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from sqlalchemy.orm import Session
 
 from fundlens.allocation.service import set_risk_profile
 from fundlens.assumptions.service import AssumptionKey, create_version, get_current_version
 from fundlens.compute import service
 from fundlens.compute.allocation import AllocationDrift, EquityCapBreakdown
+from fundlens.compute.plan_audit import get_category_expense_medians
 from fundlens.compute.verdict import (
     OMITTED_COMPONENTS,
     VerdictType,
@@ -15,6 +17,7 @@ from fundlens.compute.verdict import (
     get_all_verdicts,
 )
 from fundlens.db.models import (
+    GrowwFundMetadata,
     NavHistory,
     NavSource,
     Persona,
@@ -97,6 +100,7 @@ def test_no_data_at_all_defaults_to_hold_with_zero_confidence(session: Session) 
         amfi_code=None,
         metadata=None,
         drift=None,
+        expense_medians={},
     )
 
     assert verdict.verdict_type == VerdictType.HOLD
@@ -138,6 +142,7 @@ def test_poor_performer_triggers_sell_with_computable_tax_impact(session: Sessio
         amfi_code="111",
         metadata=metadata,
         drift=drift,
+        expense_medians={},
     )
 
     assert verdict.overall_score is not None
@@ -179,6 +184,7 @@ def test_sell_blocked_when_debt_tax_rate_not_configured(session: Session) -> Non
         amfi_code="222",
         metadata=metadata,
         drift=drift,
+        expense_medians={},
     )
 
     # Rubric score is bad enough to indicate SELL, but no debt marginal
@@ -225,6 +231,7 @@ def test_sell_unblocked_once_debt_tax_rate_configured(session: Session) -> None:
         amfi_code="222",
         metadata=metadata,
         drift=drift,
+        expense_medians={},
     )
 
     assert verdict.verdict_type == VerdictType.SELL
@@ -259,6 +266,71 @@ def test_get_all_verdicts_without_risk_profile_flags_category_fit(session: Sessi
     category_fit = next(c for c in verdicts[0].components if c.name == "category_fit")
     assert category_fit.score is None
     assert category_fit.reason == "no_risk_profile_set"
+
+
+def test_cost_component_scored_from_real_expense_ratio(session: Session) -> None:
+    for i in range(6):
+        session.add(
+            GrowwFundMetadata(
+                amfi_code=f"P{i}",
+                scheme_name=f"Peer {i}",
+                sub_category="Flexi Cap",
+                expense_ratio=Decimal("0.91"),
+                fetched_at=datetime(2026, 8, 19, 12, 0, 0),
+            )
+        )
+    session.add(
+        GrowwFundMetadata(
+            amfi_code="444",
+            scheme_name="Cheap Flexi Cap Fund Direct Growth",
+            sub_category="Flexi Cap",
+            expense_ratio=Decimal("0.74"),
+            fetched_at=datetime(2026, 8, 19, 12, 0, 0),
+        )
+    )
+    session.commit()
+
+    verdict = compute_verdict(
+        session,
+        folio="F1",
+        scheme_key="ISIN444",
+        scheme_name="Cheap Flexi Cap Fund Direct Growth",
+        amfi_code="444",
+        metadata=None,
+        drift=None,
+        expense_medians=get_category_expense_medians(session),
+    )
+
+    cost = next(c for c in verdict.components if c.name == "cost_expense_ratio")
+    assert cost.score == pytest.approx(58.5)  # 0.74 vs a 0.91 peer median
+    assert cost.reason is None
+
+
+def test_fund_without_expense_ratio_is_unscored_and_lowers_confidence(session: Session) -> None:
+    """Never scored as zero: an absent TER must renormalize out of the
+    weighted average and show up as reduced confidence instead."""
+    verdict = compute_verdict(
+        session,
+        folio="F1",
+        scheme_key="ISIN555",
+        scheme_name="Unlisted Fund Direct Growth",
+        amfi_code="555",
+        metadata=None,
+        drift=None,
+        expense_medians={},
+    )
+
+    cost = next(c for c in verdict.components if c.name == "cost_expense_ratio")
+    assert cost.score is None
+    assert cost.reason == "expense_ratio_unavailable"
+    # 5 components now, of which only direct_vs_regular is computable here.
+    assert len(verdict.components) == 5
+    assert verdict.confidence_pct == 20.0
+
+
+def test_expense_ratio_is_no_longer_declared_omitted() -> None:
+    assert "cost_expense_ratio" not in OMITTED_COMPONENTS
+    assert OMITTED_COMPONENTS == ("overlap_redundancy",)
 
 
 def test_get_all_verdicts_with_risk_profile_scores_category_fit(session: Session) -> None:

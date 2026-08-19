@@ -372,7 +372,7 @@ originally-specified components:
 | Rolling alpha | mean(rolling-window fund XIRR − benchmark XIRR) via §4 | scheme-level 3yr/5yr **true rolling** NAV CAGR vs benchmark CAGR (`compute/rolling_returns.py`, upgraded P3/FR-3.3) — see below for why | 30 |
 | Consistency | % of rolling windows where fund beat benchmark | genuine win-rate across every monthly-sampled 3yr/5yr window (P3 upgrade) | 20 |
 | Category fit | actual-vs-target allocation drift contribution (§7) | unchanged — needs P1.4's drift, which is why P1.4 was built first | 15 |
-| Cost | expense ratio percentile vs category peers; direct-vs-regular flag | **narrowed to the binary direct-vs-regular flag alone** (§6) — inherits cost's original weight | 20 |
+| Cost | expense ratio percentile vs category peers; direct-vs-regular flag | both signals, as two components: `cost_expense_ratio` scored from real TER (§6a) and the binary `direct_vs_regular` flag (§6). Originally the flag alone carried all 20 — no free TER source existed until the Groww scraper supplied one | 10 + 10 |
 | Overlap/redundancy | pairwise holding overlap vs rest of portfolio (FR-5.3) | **omitted entirely** — needs monthly AMC portfolio disclosures, a data source this app doesn't integrate | — |
 
 **Why NAV-based CAGR, not XIRR, for rolling alpha**: this is scheme-level performance (how has
@@ -443,12 +443,56 @@ documented in data-model.md — no plan-type field was ever added, since the ori
 premise, a stored plan_type, was never populated).
 
 **No ₹/year commission-drag figure**: the original design estimated commission drag from the
-expense-ratio delta between the held regular plan and its direct-plan twin. No free expense-ratio
-data source exists — live-checked during P1.1/P1.3: mfapi.in's scheme metadata has no TER field,
-and AMFI's TER disclosures are scattered per-AMC filings, not a unified free feed. This ships as a
-binary flag only (`direct` / `regular` / `unknown`), which is what feeds the rubric's cost
-component (§5) at weight 20. Real-data check: all 13 of the user's real open holdings resolved to
-`direct` — none flagged `regular` or `unknown` in this portfolio.
+expense-ratio delta between the held regular plan and its direct-plan twin. That specific figure
+is still not computed — it needs the *twin*, and the Groww feed is direct-plan-only, so a held
+regular plan has no counterpart row to diff against. This ships as a binary flag
+(`direct` / `regular` / `unknown`) feeding the rubric's `direct_vs_regular` component (§5) at
+weight 10. Real-data check: all 13 of the user's real open holdings resolved to `direct` — none
+flagged `regular` or `unknown` in this portfolio.
+
+## 6a. Expense-Ratio Cost Score
+
+`compute/plan_audit.py::compute_cost_score`, feeding the rubric's `cost_expense_ratio` component
+(§5) at weight 10. The claim in §6 that "no free expense-ratio data source exists" held when P1.3
+shipped and no longer does: `groww_fund_metadata.expense_ratio` now carries real TER for 3,146
+funds.
+
+**Scored relative to category peers, not an absolute threshold.** An absolute TER cutoff is
+meaningless across categories — real spread in the feed is Overnight 0.07–0.20% against Aggressive
+Hybrid 0.07–8.66%. Percentile rank within `sub_category` fixes the scale problem but creates a
+worse one: it amplifies noise in tight distributions, scoring ICICI Overnight (0.09%) at 58 and
+HDFC Overnight (0.11%) at 40 — an 18-point gap manufactured out of two basis points. So:
+
+```
+score = clamp(50 + (category_median_ter − fund_ter) × 50, 0, 100)
+```
+
+50 means priced at the category median; ±1pp of TER versus peers is ±50 points — the same shape
+§5's rolling-alpha mapping uses, and a judgment call of the same standing, not a canonical
+formula. **Median rather than mean**, because the feed carries obviously-bad rows (an 8.66%
+"Aggressive Hybrid") that a mean would chase.
+
+**Unscored rather than guessed** when there is no `groww_fund_metadata` row, no `expense_ratio`,
+no `sub_category`, or fewer than `MIN_PEERS` (5) priced funds in the category — a "median" over
+four funds is an anecdote, not a category norm. Regular-plan holdings get their own reason
+(`expense_ratio_unavailable_regular_plan`): Groww's screener is direct-plan-only (data-model.md),
+so the gap there is structural and permanent rather than a fetch that might later succeed, and
+`direct_vs_regular` is already scoring exactly those funds 0.
+
+**Real-portfolio verification**: 40 of 42 verdicts score the component (the two exceptions are
+Motilal Oswal Nasdaq 100 FoF and PGIM India Global Equity Opportunities FoF, both absent from the
+feed). All four held Overnight funds land at 50–51 — the honest answer where cost differences are
+basis points — while index funds (57.8–59.8) separate cleanly from active Large Cap (22.2–34.8).
+No verdict changed HOLD↔SELL.
+
+**Absolute scores shift downward across the board**, and this is expected: nearly every holding is
+a Direct plan scoring 100 on `direct_vs_regular`, so moving 10 points of weight off that
+perfect-scoring binary and onto a graded component dilutes every fund. The largest move (UTI Gold
+ETF FoF, 100 → 76.8) is the rubric correcting an overstatement — that fund previously scored a
+flat 100 because `direct_vs_regular` was its *only* computable component. Consequence worth
+tracking: the lowest-scoring holding now sits 3.7 points above `rubric_sell_threshold_pct` (35),
+where it was 10.8 points clear before. The threshold is a tunable assumption and was deliberately
+left unchanged.
 
 ## 7. Allocation & Drift
 

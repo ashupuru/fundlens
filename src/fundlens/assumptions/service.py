@@ -40,16 +40,19 @@ class AssumptionKey(enum.StrEnum):
     # reported as unconfigured, not silently assumed.
     DEBT_MARGINAL_TAX_RATE_PCT = "debt_marginal_tax_rate_pct"
     # Recommendation rubric (compute-engine.md §5) weights, out of the
-    # components P1.3 actually has real data for — overlap/redundancy
-    # (FR-5.3) and expense-ratio cost have no data source (P1.3 scope
-    # decision) and are omitted rather than weighted-and-faked. Default
-    # values keep the PRD table's original relative proportions among the
-    # 4 remaining components (alpha 30, consistency 20, category_fit 15,
-    # cost 20 -> direct_regular inherits cost's weight).
+    # components there is real data for — overlap/redundancy (FR-5.3) still
+    # has no data source and is omitted rather than weighted-and-faked.
+    # Defaults keep the PRD table's original proportions (alpha 30,
+    # consistency 20, category_fit 15, cost 20), with cost's 20 split evenly
+    # between its two signals: the graded expense-ratio score (added once the
+    # Groww scraper supplied real TER data) and the binary Direct-vs-Regular
+    # flag that previously carried all of it. Split rather than doubled —
+    # see compute/plan_audit.py for why the two measure one thing.
     RUBRIC_WEIGHT_ALPHA = "rubric_weight_alpha"
     RUBRIC_WEIGHT_CONSISTENCY = "rubric_weight_consistency"
     RUBRIC_WEIGHT_CATEGORY_FIT = "rubric_weight_category_fit"
     RUBRIC_WEIGHT_DIRECT_REGULAR = "rubric_weight_direct_regular"
+    RUBRIC_WEIGHT_COST_EXPENSE_RATIO = "rubric_weight_cost_expense_ratio"
     RUBRIC_SELL_THRESHOLD_PCT = "rubric_sell_threshold_pct"
     # Goal planning (compute-engine.md §10): expected returns are blended
     # per-goal from the existing RiskProfile's target_equity_pct/
@@ -94,7 +97,8 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     AssumptionKey.RUBRIC_WEIGHT_ALPHA: "30",
     AssumptionKey.RUBRIC_WEIGHT_CONSISTENCY: "20",
     AssumptionKey.RUBRIC_WEIGHT_CATEGORY_FIT: "15",
-    AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR: "20",
+    AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR: "10",
+    AssumptionKey.RUBRIC_WEIGHT_COST_EXPENSE_RATIO: "10",
     AssumptionKey.RUBRIC_SELL_THRESHOLD_PCT: "35",
     # Reasonable Indian-market long-term planning defaults, editable via
     # POST /assumptions like everything else here — not asserted as a
@@ -240,16 +244,27 @@ class RubricWeights:
     consistency: float
     category_fit: float
     direct_regular: float
+    cost_expense_ratio: float
     sell_threshold_pct: float
 
 
 def get_current_rubric_weights(session: Session) -> RubricWeights:
+    """Note for databases seeded before `rubric_weight_cost_expense_ratio`
+    existed: the new key backfills from DEFAULT_ASSUMPTIONS, but
+    `rubric_weight_direct_regular` is already *stored* at its old value of
+    20 and a stored value always wins over a default. Such a database keeps
+    scoring cost at 20+10 until a new assumption version rebalances it —
+    deliberately, since silently rewriting a stored weight would break the
+    reproducibility guarantee versions exist for. Rebalance via
+    POST /assumptions, which records the change as its own version.
+    """
     values = get_current_values(session)
     return RubricWeights(
         alpha=float(values[AssumptionKey.RUBRIC_WEIGHT_ALPHA.value]),
         consistency=float(values[AssumptionKey.RUBRIC_WEIGHT_CONSISTENCY.value]),
         category_fit=float(values[AssumptionKey.RUBRIC_WEIGHT_CATEGORY_FIT.value]),
         direct_regular=float(values[AssumptionKey.RUBRIC_WEIGHT_DIRECT_REGULAR.value]),
+        cost_expense_ratio=float(values[AssumptionKey.RUBRIC_WEIGHT_COST_EXPENSE_RATIO.value]),
         sell_threshold_pct=float(values[AssumptionKey.RUBRIC_SELL_THRESHOLD_PCT.value]),
     )
 

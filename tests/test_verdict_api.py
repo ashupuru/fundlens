@@ -32,8 +32,12 @@ def test_verdicts_after_ingest_returns_hold_with_schema_fields(client: TestClien
     # computable -- must default to the safe HOLD state, never SELL.
     assert verdict["verdict_type"] == "hold"
     assert verdict["tax_impact"] is None
-    assert set(verdict["omitted_components"]) == {"overlap_redundancy", "cost_expense_ratio"}
-    assert len(verdict["components"]) == 4
+    assert set(verdict["omitted_components"]) == {"overlap_redundancy"}
+    cost = next(c for c in verdict["components"] if c["name"] == "cost_expense_ratio")
+    # "Regular Feeder Fund" -- Groww's screener is direct-plan-only, so this
+    # is the structural gap, reported as such rather than scored 0.
+    assert cost["reason"] == "expense_ratio_unavailable_regular_plan"
+    assert len(verdict["components"]) == 5
 
 
 def test_direct_vs_regular_audit_flags_regular_plan(client: TestClient) -> None:

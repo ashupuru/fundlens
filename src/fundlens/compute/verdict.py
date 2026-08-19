@@ -2,10 +2,10 @@
 §5): transparent and tunable, not a black-box score.
 
 **Scope narrowing from the original 5-component design** (agreed before
-building this — see the P1.3 planning discussion): real data only supports
-4 of the original 5 components today.
+building this — see the P1.3 planning discussion): real data supports 4 of
+the original 5 components, now scored across 5 named components.
 
-    Component        Original weight   This phase
+    Component        Original weight   Today
     Rolling alpha     30%               kept (compute/rolling_returns.py, true
                                          monthly-sampled rolling windows as of
                                          P3 — see that module's docstring)
@@ -14,20 +14,30 @@ building this — see the P1.3 planning discussion): real data only supports
                                          1yr is informational-only, never fed
                                          into this rubric, see
                                          rolling_returns.py)
-    Cost              20%               narrowed to a binary Direct-vs-
-                                         Regular flag (compute/plan_audit.py)
-                                         — no free expense-ratio source
-                                         exists (checked live: mfapi.in has
-                                         no TER field; AMFI's TER
-                                         disclosures are scattered per-AMC
-                                         filings, not a unified feed)
+    Cost              20%               split 10/10 across two signals, both
+                                         in compute/plan_audit.py: the graded
+                                         expense-ratio score, and the binary
+                                         Direct-vs-Regular flag. Originally
+                                         the flag alone carried all 20 because
+                                         no free TER source existed; the Groww
+                                         screener scraper has since supplied
+                                         one. Split rather than doubled
+                                         because a Regular plan simply *is*
+                                         ~0.6-1.2pp more TER — the two
+                                         measure one underlying thing, and
+                                         weighting both fully would
+                                         double-count it. They are
+                                         complementary in practice: Groww's
+                                         feed is direct-plan-only, so TER is
+                                         absent for precisely the Regular
+                                         holdings the flag already scores 0.
     Overlap/redundancy 15%              omitted entirely — needs monthly
                                          AMC portfolio disclosures, a data
                                          source this app doesn't integrate
     Category fit       15%              kept (compute/allocation.py, needs
                                          P1.4's drift data)
 
-Weights among the 4 kept components live in the assumption registry
+Weights among the kept components live in the assumption registry
 (`assumptions/service.py::RubricWeights`), not code, per PRD §5.7 — and are
 **renormalized per-verdict** across whichever components are actually
 computable for that specific fund (e.g. a fund held <3yr has both rolling
@@ -51,7 +61,9 @@ can't be quantified.
 """
 
 import enum
+from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -64,16 +76,21 @@ from fundlens.compute.allocation import (
     compute_category_fit_score,
 )
 from fundlens.compute.holdings import get_current_holdings
-from fundlens.compute.plan_audit import PlanType, detect_plan_type
+from fundlens.compute.plan_audit import (
+    PlanType,
+    compute_cost_score,
+    detect_plan_type,
+    get_category_expense_medians,
+)
 from fundlens.compute.rolling_returns import (
     RollingReturnSummary,
     compute_rolling_returns,
     summarize_for_rubric,
 )
-from fundlens.db.models import SchemeMetadata
+from fundlens.db.models import GrowwFundMetadata, SchemeMetadata
 from fundlens.tax.friction import TaxFrictionStatement, compute_tax_friction
 
-OMITTED_COMPONENTS = ("overlap_redundancy", "cost_expense_ratio")
+OMITTED_COMPONENTS = ("overlap_redundancy",)
 
 
 class VerdictType(enum.StrEnum):
@@ -149,7 +166,15 @@ def compute_verdict(
     amfi_code: str | None,
     metadata: SchemeMetadata | None,
     drift: AllocationDrift | None,
+    expense_medians: Mapping[str, Decimal],
 ) -> Verdict:
+    """`expense_medians` is required rather than looked up here because it
+    is an aggregate over the entire scheme universe — the caller computes it
+    once via `plan_audit.get_category_expense_medians` and reuses it across
+    holdings, the same way `metadata` and `drift` are already batched. Pass
+    an empty mapping to score without peer data; the cost component then
+    reports itself unscored rather than guessing.
+    """
     weights = get_current_rubric_weights(session)
     components: list[RubricComponent] = []
 
@@ -211,6 +236,21 @@ def compute_verdict(
         )
     )
 
+    # Primary-key get, so it hits the identity map rather than the DB when
+    # the caller has already loaded the row.
+    groww = session.get(GrowwFundMetadata, amfi_code) if amfi_code is not None else None
+    cost_score, cost_reason = compute_cost_score(
+        groww.expense_ratio if groww is not None else None,
+        groww.sub_category if groww is not None else None,
+        expense_medians,
+        plan_type,
+    )
+    components.append(
+        RubricComponent(
+            "cost_expense_ratio", cost_score, weights.cost_expense_ratio, cost_reason
+        )
+    )
+
     overall_score = _weighted_average(components)
     available = sum(1 for c in components if c.score is not None)
     confidence_pct = available / len(components) * 100
@@ -264,6 +304,7 @@ def get_all_verdicts(session: Session) -> list[Verdict]:
             select(SchemeMetadata).where(SchemeMetadata.amfi_code.in_(amfi_codes))
         )
     }
+    expense_medians = get_category_expense_medians(session)
 
     return [
         compute_verdict(
@@ -274,6 +315,7 @@ def get_all_verdicts(session: Session) -> list[Verdict]:
             amfi_code=h.amfi_code,
             metadata=metadata_by_code.get(h.amfi_code) if h.amfi_code else None,
             drift=drift,
+            expense_medians=expense_medians,
         )
         for h in holdings
     ]
