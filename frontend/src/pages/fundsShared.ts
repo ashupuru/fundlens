@@ -69,3 +69,12 @@ export function sortValue(row: FundRow, sortKey: SortKey): number | string {
 export function sourceValue(rows: FundRow[]): number {
   return rows.reduce((sum, r) => sum + (r.metrics?.current_value_paise ?? 0), 0);
 }
+
+// Invested basis for a group. Uses cost_basis_paise (the cost of *currently
+// open* lots), not invested_paise (gross lifetime purchases), so it stays on
+// the same basis as the page's headline "Invested value" and reconciles with
+// current value -- gross invested would include money already redeemed and
+// make the returns figure nonsense.
+export function sourceCostBasis(rows: FundRow[]): number {
+  return rows.reduce((sum, r) => sum + (r.metrics?.cost_basis_paise ?? 0), 0);
+}
