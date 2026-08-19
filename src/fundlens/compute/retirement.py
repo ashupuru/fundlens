@@ -149,6 +149,7 @@ def _plan_events(
     life_expectancy: int,
     default_inflation_pct: Decimal,
     today: date,
+    inflation_delta_pct: Decimal = Decimal(0),
 ) -> list[PlannedEvent]:
     """Maps each `Goal` onto the age it lands at and inflates its cost to
     that year.
@@ -172,11 +173,14 @@ def _plan_events(
     for goal in goals:
         if not goal.include_in_retirement_projection:
             continue
+        # The scenario delta shifts an explicit per-goal override too: "what
+        # if inflation runs hotter than expected" should make an 8% education
+        # assumption 9%, not leave it pinned while everything else moves.
         inflation_pct = (
             goal.inflation_pct_override
             if goal.inflation_pct_override is not None
             else default_inflation_pct
-        )
+        ) + inflation_delta_pct
         years_until = int((goal.target_date - today).days // _DAYS_PER_YEAR)
 
         if years_until < 0:
@@ -262,7 +266,18 @@ def compute_retirement_projection(
     session: Session,
     profile: RiskProfile,
     assumptions: GoalAssumptions,
+    return_delta_pct: Decimal = Decimal(0),
+    inflation_delta_pct: Decimal = Decimal(0),
+    starting_corpus_paise: int | None = None,
 ) -> RetirementProjection:
+    """`*_delta_pct` shift the return and inflation assumptions for scenario
+    analysis (see `compute_retirement_scenarios`); both default to 0, so the
+    plain call is the user's own base assumptions unchanged.
+
+    `starting_corpus_paise` lets a caller running several scenarios price the
+    portfolio once instead of once per scenario -- it's the one genuinely
+    expensive input here (a full pass over every transaction).
+    """
     required_fields = (
         profile.current_age,
         profile.retirement_age,
@@ -286,24 +301,30 @@ def compute_retirement_projection(
     if life_expectancy <= retirement_age:
         return _incomplete(REASON_INVALID_AGES)
 
-    inflation_pct = assumptions.inflation_pct
-    pre_return_pct = blended_expected_return_pct(profile, assumptions)
+    inflation_pct = assumptions.inflation_pct + inflation_delta_pct
+    pre_return_pct = blended_expected_return_pct(profile, assumptions) + return_delta_pct
     post_return_pct = (
         profile.post_retirement_return_pct
         if profile.post_retirement_return_pct is not None
-        else pre_return_pct
-    )
+        else blended_expected_return_pct(profile, assumptions)
+    ) + return_delta_pct
     step_up_pct = (
         profile.annual_investment_step_up_pct
         if profile.annual_investment_step_up_pct is not None
         else Decimal(0)
     )
 
-    starting_corpus_paise = compute_portfolio_metrics(session).current_value_paise
+    if starting_corpus_paise is None:
+        starting_corpus_paise = compute_portfolio_metrics(session).current_value_paise
     years_to_retirement = retirement_age - current_age
 
     events = _plan_events(
-        list_goals(session), current_age, life_expectancy, inflation_pct, date.today()
+        list_goals(session),
+        current_age,
+        life_expectancy,
+        assumptions.inflation_pct,
+        date.today(),
+        inflation_delta_pct,
     )
     lump_sum_by_age: dict[int, Decimal] = {}
     for event in events:
@@ -449,3 +470,72 @@ def compute_retirement_projection(
         events=events,
         years=years,
     )
+
+
+CONSERVATIVE = "conservative"
+BASE = "base"
+OPTIMISTIC = "optimistic"
+
+
+@dataclass(frozen=True)
+class RetirementScenario:
+    key: str  # CONSERVATIVE | BASE | OPTIMISTIC
+    label: str
+    return_delta_pct: Decimal
+    inflation_delta_pct: Decimal
+    projection: RetirementProjection
+
+
+def compute_retirement_scenarios(
+    session: Session,
+    profile: RiskProfile,
+    assumptions: GoalAssumptions,
+    return_delta_pct: Decimal,
+    inflation_delta_pct: Decimal,
+) -> list[RetirementScenario]:
+    """The same projection run under three sets of assumptions, so the
+    output is a range rather than a single number presented as if it were a
+    forecast (the source spec's stated core principle).
+
+    **Two knobs, not three.** The spec describes the conservative case as
+    lower returns *and* higher inflation *and* higher withdrawals -- but
+    withdrawals in this engine are derived from inflation (the retirement-year
+    nominal figure is today's money inflated to it, and it escalates at
+    inflation every year after). So raising inflation already raises
+    withdrawals; a separate withdrawal knob would double-apply the same
+    pessimism.
+
+    The deltas are symmetric by design: conservative subtracts the return
+    delta and adds the inflation delta, optimistic does the reverse. That
+    keeps "how pessimistic is the pessimistic case" a single legible number
+    the user can edit, rather than six independently-tunable rates whose
+    combined effect is hard to reason about.
+
+    The portfolio is priced once and shared across all three runs -- it's
+    the only expensive input, and it's identical in every scenario.
+    """
+    starting_corpus_paise = compute_portfolio_metrics(session).current_value_paise
+
+    specs = [
+        (CONSERVATIVE, "Conservative", -return_delta_pct, inflation_delta_pct),
+        (BASE, "Base", Decimal(0), Decimal(0)),
+        (OPTIMISTIC, "Optimistic", return_delta_pct, -inflation_delta_pct),
+    ]
+
+    return [
+        RetirementScenario(
+            key=key,
+            label=label,
+            return_delta_pct=r_delta,
+            inflation_delta_pct=i_delta,
+            projection=compute_retirement_projection(
+                session,
+                profile,
+                assumptions,
+                return_delta_pct=r_delta,
+                inflation_delta_pct=i_delta,
+                starting_corpus_paise=starting_corpus_paise,
+            ),
+        )
+        for key, label, r_delta, i_delta in specs
+    ]

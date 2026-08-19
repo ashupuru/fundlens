@@ -923,3 +923,32 @@ counting only the income stream would understate what's needed. Pre-retirement e
 reduce the *projected* corpus, via the simulation itself, and leave the required figure alone.
 Events falling after life expectancy, or whose target date has already passed, are reported with
 an `excluded_reason` rather than silently dropped.
+
+## 18. Retirement Scenario Analysis (shipped — `compute/retirement.py`)
+
+The same projection run under three sets of assumptions, so the output is a *range* rather than a
+single number presented as though it were a forecast — the source spec's stated core principle
+("the most important feature should ultimately be scenario-based planning").
+
+**Two knobs, not three.** The spec describes the conservative case as lower returns *and* higher
+inflation *and* higher withdrawals. But withdrawals here are *derived* from inflation: the
+retirement-year nominal figure is today's money inflated to it (§16), and it escalates at
+inflation every year after. Raising inflation therefore already raises withdrawals — a separate
+withdrawal knob would double-apply the same pessimism.
+
+**Symmetric deltas around the user's own base**, via two editable assumption keys
+(`scenario_return_delta_pct` default 2, `scenario_inflation_delta_pct` default 1 — roughly the
+spread the spec's own 9/10/12% worked example implies). Conservative subtracts the return delta
+and adds the inflation delta; optimistic does the reverse. Deltas rather than six independently
+configurable rates so "how pessimistic is the pessimistic case" stays one legible number, and so
+the base case is *by construction* identical to what the projection endpoint already shows
+(asserted in tests — the two must never drift).
+
+**The inflation delta shifts per-goal overrides too.** "What if inflation runs hotter than
+expected" should make an explicit 8% education assumption 9%, not leave it pinned while
+everything around it moves.
+
+**The portfolio is priced once** and passed into all three runs via
+`compute_retirement_projection`'s `starting_corpus_paise` parameter — it's the one genuinely
+expensive input (a full pass over every transaction) and is identical across scenarios, so
+pricing it per scenario would triple the cost for no difference in result.

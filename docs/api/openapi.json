@@ -1620,6 +1620,31 @@
           }
         }
       }
+    },
+    "/retirement/scenarios": {
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Get Retirement Scenarios",
+        "operationId": "get_retirement_scenarios_retirement_scenarios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetirementScenarioResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Retirement Scenarios Retirement Scenarios Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4774,6 +4799,38 @@
           "years"
         ],
         "title": "RetirementProjectionResponse"
+      },
+      "RetirementScenarioResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "return_delta_pct": {
+            "type": "string",
+            "title": "Return Delta Pct"
+          },
+          "inflation_delta_pct": {
+            "type": "string",
+            "title": "Inflation Delta Pct"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/RetirementProjectionResponse"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "return_delta_pct",
+          "inflation_delta_pct",
+          "projection"
+        ],
+        "title": "RetirementScenarioResponse"
       },
       "RetirementYearResponse": {
         "properties": {

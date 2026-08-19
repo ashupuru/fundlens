@@ -12,9 +12,11 @@ import {
 import {
   getRetirementProfile,
   getRetirementProjection,
+  getRetirementScenarios,
   setRetirementProfile,
   type RetirementProfile,
   type RetirementProjection,
+  type RetirementScenario,
 } from "../api/client";
 
 const BRAND_COLOR = "#1c2b4a";
@@ -286,6 +288,61 @@ function EventsSection({ p }: { p: RetirementProjection }) {
   );
 }
 
+function ScenarioSection({ scenarios }: { scenarios: RetirementScenario[] }) {
+  const usable = scenarios.filter((s) => s.projection.reason === null);
+  if (usable.length === 0) return null;
+
+  return (
+    <div className="card">
+      <h3>Scenarios</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        The same plan under three sets of assumptions. The point isn't which number is right —
+        it's how much the outcome moves when the assumptions do.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th>Return</th>
+            <th>Inflation</th>
+            <th>Corpus at retirement</th>
+            <th>Required</th>
+            <th>Readiness</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {usable.map((s) => {
+            const p = s.projection;
+            const depletes = p.depletion_age !== null;
+            return (
+              <tr key={s.key}>
+                <td>
+                  <strong>{s.label}</strong>
+                </td>
+                <td>{p.blended_return_pct}%</td>
+                <td>{p.inflation_pct}%</td>
+                <td>{formatPaise(p.corpus_at_retirement_paise ?? 0)}</td>
+                <td>{formatPaise(p.required_corpus_at_retirement_paise ?? 0)}</td>
+                <td className={(p.readiness_pct ?? 0) >= 100 ? "positive" : "negative"}>
+                  {p.readiness_pct !== null && p.readiness_pct !== undefined
+                    ? `${p.readiness_pct.toFixed(0)}%`
+                    : "—"}
+                </td>
+                <td className={depletes ? "negative" : "positive"}>
+                  {depletes
+                    ? `Runs out at ${p.depletion_age}`
+                    : `Lasts to ${p.life_expectancy} · ${formatPaise(p.terminal_corpus_paise ?? 0)} left`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function CorpusChart({ p }: { p: RetirementProjection }) {
   const data = p.years.map((y) => ({
     age: y.age,
@@ -386,14 +443,16 @@ function YearTable({ p }: { p: RetirementProjection }) {
 export default function Retirement() {
   const [profile, setProfile] = useState<RetirementProfile | null>(null);
   const [projection, setProjection] = useState<RetirementProjection | null>(null);
+  const [scenarios, setScenarios] = useState<RetirementScenario[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function refresh() {
-    Promise.all([getRetirementProfile(), getRetirementProjection()])
-      .then(([pr, pj]) => {
+    Promise.all([getRetirementProfile(), getRetirementProjection(), getRetirementScenarios()])
+      .then(([pr, pj, sc]) => {
         setProfile(pr);
         setProjection(pj);
+        setScenarios(sc);
         setLoaded(true);
       })
       .catch((err: unknown) => {
@@ -443,6 +502,7 @@ export default function Retirement() {
       {hasProjection && projection && (
         <>
           <ReadinessSection p={projection} />
+          <ScenarioSection scenarios={scenarios} />
           <CorpusChart p={projection} />
           <EventsSection p={projection} />
           <YearTable p={projection} />

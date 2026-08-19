@@ -585,3 +585,105 @@ def test_life_expectancy_not_after_retirement_is_reported_not_projected(
 
     assert result.reason == REASON_INVALID_AGES
     assert result.years == []
+
+
+def _scenarios(
+    session: Session, profile: RiskProfile, assumptions: GoalAssumptions
+) -> dict[str, object]:
+    from fundlens.compute.retirement import compute_retirement_scenarios
+
+    return {
+        s.key: s
+        for s in compute_retirement_scenarios(
+            session, profile, assumptions, Decimal("2"), Decimal("1")
+        )
+    }
+
+
+def test_scenarios_apply_deltas_symmetrically_around_base(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Base blended return 10%, inflation 7%. With +/-2 return and +/-1
+    # inflation: conservative 8%/8%, base 10%/7%, optimistic 12%/6%.
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=51, retirement_age=60, post_retirement_return_pct=None)
+
+    by_key = _scenarios(session, profile, _assumptions(inflation="7", equity="10", debt="7"))
+
+    cons = by_key["conservative"].projection  # type: ignore[attr-defined]
+    base = by_key["base"].projection  # type: ignore[attr-defined]
+    opt = by_key["optimistic"].projection  # type: ignore[attr-defined]
+
+    assert (cons.blended_return_pct, cons.inflation_pct) == (Decimal("8"), Decimal("8"))
+    assert (base.blended_return_pct, base.inflation_pct) == (Decimal("10"), Decimal("7"))
+    assert (opt.blended_return_pct, opt.inflation_pct) == (Decimal("12"), Decimal("6"))
+
+
+def test_base_scenario_is_identical_to_the_plain_projection(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The base case must not drift from what the Retirement page's own
+    projection endpoint shows -- same inputs, same engine, zero deltas."""
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=51, retirement_age=60)
+    assumptions = _assumptions()
+
+    plain = compute_retirement_projection(session, profile, assumptions)
+    base = _scenarios(session, profile, assumptions)["base"].projection  # type: ignore[attr-defined]
+
+    assert base.corpus_at_retirement_paise == plain.corpus_at_retirement_paise
+    assert base.required_corpus_at_retirement_paise == plain.required_corpus_at_retirement_paise
+    assert base.depletion_age == plain.depletion_age
+
+
+def test_conservative_is_worse_and_optimistic_better_on_every_headline(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=51, retirement_age=60, post_retirement_return_pct=None)
+
+    by_key = _scenarios(session, profile, _assumptions())
+    cons = by_key["conservative"].projection  # type: ignore[attr-defined]
+    base = by_key["base"].projection  # type: ignore[attr-defined]
+    opt = by_key["optimistic"].projection  # type: ignore[attr-defined]
+
+    # Lower returns -> smaller corpus; higher inflation -> bigger requirement.
+    assert cons.corpus_at_retirement_paise < base.corpus_at_retirement_paise
+    assert base.corpus_at_retirement_paise < opt.corpus_at_retirement_paise
+    assert cons.required_corpus_at_retirement_paise > base.required_corpus_at_retirement_paise
+    assert base.required_corpus_at_retirement_paise > opt.required_corpus_at_retirement_paise
+    assert cons.readiness_pct < base.readiness_pct < opt.readiness_pct
+
+
+def test_scenario_inflation_delta_also_shifts_a_per_goal_override(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An explicit 8% education override becomes 9% in the conservative case
+    # and 7% in the optimistic one -- it moves with the scenario rather than
+    # staying pinned while everything around it changes.
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(
+        session, "Education", rupees=2_500_000, years_from_now=4,
+        inflation_override=Decimal("8"),
+    )
+    profile = _profile(current_age=51, retirement_age=60)
+
+    by_key = _scenarios(session, profile, _assumptions())
+
+    assert by_key["conservative"].projection.events[0].inflation_pct_used == Decimal("9")  # type: ignore[attr-defined]
+    assert by_key["base"].projection.events[0].inflation_pct_used == Decimal("8")  # type: ignore[attr-defined]
+    assert by_key["optimistic"].projection.events[0].inflation_pct_used == Decimal("7")  # type: ignore[attr-defined]
+
+
+def test_scenarios_return_incomplete_reason_without_a_retirement_plan(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=None)
+
+    by_key = _scenarios(session, profile, _assumptions())
+
+    assert all(
+        s.projection.reason == REASON_INCOMPLETE  # type: ignore[attr-defined]
+        for s in by_key.values()
+    )

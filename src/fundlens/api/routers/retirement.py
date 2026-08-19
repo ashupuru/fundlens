@@ -16,10 +16,14 @@ from sqlalchemy.orm import Session
 
 from fundlens.allocation.service import get_risk_profile, set_retirement_profile
 from fundlens.api.deps import get_session
-from fundlens.assumptions.service import get_current_goal_assumptions
+from fundlens.assumptions.service import (
+    get_current_goal_assumptions,
+    get_current_scenario_assumptions,
+)
 from fundlens.compute.retirement import (
     RetirementProjection,
     compute_retirement_projection,
+    compute_retirement_scenarios,
 )
 from fundlens.db.models import RiskProfile
 from fundlens.money import to_paise_strict
@@ -235,3 +239,41 @@ def get_retirement_projection(
         )
     assumptions = get_current_goal_assumptions(session)
     return _to_response(compute_retirement_projection(session, profile, assumptions))
+
+
+class RetirementScenarioResponse(BaseModel):
+    key: str
+    label: str
+    return_delta_pct: str
+    inflation_delta_pct: str
+    projection: RetirementProjectionResponse
+
+
+@router.get("/scenarios", response_model=list[RetirementScenarioResponse])
+def get_retirement_scenarios(
+    session: Session = Depends(get_session),
+) -> list[RetirementScenarioResponse]:
+    profile = get_risk_profile(session)
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No risk profile set — complete onboarding first (POST /risk-profile)",
+        )
+    assumptions = get_current_goal_assumptions(session)
+    scenario_assumptions = get_current_scenario_assumptions(session)
+    return [
+        RetirementScenarioResponse(
+            key=s.key,
+            label=s.label,
+            return_delta_pct=str(s.return_delta_pct),
+            inflation_delta_pct=str(s.inflation_delta_pct),
+            projection=_to_response(s.projection),
+        )
+        for s in compute_retirement_scenarios(
+            session,
+            profile,
+            assumptions,
+            scenario_assumptions.return_delta_pct,
+            scenario_assumptions.inflation_delta_pct,
+        )
+    ]

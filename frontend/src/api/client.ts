@@ -135,6 +135,16 @@ export async function setRetirementProfile(request: {
   return response.json() as Promise<RetirementProfile>;
 }
 
+export type RetirementScenario = components["schemas"]["RetirementScenarioResponse"];
+
+export async function getRetirementScenarios(): Promise<RetirementScenario[]> {
+  const response = await fetch(`${API_BASE_URL}/retirement/scenarios`);
+  if (!response.ok) {
+    throw new Error(`Failed to load retirement scenarios: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RetirementScenario[]>;
+}
+
 export async function getRetirementProjection(): Promise<RetirementProjection> {
   const response = await fetch(`${API_BASE_URL}/retirement/projection`);
   if (!response.ok) {

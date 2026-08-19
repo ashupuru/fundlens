@@ -66,6 +66,12 @@ class AssumptionKey(enum.StrEnum):
     # weighted-average way expected returns already are.
     EQUITY_VOLATILITY_PCT = "equity_volatility_pct"
     DEBT_VOLATILITY_PCT = "debt_volatility_pct"
+    # Retirement scenario analysis (compute-engine.md §18): how far the
+    # conservative/optimistic cases sit either side of the base assumptions.
+    # One knob each rather than six independently-tunable rates, so "how
+    # pessimistic is the pessimistic case" stays a single legible number.
+    SCENARIO_RETURN_DELTA_PCT = "scenario_return_delta_pct"
+    SCENARIO_INFLATION_DELTA_PCT = "scenario_inflation_delta_pct"
 
 
 DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
@@ -101,6 +107,11 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     # asserted as a forecast.
     AssumptionKey.EQUITY_VOLATILITY_PCT: "18",
     AssumptionKey.DEBT_VOLATILITY_PCT: "3",
+    # Roughly the spread the source spec's own worked example implies
+    # (9/10/12% returns around a ~10% base). Editable, not asserted as a
+    # forecast of how wrong the base case might be.
+    AssumptionKey.SCENARIO_RETURN_DELTA_PCT: "2",
+    AssumptionKey.SCENARIO_INFLATION_DELTA_PCT: "1",
 }
 
 
@@ -276,4 +287,18 @@ def get_current_monte_carlo_assumptions(session: Session) -> MonteCarloAssumptio
     return MonteCarloAssumptions(
         equity_volatility_pct=Decimal(values[AssumptionKey.EQUITY_VOLATILITY_PCT.value]),
         debt_volatility_pct=Decimal(values[AssumptionKey.DEBT_VOLATILITY_PCT.value]),
+    )
+
+
+@dataclass(frozen=True)
+class ScenarioAssumptions:
+    return_delta_pct: Decimal
+    inflation_delta_pct: Decimal
+
+
+def get_current_scenario_assumptions(session: Session) -> ScenarioAssumptions:
+    values = get_current_values(session)
+    return ScenarioAssumptions(
+        return_delta_pct=Decimal(values[AssumptionKey.SCENARIO_RETURN_DELTA_PCT.value]),
+        inflation_delta_pct=Decimal(values[AssumptionKey.SCENARIO_INFLATION_DELTA_PCT.value]),
     )
