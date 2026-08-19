@@ -220,3 +220,105 @@ def test_data_freshness_reflects_persisted_row(session: Session) -> None:
     assert freshness[0].source == "amfi_navall"
     assert freshness[0].status == "ok"
     assert freshness[0].rows_updated == 5
+
+
+def _dup_txn(
+    session: Session,
+    *,
+    folio: str,
+    parser_version: str,
+    amount_paise: int,
+    units: Decimal,
+    txn_date: date = date(2021, 10, 6),
+    txn_type: TransactionType = TransactionType.PURCHASE,
+    amfi_code: str = "120700",
+) -> None:
+    upload = RawCASUpload(
+        file_hash=f"h-{uuid.uuid4().hex}",
+        parser_version=parser_version,
+        status=UploadStatus.PARSED,
+    )
+    session.add(upload)
+    session.flush()
+    session.add(
+        RawTransaction(
+            upload_id=upload.id,
+            folio=folio,
+            amc="ICICI",
+            scheme_name="Acme Hybrid",
+            isin="INF001",
+            amfi_code=amfi_code,
+            txn_type=txn_type,
+            txn_date=txn_date,
+            units=units,
+            amount_paise=amount_paise,
+            natural_key=f"k-{uuid.uuid4().hex}",
+        )
+    )
+    session.commit()
+
+
+def test_cross_source_duplicate_found_despite_differing_amounts(session: Session) -> None:
+    """Real shape of the bug: identical units, amounts a few paise apart
+    because the CAS is net of stamp duty and the broker reports gross."""
+    from fundlens.compute.data_quality import get_cross_source_duplicates
+
+    _dup_txn(session, folio="AMC-1", parser_version="1.3.0",
+             amount_paise=4999750, units=Decimal("379.9850"))
+    _dup_txn(session, folio="ZERODHA", parser_version="zerodha-tradebook-csv-v1",
+             amount_paise=4999744, units=Decimal("379.9850"))
+
+    dups = get_cross_source_duplicates(session)
+
+    assert len(dups) == 1
+    assert dups[0].units == Decimal("379.9850")
+    assert {r.source for r in dups[0].rows} == {"Direct / AMC folio", "Zerodha"}
+    # The broker copy is removable; the CAS copy is kept.
+    assert dups[0].removable is not None and dups[0].removable.folio == "ZERODHA"
+    assert dups[0].keep is not None and dups[0].keep.folio == "AMC-1"
+
+
+def test_repeats_within_one_folio_are_not_flagged(session: Session) -> None:
+    from fundlens.compute.data_quality import get_cross_source_duplicates
+
+    for _ in range(2):
+        _dup_txn(session, folio="AMC-1", parser_version="1.3.0",
+                 amount_paise=100_000, units=Decimal("10.0000"))
+
+    assert get_cross_source_duplicates(session) == []
+
+
+def test_different_units_are_not_duplicates(session: Session) -> None:
+    from fundlens.compute.data_quality import get_cross_source_duplicates
+
+    _dup_txn(session, folio="AMC-1", parser_version="1.3.0",
+             amount_paise=100_000, units=Decimal("10.0000"))
+    _dup_txn(session, folio="ZERODHA", parser_version="zerodha-tradebook-csv-v1",
+             amount_paise=100_000, units=Decimal("11.0000"))
+
+    assert get_cross_source_duplicates(session) == []
+
+
+def test_two_non_broker_sources_are_not_auto_resolvable(session: Session) -> None:
+    """Without a broker side there's no basis to prefer one copy over the
+    other, so nothing is marked removable."""
+    from fundlens.compute.data_quality import get_cross_source_duplicates
+
+    _dup_txn(session, folio="AMC-1", parser_version="1.3.0",
+             amount_paise=100_000, units=Decimal("10.0000"))
+    _dup_txn(session, folio="AMC-2", parser_version="1.3.0",
+             amount_paise=100_000, units=Decimal("10.0000"))
+
+    assert get_cross_source_duplicates(session) == []
+
+
+def test_tax_lines_without_units_are_never_duplicates(session: Session) -> None:
+    """Zero-unit rows (stamp duty, STT) would otherwise all collide with each
+    other on the same date."""
+    from fundlens.compute.data_quality import get_cross_source_duplicates
+
+    for folio, pv in [("AMC-1", "1.3.0"), ("ZERODHA", "zerodha-tradebook-csv-v1")]:
+        _dup_txn(session, folio=folio, parser_version=pv, amount_paise=187,
+                 units=Decimal("0"), txn_type=TransactionType.STAMP_DUTY_TAX)
+
+    assert get_cross_source_duplicates(session) == []

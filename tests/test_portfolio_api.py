@@ -257,3 +257,111 @@ def test_known_sources_include_builtins_and_user_labels(client: TestClient) -> N
     assert "Groww" in sources  # what the user typed
     assert "Direct / AMC folio" in sources  # built-in suggestion
     assert "Zerodha" in sources
+
+
+def _seed_cross_source_duplicate(client: TestClient) -> None:
+    """A CAS-style purchase and a broker-style purchase of the same trade:
+    identical units, amounts a few paise apart -- the real shape of the bug."""
+    cas = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
+        "AMC-FOLIO-1,ICICI,Acme Hybrid,PURCHASE,2021-10-06,49997.50,379.9850,INF001,120700\n"
+    )
+    client.post("/ingest/csv", files={"file": ("cas.csv", cas, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+    # Only the broker side is re-attributed; the CAS side keeps its derived
+    # source, as a real CAS position would (no override until a user sets one).
+    broker = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
+        "ZERODHA,ICICI,Acme Hybrid,PURCHASE,2021-10-06,49997.44,379.9850,INF001,120700\n"
+    )
+    client.post("/ingest/csv", files={"file": ("z.csv", broker, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+    zerodha = [h for h in client.get("/portfolio/holdings").json() if h["folio"] == "ZERODHA"][0]
+    client.put(
+        "/portfolio/holding-source",
+        json={
+            "folio": "ZERODHA",
+            "scheme_key": zerodha["scheme_key"],
+            "source": "Zerodha",
+        },
+    )
+
+
+def test_duplicate_preview_finds_the_pair_without_deleting(client: TestClient) -> None:
+    _seed_cross_source_duplicate(client)
+
+    body = client.get("/portfolio/duplicates/preview").json()
+
+    assert body["removable_count"] == 1
+    dup = body["duplicates"][0]
+    assert dup["units"] == "379.9850"
+    assert {r["source"] for r in dup["rows"]} == {"Manual CSV", "Zerodha"}
+    # The broker side is the one marked for removal, the CAS side is kept.
+    removable = next(r for r in dup["rows"] if r["txn_id"] == dup["removable_txn_id"])
+    assert removable["source"] == "Zerodha"
+    assert dup["keep_folio"] == "AMC-FOLIO-1"
+
+    # Nothing deleted by a preview.
+    assert len(client.get("/portfolio/metrics").json()) == 2
+
+
+def test_duplicate_resolve_deletes_the_broker_copy_and_keeps_attribution(
+    client: TestClient,
+) -> None:
+    _seed_cross_source_duplicate(client)
+
+    body = client.post("/portfolio/duplicates/resolve").json()
+
+    assert body["deleted_count"] == 1
+    assert body["deleted_amount_paise"] == 4999744  # the broker-side amount
+    assert body["source_overrides_written"] == 1
+
+    # Only the CAS position survives...
+    holdings = client.get("/portfolio/holdings").json()
+    assert [h["folio"] for h in holdings] == ["AMC-FOLIO-1"]
+
+    # ...and it is still attributed to the broker it was really bought through,
+    # rather than silently reverting to "Direct".
+    surviving = client.get("/portfolio/metrics").json()[0]
+    assert surviving["source"] == "Zerodha"
+    assert surviving["source_is_override"] is True
+
+
+def test_duplicate_resolve_is_idempotent(client: TestClient) -> None:
+    _seed_cross_source_duplicate(client)
+    client.post("/portfolio/duplicates/resolve")
+
+    second = client.post("/portfolio/duplicates/resolve").json()
+
+    assert second["deleted_count"] == 0
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 0
+
+
+def test_repeats_within_one_folio_are_not_duplicates(client: TestClient) -> None:
+    """Two genuine same-day purchases in the same folio must be left alone --
+    only cross-folio pairs are cross-source duplicates."""
+    csv_content = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
+        "F1,ICICI,Acme Hybrid,PURCHASE,2021-10-06,1000.00,100.0000,INF001,120700\n"
+        "F1,ICICI,Acme Hybrid,PURCHASE,2021-10-06,1000.00,100.0000,INF001,120700\n"
+    )
+    client.post("/ingest/csv", files={"file": ("t.csv", csv_content, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 0
+
+
+def test_two_non_broker_sources_are_reported_but_not_auto_resolved(
+    client: TestClient,
+) -> None:
+    """With no broker side there's no basis to prefer one copy, so nothing is
+    marked removable rather than guessing."""
+    csv_content = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
+        "F1,ICICI,Acme Hybrid,PURCHASE,2021-10-06,1000.00,100.0000,INF001,120700\n"
+        "F2,ICICI,Acme Hybrid,PURCHASE,2021-10-06,1000.00,100.0000,INF001,120700\n"
+    )
+    client.post("/ingest/csv", files={"file": ("t.csv", csv_content, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+
+    assert client.get("/portfolio/duplicates/preview").json()["removable_count"] == 0

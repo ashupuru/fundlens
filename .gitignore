@@ -37,3 +37,4 @@ exports/
 
 # scripts/start.sh runtime state (PID files, logs)
 .run/
+.backups/

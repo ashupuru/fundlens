@@ -615,6 +615,50 @@
         }
       }
     },
+    "/portfolio/duplicates/preview": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Preview Duplicates",
+        "description": "What a cleanup would remove. Writes nothing -- same preview-then-commit\nshape the broker importers use, because the resolve step deletes real\nfinancial records.",
+        "operationId": "preview_duplicates_portfolio_duplicates_preview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicatePreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/duplicates/resolve": {
+      "post": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Resolve Duplicates",
+        "description": "Deletes the broker-side copy of each provable duplicate, keeping the\nCAS record, then rebuilds lots.\n\nBroker attribution would otherwise be lost -- a fund bought through\nZerodha whose only Zerodha rows were duplicates would silently become\n\"Direct / AMC folio\". So for each surviving position a\n`HoldingSourceOverride` is written naming the broker, which is exactly\nwhat that table exists for.",
+        "operationId": "resolve_duplicates_portfolio_duplicates_resolve_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateResolveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reports/capital-gains": {
       "get": {
         "tags": [
@@ -2670,6 +2714,47 @@
         ],
         "title": "CreateGoalRequest"
       },
+      "CrossSourceDuplicateResponse": {
+        "properties": {
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "txn_date": {
+            "type": "string",
+            "title": "Txn Date"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/fundlens__api__routers__data_quality__DuplicateSideResponse"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "resolvable": {
+            "type": "boolean",
+            "title": "Resolvable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheme_name",
+          "txn_date",
+          "direction",
+          "units",
+          "rows",
+          "resolvable"
+        ],
+        "title": "CrossSourceDuplicateResponse"
+      },
       "DataFreshnessResponse": {
         "properties": {
           "source": {
@@ -2765,6 +2850,13 @@
             },
             "type": "array",
             "title": "Data Freshness"
+          },
+          "cross_source_duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/CrossSourceDuplicateResponse"
+            },
+            "type": "array",
+            "title": "Cross Source Duplicates"
           }
         },
         "type": "object",
@@ -2773,7 +2865,8 @@
           "coverage_gaps",
           "unmatched_schemes",
           "failed_xirr_positions",
-          "data_freshness"
+          "data_freshness",
+          "cross_source_duplicates"
         ],
         "title": "DataQualitySummaryResponse"
       },
@@ -2997,6 +3090,132 @@
           "plan_type"
         ],
         "title": "DirectVsRegularFlagResponse"
+      },
+      "DuplicatePreviewResponse": {
+        "properties": {
+          "duplicates": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateResponse"
+            },
+            "type": "array",
+            "title": "Duplicates"
+          },
+          "removable_count": {
+            "type": "integer",
+            "title": "Removable Count"
+          },
+          "removable_amount_paise": {
+            "type": "integer",
+            "title": "Removable Amount Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duplicates",
+          "removable_count",
+          "removable_amount_paise"
+        ],
+        "title": "DuplicatePreviewResponse"
+      },
+      "DuplicateResolveResponse": {
+        "properties": {
+          "deleted_count": {
+            "type": "integer",
+            "title": "Deleted Count"
+          },
+          "deleted_amount_paise": {
+            "type": "integer",
+            "title": "Deleted Amount Paise"
+          },
+          "source_overrides_written": {
+            "type": "integer",
+            "title": "Source Overrides Written"
+          },
+          "rebuild": {
+            "$ref": "#/components/schemas/RebuildResponse"
+          },
+          "deleted": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateResponse"
+            },
+            "type": "array",
+            "title": "Deleted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted_count",
+          "deleted_amount_paise",
+          "source_overrides_written",
+          "rebuild",
+          "deleted"
+        ],
+        "title": "DuplicateResolveResponse"
+      },
+      "DuplicateResponse": {
+        "properties": {
+          "amfi_code": {
+            "type": "string",
+            "title": "Amfi Code"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "txn_date": {
+            "type": "string",
+            "title": "Txn Date"
+          },
+          "direction": {
+            "type": "string",
+            "title": "Direction"
+          },
+          "units": {
+            "type": "string",
+            "title": "Units"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/fundlens__api__routers__portfolio__DuplicateSideResponse"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "removable_txn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removable Txn Id"
+          },
+          "keep_folio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Folio"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amfi_code",
+          "scheme_name",
+          "txn_date",
+          "direction",
+          "units",
+          "rows",
+          "removable_txn_id",
+          "keep_folio"
+        ],
+        "title": "DuplicateResponse"
       },
       "EquityCapBreakdownResponse": {
         "properties": {
@@ -6636,6 +6855,36 @@
         ],
         "title": "CoverageGapResponse"
       },
+      "fundlens__api__routers__data_quality__DuplicateSideResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "amount_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "source",
+          "amount_paise"
+        ],
+        "title": "DuplicateSideResponse"
+      },
       "fundlens__api__routers__ingestion__CoverageGapResponse": {
         "properties": {
           "folio": {
@@ -6663,6 +6912,41 @@
           "message"
         ],
         "title": "CoverageGapResponse"
+      },
+      "fundlens__api__routers__portfolio__DuplicateSideResponse": {
+        "properties": {
+          "txn_id": {
+            "type": "string",
+            "title": "Txn Id"
+          },
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "amount_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Paise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "txn_id",
+          "folio",
+          "source",
+          "amount_paise"
+        ],
+        "title": "DuplicateSideResponse"
       }
     }
   }

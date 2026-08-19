@@ -340,6 +340,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/duplicates/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Duplicates
+         * @description What a cleanup would remove. Writes nothing -- same preview-then-commit
+         *     shape the broker importers use, because the resolve step deletes real
+         *     financial records.
+         */
+        get: operations["preview_duplicates_portfolio_duplicates_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/duplicates/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Duplicates
+         * @description Deletes the broker-side copy of each provable duplicate, keeping the
+         *     CAS record, then rebuilds lots.
+         *
+         *     Broker attribution would otherwise be lost -- a fund bought through
+         *     Zerodha whose only Zerodha rows were duplicates would silently become
+         *     "Direct / AMC folio". So for each surviving position a
+         *     `HoldingSourceOverride` is written naming the broker, which is exactly
+         *     what that table exists for.
+         */
+        post: operations["resolve_duplicates_portfolio_duplicates_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/capital-gains": {
         parameters: {
             query?: never;
@@ -1104,6 +1153,21 @@ export interface components {
              */
             include_in_retirement_projection: boolean;
         };
+        /** CrossSourceDuplicateResponse */
+        CrossSourceDuplicateResponse: {
+            /** Scheme Name */
+            scheme_name: string;
+            /** Txn Date */
+            txn_date: string;
+            /** Direction */
+            direction: string;
+            /** Units */
+            units: string;
+            /** Rows */
+            rows: components["schemas"]["fundlens__api__routers__data_quality__DuplicateSideResponse"][];
+            /** Resolvable */
+            resolvable: boolean;
+        };
         /** DataFreshnessResponse */
         DataFreshnessResponse: {
             /** Source */
@@ -1131,6 +1195,8 @@ export interface components {
             failed_xirr_positions: components["schemas"]["FailedXirrPositionResponse"][];
             /** Data Freshness */
             data_freshness: components["schemas"]["DataFreshnessResponse"][];
+            /** Cross Source Duplicates */
+            cross_source_duplicates: components["schemas"]["CrossSourceDuplicateResponse"][];
         };
         /** DezervCommitResponse */
         DezervCommitResponse: {
@@ -1197,6 +1263,46 @@ export interface components {
             amc: string;
             /** Plan Type */
             plan_type: string;
+        };
+        /** DuplicatePreviewResponse */
+        DuplicatePreviewResponse: {
+            /** Duplicates */
+            duplicates: components["schemas"]["DuplicateResponse"][];
+            /** Removable Count */
+            removable_count: number;
+            /** Removable Amount Paise */
+            removable_amount_paise: number;
+        };
+        /** DuplicateResolveResponse */
+        DuplicateResolveResponse: {
+            /** Deleted Count */
+            deleted_count: number;
+            /** Deleted Amount Paise */
+            deleted_amount_paise: number;
+            /** Source Overrides Written */
+            source_overrides_written: number;
+            rebuild: components["schemas"]["RebuildResponse"];
+            /** Deleted */
+            deleted: components["schemas"]["DuplicateResponse"][];
+        };
+        /** DuplicateResponse */
+        DuplicateResponse: {
+            /** Amfi Code */
+            amfi_code: string;
+            /** Scheme Name */
+            scheme_name: string;
+            /** Txn Date */
+            txn_date: string;
+            /** Direction */
+            direction: string;
+            /** Units */
+            units: string;
+            /** Rows */
+            rows: components["schemas"]["fundlens__api__routers__portfolio__DuplicateSideResponse"][];
+            /** Removable Txn Id */
+            removable_txn_id: string | null;
+            /** Keep Folio */
+            keep_folio: string | null;
         };
         /** EquityCapBreakdownResponse */
         EquityCapBreakdownResponse: {
@@ -2171,6 +2277,15 @@ export interface components {
             /** Detected At */
             detected_at: string;
         };
+        /** DuplicateSideResponse */
+        fundlens__api__routers__data_quality__DuplicateSideResponse: {
+            /** Folio */
+            folio: string;
+            /** Source */
+            source: string;
+            /** Amount Paise */
+            amount_paise: number | null;
+        };
         /** CoverageGapResponse */
         fundlens__api__routers__ingestion__CoverageGapResponse: {
             /** Folio */
@@ -2181,6 +2296,17 @@ export interface components {
             opening_balance_units: string;
             /** Message */
             message: string;
+        };
+        /** DuplicateSideResponse */
+        fundlens__api__routers__portfolio__DuplicateSideResponse: {
+            /** Txn Id */
+            txn_id: string;
+            /** Folio */
+            folio: string;
+            /** Source */
+            source: string;
+            /** Amount Paise */
+            amount_paise: number | null;
         };
     };
     responses: never;
@@ -2682,6 +2808,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnownSourcesResponse"];
+                };
+            };
+        };
+    };
+    preview_duplicates_portfolio_duplicates_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicatePreviewResponse"];
+                };
+            };
+        };
+    };
+    resolve_duplicates_portfolio_duplicates_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateResolveResponse"];
                 };
             };
         };

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from fundlens.api.deps import get_session
 from fundlens.compute.data_quality import (
     get_coverage_gaps,
+    get_cross_source_duplicates,
     get_data_freshness,
     get_failed_xirr_positions,
     get_folio_summary,
@@ -63,12 +64,28 @@ class DataFreshnessResponse(BaseModel):
     rows_updated: int | None
 
 
+class DuplicateSideResponse(BaseModel):
+    folio: str
+    source: str
+    amount_paise: int | None
+
+
+class CrossSourceDuplicateResponse(BaseModel):
+    scheme_name: str
+    txn_date: str
+    direction: str
+    units: str
+    rows: list[DuplicateSideResponse]
+    resolvable: bool
+
+
 class DataQualitySummaryResponse(BaseModel):
     folios: list[FolioSummaryResponse]
     coverage_gaps: list[CoverageGapResponse]
     unmatched_schemes: list[UnmatchedSchemeResponse]
     failed_xirr_positions: list[FailedXirrPositionResponse]
     data_freshness: list[DataFreshnessResponse]
+    cross_source_duplicates: list[CrossSourceDuplicateResponse]
 
 
 @router.get("/summary", response_model=DataQualitySummaryResponse)
@@ -117,6 +134,22 @@ def summary(session: Session = Depends(get_session)) -> DataQualitySummaryRespon
                 less_than_one_year=m.less_than_one_year,
             )
             for m in get_failed_xirr_positions(session)
+        ],
+        cross_source_duplicates=[
+            CrossSourceDuplicateResponse(
+                scheme_name=d.scheme_name,
+                txn_date=d.txn_date.isoformat(),
+                direction=d.direction,
+                units=str(d.units),
+                rows=[
+                    DuplicateSideResponse(
+                        folio=r.folio, source=r.source, amount_paise=r.amount_paise
+                    )
+                    for r in d.rows
+                ],
+                resolvable=d.removable is not None,
+            )
+            for d in get_cross_source_duplicates(session)
         ],
         data_freshness=[
             DataFreshnessResponse(

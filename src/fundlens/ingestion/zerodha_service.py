@@ -162,7 +162,12 @@ def commit_zerodha_csv(
         signed_amount_paise = row.amount_paise if is_buy else -row.amount_paise
 
         if existing_cross_source_transaction(
-            session, scheme.amfi_code, row.txn_date, is_buy, signed_amount_paise
+            session,
+            scheme.amfi_code,
+            row.txn_date,
+            is_buy,
+            signed_amount_paise,
+            units=row.quantity,
         ):
             cross_source_duplicates[row.isin] = cross_source_duplicates.get(row.isin, 0) + 1
             continue

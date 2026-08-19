@@ -1140,3 +1140,70 @@ table created but `alembic_version` still on the prior revision (SQLite DDL is n
 after which every run aborted with "table already exists". The env var is set rather than
 `Settings` patched because `get_settings()` is `lru_cache`d and read during app startup, long
 before any fixture could intervene.
+
+## 24. Cross-Source Duplicate Detection and Cleanup
+
+### The bug: matching on amount alone
+
+`ingestion/broker_import_shared.py::existing_cross_source_transaction` skips a broker row when the
+same transaction already exists from another import, since a broker's account label is never the
+same string as a CAS folio and natural-key dedup (which includes `folio`) therefore can't see it.
+It originally matched on `(amfi_code, txn_date, buy/sell direction, exact amount_paise)`, with a
+docstring stating units were *deliberately* excluded because "a broker's units can be
+back-computed".
+
+That was correct for **Dezerv** — whose export has no units column at all, so units are derived
+from NAV while its rupee amounts are exact — and **exactly backwards for Zerodha**, whose tradebook
+reports exact units and an amount that drifts:
+
+```
+2021-10-06   CAS Rs 49,997.50    Zerodha Rs 49,997.44    units 379.9850 both
+2026-01-12   CAS Rs 37,498.13    Zerodha Rs 37,498.92    units  16.5230 both
+```
+
+A CAS reports the amount **net of stamp duty** (carried on its own line, e.g. ₹1.87); Zerodha
+reports the **gross order**. The exact-amount match therefore never fired, and **113 real
+transactions — ₹8.69 L — were ingested twice**: HDFC Flexi Cap held 119.5080 units under *both* an
+AMC folio and `ZERODHA`, ICICI Pru Aggressive Hybrid matched on units across 8 of 9 installments.
+
+**The rule now matches on amount OR units**, because each source reports exactly one of them
+exactly and they are different fields. Additive rather than replacing, so Dezerv's
+real-data-verified amount match (35 transactions) keeps working. Units are compared as magnitudes
+at the column's own 4dp — direction is already pinned by `txn_type`, and a signed comparison would
+never fire for a redemption. Zero-unit rows (tax lines) fall back to amount-only, since matching on
+0 would collide with every other zero-unit row that day.
+
+**Deliberately not an amount tolerance.** Two genuinely separate same-day purchases of the same
+fund for a similar amount are indistinguishable from a duplicate, so widening the amount arm adds
+false-positive risk without catching anything the units arm misses.
+
+### Detection: `compute/data_quality.py::get_cross_source_duplicates`
+
+Groups transactions by `(amfi_code, txn_date, direction, exact units)` and reports any appearing
+under more than one folio, alongside coverage gaps and unmatched schemes on the Data Quality page.
+This matters independently of the cleanup: the bug survived undetected because **nothing was
+looking for it**.
+
+Only *provable* duplicates — exact unit equality. Anything looser can't be told apart from two
+genuine same-day purchases, and under-reporting is recoverable where deleting real history is not.
+Reads **effective** sources (`compute/metrics.py::position_sources`, overrides applied) rather than
+derived ones: a position whose attribution the user has already corrected must still have its
+duplicates detected, or precisely the ones they'd noticed were wrong become invisible.
+
+### Cleanup: `GET/POST /portfolio/duplicates/{preview,resolve}`
+
+Preview-then-confirm, matching the broker importers, because resolve deletes real financial
+records. Resolve removes the **broker-side** row and keeps the **CAS** one — the authoritative RTA
+record with the real AMC folio, stamp-duty lines, and history reaching far beyond a broker
+export's window.
+
+Deleting the broker row would silently strip broker attribution (a fund bought via Zerodha whose
+only Zerodha rows were duplicates would become "Direct / AMC folio"), so resolve writes a
+`HoldingSourceOverride` naming the broker on each surviving position — exactly what that table
+exists for. It **never overwrites an override the user set themselves**: automated bookkeeping
+correcting its own mistake has no business relabelling a judgement someone already made.
+
+Run `scripts/backup-db.sh` first. Verified on the real portfolio: 113 transactions and ₹8.69 L
+removed, cost basis ₹3.16 Cr → ₹3.07 Cr, HDFC Flexi Cap reduced to a single 119.5080-unit holding,
+1,603 lots rebuilt with zero errors, re-running preview finds none, and the three affected funds
+still report as Zerodha.

@@ -198,6 +198,57 @@ export default function DataQuality() {
       </div>
 
       <div className="card">
+        <h2>Cross-source duplicates ({summary.cross_source_duplicates.length})</h2>
+        {summary.cross_source_duplicates.length === 0 ? (
+          <p className="muted">
+            No transaction appears under more than one folio with identical units.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginBottom: 12 }}>
+              The same trade ingested twice — once from your CAS, once from a broker export. The
+              two sources report amounts a few paise apart (a CAS is net of stamp duty, a broker
+              reports the gross order), so only the identical unit count gives them away. Resolving
+              keeps the CAS record and removes the broker copy, preserving broker attribution.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Scheme</th>
+                  <th>Date</th>
+                  <th>Units</th>
+                  <th>Recorded under</th>
+                  <th>Resolvable</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.cross_source_duplicates.slice(0, 50).map((d, i) => (
+                  <tr key={i}>
+                    <td>{d.scheme_name}</td>
+                    <td>{d.txn_date}</td>
+                    <td>{d.units}</td>
+                    <td>
+                      {d.rows
+                        .map((r) => `${r.source} (${(r.amount_paise ?? 0) / 100})`)
+                        .join(" vs ")}
+                    </td>
+                    <td className={d.resolvable ? "positive" : ""}>
+                      {d.resolvable ? "yes" : "needs review"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {summary.cross_source_duplicates.length > 50 && (
+              <p className="muted" style={{ marginTop: 8 }}>
+                Showing the first 50 of {summary.cross_source_duplicates.length}.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="card">
         <h2>Failed XIRR computations ({summary.failed_xirr_positions.length})</h2>
         {summary.failed_xirr_positions.length === 0 ? (
           <p className="muted">XIRR computed successfully for every position.</p>

@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 
 from fundlens.api.deps import get_session
 from fundlens.compute import metrics, service
+from fundlens.compute.data_quality import get_cross_source_duplicates
 from fundlens.compute.holdings import get_current_holdings, get_holdings_by_amc
 from fundlens.compute.valuation_history import compute_portfolio_value_history
-from fundlens.db.models import HoldingSourceOverride
+from fundlens.db.models import HoldingSourceOverride, RawTransaction
+from fundlens.scheme_identity import scheme_key
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -301,4 +303,139 @@ def known_holding_sources(session: Session = Depends(get_session)) -> KnownSourc
     in_use = {source for source, _ in metrics.position_sources(session).values()}
     return KnownSourcesResponse(
         sources=sorted(in_use | set(metrics.SELECTABLE_SOURCES)),
+    )
+
+
+class DuplicateSideResponse(BaseModel):
+    txn_id: str
+    folio: str
+    source: str
+    amount_paise: int | None
+
+
+class DuplicateResponse(BaseModel):
+    amfi_code: str
+    scheme_name: str
+    txn_date: str
+    direction: str
+    units: str
+    rows: list[DuplicateSideResponse]
+    removable_txn_id: str | None
+    keep_folio: str | None
+
+
+class DuplicatePreviewResponse(BaseModel):
+    duplicates: list[DuplicateResponse]
+    removable_count: int
+    removable_amount_paise: int
+
+
+def _duplicate_responses(session: Session) -> list[DuplicateResponse]:
+    return [
+        DuplicateResponse(
+            amfi_code=d.amfi_code,
+            scheme_name=d.scheme_name,
+            txn_date=d.txn_date.isoformat(),
+            direction=d.direction,
+            units=str(d.units),
+            rows=[
+                DuplicateSideResponse(
+                    txn_id=r.txn_id, folio=r.folio, source=r.source,
+                    amount_paise=r.amount_paise,
+                )
+                for r in d.rows
+            ],
+            removable_txn_id=d.removable.txn_id if d.removable else None,
+            keep_folio=d.keep.folio if d.keep else None,
+        )
+        for d in get_cross_source_duplicates(session)
+    ]
+
+
+@router.get("/duplicates/preview", response_model=DuplicatePreviewResponse)
+def preview_duplicates(session: Session = Depends(get_session)) -> DuplicatePreviewResponse:
+    """What a cleanup would remove. Writes nothing -- same preview-then-commit
+    shape the broker importers use, because the resolve step deletes real
+    financial records."""
+    duplicates = _duplicate_responses(session)
+    removable = [d for d in duplicates if d.removable_txn_id is not None]
+    return DuplicatePreviewResponse(
+        duplicates=duplicates,
+        removable_count=len(removable),
+        removable_amount_paise=sum(
+            abs(next(r.amount_paise or 0 for r in d.rows if r.txn_id == d.removable_txn_id))
+            for d in removable
+        ),
+    )
+
+
+class DuplicateResolveResponse(BaseModel):
+    deleted_count: int
+    deleted_amount_paise: int
+    source_overrides_written: int
+    rebuild: RebuildResponse
+    deleted: list[DuplicateResponse]
+
+
+@router.post("/duplicates/resolve", response_model=DuplicateResolveResponse)
+def resolve_duplicates(session: Session = Depends(get_session)) -> DuplicateResolveResponse:
+    """Deletes the broker-side copy of each provable duplicate, keeping the
+    CAS record, then rebuilds lots.
+
+    Broker attribution would otherwise be lost -- a fund bought through
+    Zerodha whose only Zerodha rows were duplicates would silently become
+    "Direct / AMC folio". So for each surviving position a
+    `HoldingSourceOverride` is written naming the broker, which is exactly
+    what that table exists for.
+    """
+    duplicates = get_cross_source_duplicates(session)
+    resolvable = [d for d in duplicates if d.removable is not None and d.keep is not None]
+
+    deleted_amount = 0
+    overrides: dict[tuple[str, str], str] = {}
+    for dup in resolvable:
+        assert dup.removable is not None and dup.keep is not None
+        txn = session.get(RawTransaction, dup.removable.txn_id)
+        if txn is None:
+            continue
+        deleted_amount += abs(txn.amount_paise or 0)
+        overrides[(dup.keep.folio, scheme_key(txn.isin, txn.amfi_code, txn.scheme_name))] = (
+            dup.removable.source
+        )
+        session.delete(txn)
+
+    for (folio, key), source in overrides.items():
+        # Never overwrite an override the user set themselves: an automated
+        # cleanup correcting its own bookkeeping has no business silently
+        # relabelling a position someone has already judged.
+        if session.get(HoldingSourceOverride, (folio, key)) is None:
+            session.add(
+                HoldingSourceOverride(folio=folio, scheme_key=key, source=source)
+            )
+    session.commit()
+
+    return DuplicateResolveResponse(
+        deleted_count=len(resolvable),
+        deleted_amount_paise=deleted_amount,
+        source_overrides_written=len(overrides),
+        rebuild=rebuild_lots(session),
+        deleted=[
+            DuplicateResponse(
+                amfi_code=d.amfi_code,
+                scheme_name=d.scheme_name,
+                txn_date=d.txn_date.isoformat(),
+                direction=d.direction,
+                units=str(d.units),
+                rows=[
+                    DuplicateSideResponse(
+                        txn_id=r.txn_id, folio=r.folio, source=r.source,
+                        amount_paise=r.amount_paise,
+                    )
+                    for r in d.rows
+                ],
+                removable_txn_id=d.removable.txn_id if d.removable else None,
+                keep_folio=d.keep.folio if d.keep else None,
+            )
+            for d in resolvable
+        ],
     )

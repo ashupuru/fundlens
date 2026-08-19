@@ -109,3 +109,106 @@ def get_data_freshness(session: Session) -> list[DataFreshnessView]:
         )
         for r in rows
     ]
+
+
+@dataclass(frozen=True)
+class DuplicateRow:
+    """One side of a cross-source duplicate."""
+
+    txn_id: str
+    folio: str
+    source: str
+    amount_paise: int | None
+
+
+@dataclass(frozen=True)
+class CrossSourceDuplicate:
+    """The same real transaction ingested twice under different folios.
+
+    Identified by (amfi_code, txn_date, buy/sell direction, exact units)
+    appearing under more than one folio with at least one broker-imported
+    side. Keyed on units rather than amount because the sources disagree on
+    amount by a few paise -- which is precisely why the original amount-only
+    match in `ingestion/broker_import_shared.py` missed 113 of these.
+    """
+
+    amfi_code: str
+    scheme_name: str
+    txn_date: date
+    direction: str
+    units: Decimal
+    rows: list[DuplicateRow]
+    # The broker-side copy, i.e. the one cleanup would delete -- the CAS
+    # record is kept, being the richer one (real AMC folio, stamp-duty
+    # lines, history well beyond the broker export's window).
+    removable: DuplicateRow | None
+    keep: DuplicateRow | None
+
+
+def get_cross_source_duplicates(session: Session) -> list[CrossSourceDuplicate]:
+    """Transactions present under more than one folio with identical units.
+
+    Only *provable* duplicates: exact unit equality. Anything looser (near
+    units, tolerant amounts) is indistinguishable from two genuinely
+    separate same-day purchases, and under-reporting is recoverable where
+    deleting real history is not.
+    """
+    from fundlens.compute.metrics import (
+        BROKER_SOURCES,
+        DIRECTION_BY_TXN_TYPE,
+        position_sources,
+    )
+
+    txns = session.scalars(select(RawTransaction)).all()
+    # Effective sources, not derived ones: a user who has corrected a
+    # position's attribution (holding_source_override) must still have its
+    # duplicates detected -- reading only the derived value would make
+    # exactly the positions they'd already noticed were wrong invisible here.
+    sources = {key: source for key, (source, _) in position_sources(session).items()}
+
+    grouped: dict[tuple[str, date, str, Decimal], list[RawTransaction]] = {}
+    for txn in txns:
+        direction = DIRECTION_BY_TXN_TYPE.get(txn.txn_type)
+        if txn.amfi_code is None or not txn.units or direction is None:
+            continue
+        grouped.setdefault(
+            (txn.amfi_code, txn.txn_date, direction, abs(txn.units)), []
+        ).append(txn)
+
+    duplicates: list[CrossSourceDuplicate] = []
+    for (amfi_code, txn_date, direction, units), rows in grouped.items():
+        if len({r.folio for r in rows}) < 2:
+            continue  # repeats inside one folio are genuine, not cross-source
+
+        detailed = [
+            DuplicateRow(
+                txn_id=r.id,
+                folio=r.folio,
+                source=sources.get(
+                    (r.folio, scheme_key(r.isin, r.amfi_code, r.scheme_name)), "Unknown"
+                ),
+                amount_paise=r.amount_paise,
+            )
+            for r in rows
+        ]
+        broker_rows = [d for d in detailed if d.source in BROKER_SOURCES]
+        non_broker = [d for d in detailed if d.source not in BROKER_SOURCES]
+        if not broker_rows or not non_broker:
+            # Both sides from the same kind of import -- no basis to prefer
+            # one over the other, so report nothing rather than guess.
+            continue
+
+        duplicates.append(
+            CrossSourceDuplicate(
+                amfi_code=amfi_code,
+                scheme_name=rows[0].scheme_name,
+                txn_date=txn_date,
+                direction=direction,
+                units=units,
+                rows=detailed,
+                removable=broker_rows[0],
+                keep=non_broker[0],
+            )
+        )
+
+    return sorted(duplicates, key=lambda d: (d.scheme_name, d.txn_date))

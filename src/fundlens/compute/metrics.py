@@ -113,6 +113,16 @@ BROKER_SOURCES = frozenset({SOURCE_DEZERV, SOURCE_ZERODHA})
 # than SOURCE_DIRECT counts as broker-held for the Funds page's Personal tab.
 SELECTABLE_SOURCES = (SOURCE_DIRECT, SOURCE_DEZERV, SOURCE_ZERODHA, SOURCE_CSV)
 
+# Collapses the transaction taxonomy to the buy/sell direction a broker export
+# actually distinguishes, so a CAS's PURCHASE_SIP and a tradebook's "buy" are
+# comparable. Anything absent (tax lines, switches, segregation) has no
+# broker-side counterpart and so is never a cross-source duplicate.
+DIRECTION_BY_TXN_TYPE = {
+    TransactionType.PURCHASE: "buy",
+    TransactionType.PURCHASE_SIP: "buy",
+    TransactionType.REDEMPTION: "sell",
+}
+
 
 def _source_for_parser_version(parser_version: str) -> str:
     """A CAS is parsed by casparser, whose parser_version is its own release
