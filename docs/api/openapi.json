@@ -3759,6 +3759,10 @@
             "type": "string",
             "title": "Amc"
           },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
           "category_broad": {
             "type": "string",
             "title": "Category Broad"
@@ -3874,6 +3878,7 @@
           "folio",
           "scheme_name",
           "amc",
+          "source",
           "category_broad",
           "category_specific",
           "invested_paise",

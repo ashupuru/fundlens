@@ -1083,3 +1083,28 @@ that gate is what keeps the two implementations honest.
 
 **Tax remains deferred** (spec §14), which the spec itself sanctions for a first version: every
 figure here is pre-tax, and the UI says so.
+
+## 23. Holding Source Attribution (shipped — `compute/metrics.py::position_sources`)
+
+Backs the Funds page's three tabs (Active funds / By broker / Personal). Each `(folio,
+scheme_key)` position is attributed to whichever import supplied its transactions, derived from
+the originating `raw_cas_upload.parser_version` rather than pattern-matching the folio string,
+which has no stable format across sources.
+
+A CAS is parsed by casparser, whose `parser_version` is casparser's own release number — there's
+no fixed value to match on, so anything that isn't a *known* importer
+(`dezerv-csv-v1`, `zerodha-tradebook-csv-v1`, `csv-import-v1`) is treated as CAS-sourced.
+
+**The honest limit of "Direct".** This attributes a position by *where its data came from*, which
+is not the same as where the fund was bought: a CAS comes from the RTAs (CAMS/KFintech) and
+therefore lists holdings bought through platforms too. Real-data-verified — 4 funds are held under
+both an AMC folio and a platform folio. So `SOURCE_DIRECT` means "held under an AMC folio", not
+"never bought via a broker", and the Personal tab says exactly that rather than overclaiming.
+
+Real data also confirms **no position mixes sources** (folios differ per platform), so attribution
+is unambiguous in practice; a position that somehow did is reported as `Mixed` rather than
+silently attributed to whichever row happened to win.
+
+All three tabs scope to **currently-held positions only**. On the real portfolio that matters more
+than it sounds: 44 of 86 positions are fully exited, and the page previously listed them
+interleaved with live holdings. Exited funds keep their realised history on the fund detail page.

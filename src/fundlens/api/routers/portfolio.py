@@ -111,6 +111,7 @@ class HoldingMetricsResponse(BaseModel):
     folio: str
     scheme_name: str
     amc: str
+    source: str
     category_broad: str
     category_specific: str
     invested_paise: int
@@ -144,6 +145,7 @@ def holding_metrics(session: Session = Depends(get_session)) -> list[HoldingMetr
             folio=m.folio,
             scheme_name=m.scheme_name,
             amc=m.amc,
+            source=m.source,
             category_broad=m.category_broad,
             category_specific=m.category_specific,
             invested_paise=m.invested_paise,

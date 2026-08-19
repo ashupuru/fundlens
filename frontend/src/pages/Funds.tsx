@@ -1,5 +1,19 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { BrokerBreakdown } from "./FundsBroker";
+import {
+  BROKER_SOURCES,
+  formatPaise,
+  formatPct,
+  formatXirrFraction,
+  isActive,
+  key,
+  sortValue,
+  type FundRow,
+  type PortfolioMetrics,
+  type SortDirection,
+  type SortKey,
+} from "./fundsShared";
 import {
   getDirectVsRegularAudit,
   getHoldingMetrics,
@@ -7,55 +21,17 @@ import {
   getPortfolioMetrics,
   getVerdicts,
 } from "../api/client";
-import type { components } from "../api/schema";
 
-type Verdict = components["schemas"]["VerdictResponse"];
-type HoldingMetrics = components["schemas"]["HoldingMetricsResponse"];
-type PortfolioMetrics = components["schemas"]["PortfolioMetricsResponse"];
 
-type FundRow = {
-  folio: string;
-  schemeName: string;
-  amfiCode: string | null;
-  planType: string | undefined;
-  verdict: Verdict | undefined;
-  metrics: HoldingMetrics | undefined;
-};
+const TABS = [
+  { key: "active", label: "Active funds" },
+  { key: "broker", label: "By broker" },
+  { key: "personal", label: "Personal" },
+] as const;
 
-type SortKey = "schemeName" | "xirr" | "absoluteReturn" | "currentValue";
-type SortDirection = "asc" | "desc";
+type TabKey = (typeof TABS)[number]["key"];
 
-function key(folio: string, schemeName: string): string {
-  return `${folio}::${schemeName}`;
-}
 
-function formatPct(value: number | null | undefined, reason?: string | null): string {
-  if (value === null || value === undefined) return reason ? `n/a (${reason})` : "n/a";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
-}
-
-function formatXirrFraction(value: number | null | undefined, reason?: string | null): string {
-  if (value === null || value === undefined) return reason ? `n/a (${reason})` : "n/a";
-  return formatPct(value * 100);
-}
-
-function formatPaise(paise: number | null | undefined): string {
-  if (paise === null || paise === undefined) return "—";
-  return `₹${(paise / 100).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-}
-
-function sortValue(row: FundRow, sortKey: SortKey): number | string {
-  switch (sortKey) {
-    case "schemeName":
-      return row.schemeName.toLowerCase();
-    case "xirr":
-      return row.metrics?.xirr ?? Number.NEGATIVE_INFINITY;
-    case "absoluteReturn":
-      return row.metrics?.absolute_return_pct ?? Number.NEGATIVE_INFINITY;
-    case "currentValue":
-      return row.metrics?.current_value_paise ?? Number.NEGATIVE_INFINITY;
-  }
-}
 
 function SortableHeader({
   label,
@@ -89,6 +65,7 @@ export default function Funds() {
     key: "currentValue",
     direction: "desc",
   });
+  const [tab, setTab] = useState<TabKey>("active");
   const [searchParams, setSearchParams] = useSearchParams();
   const amcFilter = searchParams.get("amc");
   const categoryFilter = searchParams.get("category");
@@ -184,7 +161,17 @@ export default function Funds() {
     return true;
   });
 
-  const sorted = [...filteredRows].sort((a, b) => {
+  // Every tab shows only currently-held positions: a fully-exited fund isn't
+  // "active", has no broker allocation worth grouping, and isn't personally
+  // held any more. Exited funds keep their realised history on the fund
+  // detail page.
+  const activeRows = filteredRows.filter(isActive);
+  const tabRows =
+    tab === "personal"
+      ? activeRows.filter((r) => !BROKER_SOURCES.has(r.metrics?.source ?? ""))
+      : activeRows;
+
+  const sorted = [...tabRows].sort((a, b) => {
     const av = sortValue(a, sort.key);
     const bv = sortValue(b, sort.key);
     const cmp = av < bv ? -1 : av > bv ? 1 : 0;
@@ -223,6 +210,21 @@ export default function Funds() {
         </p>
       )}
 
+      <div className="dashboard-tabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            className={`dashboard-tab${tab === t.key ? " active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="card-grid">
         <div className="stat">
           <div className="stat-label">Current value</div>
@@ -246,7 +248,17 @@ export default function Funds() {
         </div>
       </div>
 
-      {sorted.length === 0 ? (
+      {tab === "personal" && (
+        <p className="muted" style={{ marginBottom: 16 }}>
+          Held under an AMC folio in your own name, rather than through Dezerv or Zerodha. Note a
+          CAS comes from the RTAs and lists platform-bought funds too, so this means "held under an
+          AMC folio", not "never bought via a broker".
+        </p>
+      )}
+
+      {tab === "broker" ? (
+        <BrokerBreakdown rows={activeRows} />
+      ) : sorted.length === 0 ? (
         <div className="card">
           <p className="muted">
             {rows.length === 0 ? "No holdings found." : "No funds match this filter."}

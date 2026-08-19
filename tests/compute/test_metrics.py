@@ -672,3 +672,38 @@ def test_compute_amc_breakdown_excludes_fully_exited_positions(session: Session)
 
 def test_compute_amc_breakdown_empty_portfolio(session: Session) -> None:
     assert metrics.compute_amc_breakdown(session) == []
+
+
+def test_holding_source_is_attributed_from_the_originating_upload(session: Session) -> None:
+    from fundlens.compute.metrics import SOURCE_DIRECT, SOURCE_ZERODHA
+    from fundlens.db.models import RawCASUpload, UploadStatus
+
+    cas = _make_upload(session)  # parser_version="test" -> not a known importer
+    zerodha = RawCASUpload(
+        file_hash=f"z-{uuid.uuid4().hex}",
+        parser_version="zerodha-tradebook-csv-v1",
+        status=UploadStatus.PARSED,
+    )
+    session.add(zerodha)
+    session.flush()
+
+    _add_txn(
+        session, cas.id, folio="AMC-FOLIO-1", amfi_code="111",
+        txn_type=TransactionType.PURCHASE, txn_date=date.today() - timedelta(days=30),
+        units=Decimal("10"), nav=Decimal("100"), amount_paise=1_000_000,
+    )
+    _add_txn(
+        session, zerodha.id, folio="ZERODHA", amfi_code="222",
+        txn_type=TransactionType.PURCHASE, txn_date=date.today() - timedelta(days=30),
+        units=Decimal("5"), nav=Decimal("200"), amount_paise=1_000_000,
+    )
+    session.commit()
+    service.rebuild_all_lots(session)
+    _add_nav(session, "111", date.today(), Decimal("110"))
+    _add_nav(session, "222", date.today(), Decimal("210"))
+    session.commit()
+
+    by_folio = {m.folio: m.source for m in metrics.get_all_holding_metrics(session)}
+
+    assert by_folio["AMC-FOLIO-1"] == SOURCE_DIRECT
+    assert by_folio["ZERODHA"] == SOURCE_ZERODHA

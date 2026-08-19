@@ -62,6 +62,7 @@ from fundlens.compute.xirr import CashFlow, compute_xirr
 from fundlens.db.models import (
     GrowwFundMetadata,
     NavHistory,
+    RawCASUpload,
     RawTransaction,
     RealizedGain,
     SchemeMetadata,
@@ -86,12 +87,75 @@ CASH_INFLOW_TYPES = {
 }
 
 
+# How a position's transactions got into the app. Derived from the
+# originating upload's parser_version rather than guessed from the folio
+# string, which has no stable format across sources.
+SOURCE_DIRECT = "Direct / AMC folio"
+SOURCE_DEZERV = "Dezerv"
+SOURCE_ZERODHA = "Zerodha"
+SOURCE_CSV = "Manual CSV"
+SOURCE_UNKNOWN = "Unknown"
+SOURCE_MIXED = "Mixed"
+
+_PARSER_VERSION_SOURCES = {
+    "dezerv-csv-v1": SOURCE_DEZERV,
+    "zerodha-tradebook-csv-v1": SOURCE_ZERODHA,
+    "csv-import-v1": SOURCE_CSV,
+}
+
+# Platform imports; everything else (a CAS parsed by casparser, whose
+# parser_version is casparser's own version string) is an AMC folio.
+BROKER_SOURCES = frozenset({SOURCE_DEZERV, SOURCE_ZERODHA})
+
+
+def _source_for_parser_version(parser_version: str) -> str:
+    """A CAS is parsed by casparser, whose parser_version is its own release
+    number (e.g. "1.3.0") -- there's no fixed value to match, so anything not
+    a known importer is treated as CAS-sourced.
+
+    Note this attributes a position by *where its data came from*, which is
+    not the same as where the fund was bought: a CAS comes from the RTAs
+    (CAMS/KFintech) and therefore lists holdings bought through platforms too.
+    Real data shows 4 funds held under both an AMC folio and a platform folio.
+    So SOURCE_DIRECT means "held under an AMC folio", not "never bought via a
+    broker" -- the UI says so rather than overclaiming.
+    """
+    return _PARSER_VERSION_SOURCES.get(parser_version, SOURCE_DIRECT)
+
+
+def position_sources(session: Session) -> dict[tuple[str, str], str]:
+    """Maps each (folio, scheme_key) to the source that supplied its
+    transactions. Real-data-verified that no position mixes sources (folios
+    differ per platform), but a position that somehow did is reported as
+    SOURCE_MIXED rather than silently attributed to whichever row won."""
+    rows = session.execute(
+        select(
+            RawTransaction.folio,
+            RawTransaction.isin,
+            RawTransaction.amfi_code,
+            RawTransaction.scheme_name,
+            RawCASUpload.parser_version,
+        ).join(RawCASUpload, RawCASUpload.id == RawTransaction.upload_id)
+    ).all()
+
+    by_position: dict[tuple[str, str], set[str]] = {}
+    for folio, isin, amfi_code, scheme_name, parser_version in rows:
+        key = (folio, scheme_key(isin, amfi_code, scheme_name))
+        by_position.setdefault(key, set()).add(_source_for_parser_version(parser_version))
+
+    return {
+        key: (sources.pop() if len(sources) == 1 else SOURCE_MIXED)
+        for key, sources in by_position.items()
+    }
+
+
 @dataclass(frozen=True)
 class HoldingMetrics:
     folio: str
     scheme_key: str
     scheme_name: str
     amc: str
+    source: str  # where this position's transactions were imported from
     category_broad: str
     category_specific: str
     invested_paise: int
@@ -232,6 +296,7 @@ def compute_holding_metrics(
     open_holding: HoldingView | None,
     category_broad: str = "Uncategorized",
     category_specific: str = "Uncategorized",
+    source: str = SOURCE_UNKNOWN,
 ) -> HoldingMetrics:
     scheme_name = transactions[0].scheme_name if transactions else key
     amc = transactions[0].amc if transactions else ""
@@ -283,6 +348,7 @@ def compute_holding_metrics(
         scheme_key=key,
         scheme_name=scheme_name,
         amc=amc,
+        source=source,
         category_broad=category_broad,
         category_specific=category_specific,
         invested_paise=pos.invested_paise,
@@ -314,6 +380,7 @@ def get_all_holding_metrics(session: Session) -> list[HoldingMetrics]:
     # through to the "Uncategorized" default below rather than being looked
     # up here.
     category_labels = fund_category_labels(session, current_holdings)
+    sources = position_sources(session)
 
     return [
         compute_holding_metrics(
@@ -328,6 +395,7 @@ def get_all_holding_metrics(session: Session) -> list[HoldingMetrics]:
             category_specific=category_labels.get(
                 (folio, key), ("Uncategorized", "Uncategorized")
             )[1],
+            source=sources.get((folio, key), SOURCE_UNKNOWN),
         )
         for folio, key in positions
     ]
