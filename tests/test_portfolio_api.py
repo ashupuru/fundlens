@@ -171,3 +171,89 @@ def test_value_history_round_trip_after_ingest(client: TestClient) -> None:
     # No NAV backfilled in this test, so value stays unavailable throughout.
     assert points[-1]["value_paise"] == 0
     assert points[-1]["positions_missing_nav"] == 1
+
+
+def _ingest_one_holding(client: TestClient) -> tuple[str, str]:
+    csv_content = (
+        "folio,amc,scheme_name,txn_type,txn_date,amount,units,isin,amfi_code\n"
+        "F1,Test AMC,Acme Fund,PURCHASE,2021-04-15,5000.00,100.5,INF999,111\n"
+    )
+    client.post("/ingest/csv", files={"file": ("t.csv", csv_content, "text/csv")})
+    client.post("/portfolio/rebuild-lots")
+    holding = client.get("/portfolio/holdings").json()[0]
+    return holding["folio"], holding["scheme_key"]
+
+
+def test_holding_source_defaults_to_the_derived_value(client: TestClient) -> None:
+    _ingest_one_holding(client)
+
+    metrics = client.get("/portfolio/metrics").json()[0]
+
+    assert metrics["source"] == "Manual CSV"  # csv-import-v1
+    assert metrics["source_is_override"] is False
+
+
+def test_holding_source_can_be_overridden_and_cleared(client: TestClient) -> None:
+    folio, scheme_key = _ingest_one_holding(client)
+
+    set_response = client.put(
+        "/portfolio/holding-source",
+        json={"folio": folio, "scheme_key": scheme_key, "source": "Groww"},
+    )
+    assert set_response.status_code == 200
+    assert set_response.json()["source"] == "Groww"
+    assert set_response.json()["source_is_override"] is True
+
+    metrics = client.get("/portfolio/metrics").json()[0]
+    assert metrics["source"] == "Groww"
+    assert metrics["source_is_override"] is True
+
+    # Clearing falls back to the derived attribution rather than to a blank.
+    clear_response = client.put(
+        "/portfolio/holding-source",
+        json={"folio": folio, "scheme_key": scheme_key, "source": None},
+    )
+    assert clear_response.json()["source"] == "Manual CSV"
+    assert clear_response.json()["source_is_override"] is False
+    assert client.get("/portfolio/metrics").json()[0]["source"] == "Manual CSV"
+
+
+def test_blank_source_clears_rather_than_storing_an_empty_label(client: TestClient) -> None:
+    folio, scheme_key = _ingest_one_holding(client)
+    client.put(
+        "/portfolio/holding-source",
+        json={"folio": folio, "scheme_key": scheme_key, "source": "Groww"},
+    )
+
+    response = client.put(
+        "/portfolio/holding-source",
+        json={"folio": folio, "scheme_key": scheme_key, "source": "   "},
+    )
+
+    assert response.json()["source_is_override"] is False
+    assert response.json()["source"] == "Manual CSV"
+
+
+def test_overriding_twice_updates_rather_than_duplicating(client: TestClient) -> None:
+    folio, scheme_key = _ingest_one_holding(client)
+    for label in ("Groww", "Kuvera"):
+        client.put(
+            "/portfolio/holding-source",
+            json={"folio": folio, "scheme_key": scheme_key, "source": label},
+        )
+
+    assert client.get("/portfolio/metrics").json()[0]["source"] == "Kuvera"
+
+
+def test_known_sources_include_builtins_and_user_labels(client: TestClient) -> None:
+    folio, scheme_key = _ingest_one_holding(client)
+    client.put(
+        "/portfolio/holding-source",
+        json={"folio": folio, "scheme_key": scheme_key, "source": "Groww"},
+    )
+
+    sources = client.get("/portfolio/holding-sources").json()["sources"]
+
+    assert "Groww" in sources  # what the user typed
+    assert "Direct / AMC folio" in sources  # built-in suggestion
+    assert "Zerodha" in sources

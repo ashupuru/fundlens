@@ -293,6 +293,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/portfolio/holding-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Holding Source
+         * @description Overrides one position's derived source, or clears the override when
+         *     `source` is null.
+         *
+         *     Body rather than path parameters: a folio is free-form text that really
+         *     does contain slashes and spaces in real CAS data (e.g. "22629257 / 07"),
+         *     so putting it in the URL would need escaping every caller could get wrong.
+         */
+        put: operations["set_holding_source_portfolio_holding_source_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/portfolio/holding-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Known Holding Sources
+         * @description Every source currently in use, for the edit control's suggestions --
+         *     the built-in labels plus anything the user has typed, so a custom broker
+         *     only has to be spelled once.
+         */
+        get: operations["known_holding_sources_portfolio_holding_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/capital-gains": {
         parameters: {
             query?: never;
@@ -1392,6 +1439,8 @@ export interface components {
             amc: string;
             /** Source */
             source: string;
+            /** Source Is Override */
+            source_is_override: boolean;
             /** Category Broad */
             category_broad: string;
             /** Category Specific */
@@ -1444,6 +1493,26 @@ export interface components {
             /** Average Cost Per Unit */
             average_cost_per_unit: string;
         };
+        /** HoldingSourceRequest */
+        HoldingSourceRequest: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+            /** Source */
+            source?: string | null;
+        };
+        /** HoldingSourceResponse */
+        HoldingSourceResponse: {
+            /** Folio */
+            folio: string;
+            /** Scheme Key */
+            scheme_key: string;
+            /** Source */
+            source: string;
+            /** Source Is Override */
+            source_is_override: boolean;
+        };
         /** IngestResponse */
         IngestResponse: {
             /** Upload Id */
@@ -1454,6 +1523,11 @@ export interface components {
             duplicate_count: number;
             /** Coverage Gaps */
             coverage_gaps: components["schemas"]["fundlens__api__routers__ingestion__CoverageGapResponse"][];
+        };
+        /** KnownSourcesResponse */
+        KnownSourcesResponse: {
+            /** Sources */
+            sources: string[];
         };
         /** MatchCandidateResponse */
         MatchCandidateResponse: {
@@ -2555,6 +2629,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValuePointResponse"][];
+                };
+            };
+        };
+    };
+    set_holding_source_portfolio_holding_source_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldingSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    known_holding_sources_portfolio_holding_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnownSourcesResponse"];
                 };
             };
         };

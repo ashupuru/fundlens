@@ -551,6 +551,70 @@
         }
       }
     },
+    "/portfolio/holding-source": {
+      "put": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Set Holding Source",
+        "description": "Overrides one position's derived source, or clears the override when\n`source` is null.\n\nBody rather than path parameters: a folio is free-form text that really\ndoes contain slashes and spaces in real CAS data (e.g. \"22629257 / 07\"),\nso putting it in the URL would need escaping every caller could get wrong.",
+        "operationId": "set_holding_source_portfolio_holding_source_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldingSourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingSourceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/portfolio/holding-sources": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Known Holding Sources",
+        "description": "Every source currently in use, for the edit control's suggestions --\nthe built-in labels plus anything the user has typed, so a custom broker\nonly has to be spelled once.",
+        "operationId": "known_holding_sources_portfolio_holding_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnownSourcesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reports/capital-gains": {
       "get": {
         "tags": [
@@ -3763,6 +3827,10 @@
             "type": "string",
             "title": "Source"
           },
+          "source_is_override": {
+            "type": "boolean",
+            "title": "Source Is Override"
+          },
           "category_broad": {
             "type": "string",
             "title": "Category Broad"
@@ -3879,6 +3947,7 @@
           "scheme_name",
           "amc",
           "source",
+          "source_is_override",
           "category_broad",
           "category_specific",
           "invested_paise",
@@ -3964,6 +4033,63 @@
         ],
         "title": "HoldingResponse"
       },
+      "HoldingSourceRequest": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key"
+        ],
+        "title": "HoldingSourceRequest"
+      },
+      "HoldingSourceResponse": {
+        "properties": {
+          "folio": {
+            "type": "string",
+            "title": "Folio"
+          },
+          "scheme_key": {
+            "type": "string",
+            "title": "Scheme Key"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "source_is_override": {
+            "type": "boolean",
+            "title": "Source Is Override"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folio",
+          "scheme_key",
+          "source",
+          "source_is_override"
+        ],
+        "title": "HoldingSourceResponse"
+      },
       "IngestResponse": {
         "properties": {
           "upload_id": {
@@ -3994,6 +4120,22 @@
           "coverage_gaps"
         ],
         "title": "IngestResponse"
+      },
+      "KnownSourcesResponse": {
+        "properties": {
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sources"
+        ],
+        "title": "KnownSourcesResponse"
       },
       "MatchCandidateResponse": {
         "properties": {

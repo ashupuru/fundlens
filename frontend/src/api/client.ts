@@ -103,6 +103,29 @@ export async function setRiskProfile(request: {
   return response.json() as Promise<RiskProfile>;
 }
 
+export async function setHoldingSource(
+  folio: string,
+  schemeKey: string,
+  source: string | null,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/holding-source`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folio, scheme_key: schemeKey, source }),
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to set source: ${await detailOrStatus(response)}`);
+  }
+}
+
+export async function getKnownHoldingSources(): Promise<string[]> {
+  const response = await fetch(`${API_BASE_URL}/portfolio/holding-sources`);
+  if (!response.ok) {
+    throw new Error(`Failed to load sources: ${await detailOrStatus(response)}`);
+  }
+  return ((await response.json()) as { sources: string[] }).sources;
+}
+
 export type RetirementProfile = components["schemas"]["RetirementProfileResponse"];
 export type RetirementProjection = components["schemas"]["RetirementProjectionResponse"];
 export type RetirementYear = components["schemas"]["RetirementYearResponse"];

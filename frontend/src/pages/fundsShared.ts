@@ -11,6 +11,7 @@ export type PortfolioMetrics = components["schemas"]["PortfolioMetricsResponse"]
 export type FundRow = {
   folio: string;
   schemeName: string;
+  schemeKey: string | undefined;
   amfiCode: string | null;
   planType: string | undefined;
   verdict: Verdict | undefined;

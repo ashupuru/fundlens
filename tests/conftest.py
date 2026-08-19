@@ -1,4 +1,23 @@
+import os
+import tempfile
 from collections.abc import Iterator
+from pathlib import Path
+
+# Point the whole suite at a throwaway database *before* anything reads
+# settings. `fundlens.api.main`'s lifespan runs real Alembic migrations, and
+# TestClient used as a context manager (tests/test_funds_api.py does) triggers
+# it -- so without this the suite migrates whatever `.env` points at, which is
+# the developer's real portfolio database.
+#
+# This is not hypothetical: it corrupted one. SQLite DDL is non-transactional,
+# so a migration that created a table and then failed left the real database
+# with the table present but `alembic_version` still on the prior revision,
+# and every later run aborted with "table already exists".
+#
+# Set via the environment rather than by patching Settings, because
+# `get_settings()` is lru_cached and the app reads it during startup, well
+# before any fixture could intervene.
+os.environ["FUNDLENS_DB_PATH"] = str(Path(tempfile.mkdtemp(prefix="fundlens-test-")) / "test.db")
 
 import pytest
 from fastapi.testclient import TestClient

@@ -11,6 +11,7 @@ from fundlens.api.deps import get_session
 from fundlens.compute import metrics, service
 from fundlens.compute.holdings import get_current_holdings, get_holdings_by_amc
 from fundlens.compute.valuation_history import compute_portfolio_value_history
+from fundlens.db.models import HoldingSourceOverride
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -112,6 +113,7 @@ class HoldingMetricsResponse(BaseModel):
     scheme_name: str
     amc: str
     source: str
+    source_is_override: bool
     category_broad: str
     category_specific: str
     invested_paise: int
@@ -146,6 +148,7 @@ def holding_metrics(session: Session = Depends(get_session)) -> list[HoldingMetr
             scheme_name=m.scheme_name,
             amc=m.amc,
             source=m.source,
+            source_is_override=m.source_is_override,
             category_broad=m.category_broad,
             category_specific=m.category_specific,
             invested_paise=m.invested_paise,
@@ -229,3 +232,73 @@ def value_history(session: Session = Depends(get_session)) -> list[ValuePointRes
         )
         for p in compute_portfolio_value_history(session)
     ]
+
+
+class HoldingSourceRequest(BaseModel):
+    folio: str
+    scheme_key: str
+    # None clears the override, falling back to the derived attribution --
+    # absence of a row is the "no override" state, so there's no sentinel.
+    source: str | None = None
+
+
+class HoldingSourceResponse(BaseModel):
+    folio: str
+    scheme_key: str
+    source: str
+    source_is_override: bool
+
+
+@router.put("/holding-source", response_model=HoldingSourceResponse)
+def set_holding_source(
+    request: HoldingSourceRequest, session: Session = Depends(get_session)
+) -> HoldingSourceResponse:
+    """Overrides one position's derived source, or clears the override when
+    `source` is null.
+
+    Body rather than path parameters: a folio is free-form text that really
+    does contain slashes and spaces in real CAS data (e.g. "22629257 / 07"),
+    so putting it in the URL would need escaping every caller could get wrong.
+    """
+    label = (request.source or "").strip()
+    existing = session.get(HoldingSourceOverride, (request.folio, request.scheme_key))
+
+    if not label:
+        if existing is not None:
+            session.delete(existing)
+            session.commit()
+    elif existing is not None:
+        existing.source = label
+        session.commit()
+    else:
+        session.add(
+            HoldingSourceOverride(
+                folio=request.folio, scheme_key=request.scheme_key, source=label
+            )
+        )
+        session.commit()
+
+    effective = metrics.position_sources(session).get(
+        (request.folio, request.scheme_key), (metrics.SOURCE_UNKNOWN, False)
+    )
+    return HoldingSourceResponse(
+        folio=request.folio,
+        scheme_key=request.scheme_key,
+        source=effective[0],
+        source_is_override=effective[1],
+    )
+
+
+class KnownSourcesResponse(BaseModel):
+    sources: list[str]
+
+
+@router.get("/holding-sources", response_model=KnownSourcesResponse)
+def known_holding_sources(session: Session = Depends(get_session)) -> KnownSourcesResponse:
+    """Every source currently in use, for the edit control's suggestions --
+    the built-in labels plus anything the user has typed, so a custom broker
+    only has to be spelled once."""
+    in_use = {source for source, _ in metrics.position_sources(session).values()}
+    return KnownSourcesResponse(
+        sources=sorted(in_use | set(metrics.SELECTABLE_SOURCES)),
+    )

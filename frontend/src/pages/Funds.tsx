@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { BrokerBreakdown } from "./FundsBroker";
+import { SortableHeader } from "./FundsSortableHeader";
+import { SourceCell, SourceDatalist } from "./FundsSourceCell";
 import {
   BROKER_SOURCES,
   formatPaise,
@@ -16,6 +18,7 @@ import {
 } from "./fundsShared";
 import {
   getDirectVsRegularAudit,
+  getKnownHoldingSources,
   getHoldingMetrics,
   getHoldings,
   getPortfolioMetrics,
@@ -33,29 +36,6 @@ type TabKey = (typeof TABS)[number]["key"];
 
 
 
-function SortableHeader({
-  label,
-  sortKey,
-  activeSort,
-  onSort,
-}: {
-  label: string;
-  sortKey: SortKey;
-  activeSort: { key: SortKey; direction: SortDirection };
-  onSort: (key: SortKey) => void;
-}) {
-  const isActive = activeSort.key === sortKey;
-  return (
-    <th
-      onClick={() => onSort(sortKey)}
-      style={{ cursor: "pointer", userSelect: "none" }}
-      title="Click to sort"
-    >
-      {label} {isActive ? (activeSort.direction === "asc" ? "▲" : "▼") : ""}
-    </th>
-  );
-}
-
 export default function Funds() {
   const [rows, setRows] = useState<FundRow[] | null>(null);
   const [portfolio, setPortfolio] = useState<PortfolioMetrics | null>(null);
@@ -66,11 +46,13 @@ export default function Funds() {
     direction: "desc",
   });
   const [tab, setTab] = useState<TabKey>("active");
+  const [knownSources, setKnownSources] = useState<string[]>([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const amcFilter = searchParams.get("amc");
   const categoryFilter = searchParams.get("category");
 
-  useEffect(() => {
+  function refresh() {
+    getKnownHoldingSources().then(setKnownSources).catch(() => setKnownSources([]));
     Promise.all([
       getVerdicts(),
       getDirectVsRegularAudit(),
@@ -88,6 +70,7 @@ export default function Funds() {
               folio,
               schemeName,
               amfiCode: null,
+              schemeKey: undefined,
               planType: undefined,
               verdict: undefined,
               metrics: undefined,
@@ -100,13 +83,19 @@ export default function Funds() {
         for (const m of metricsRows) ensure(m.folio, m.scheme_name).metrics = m;
         for (const v of verdicts) ensure(v.folio, v.scheme_name).verdict = v;
         for (const f of flags) ensure(f.folio, f.scheme_name).planType = f.plan_type;
-        for (const h of holdings) ensure(h.folio, h.scheme_name).amfiCode = h.amfi_code;
+        for (const h of holdings) {
+          const holdingRow = ensure(h.folio, h.scheme_name);
+          holdingRow.amfiCode = h.amfi_code;
+          holdingRow.schemeKey = h.scheme_key;
+        }
 
         setRows(Array.from(byKey.values()));
         setPortfolio(portfolioMetrics);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Unknown error"));
-  }, []);
+  }
+
+  useEffect(refresh, []);
 
   function toggle(k: string) {
     setExpanded((prev) => {
@@ -210,6 +199,8 @@ export default function Funds() {
         </p>
       )}
 
+      <SourceDatalist sources={knownSources} />
+
       <div className="dashboard-tabs" role="tablist">
         {TABS.map((t) => (
           <button
@@ -283,6 +274,7 @@ export default function Funds() {
                   activeSort={sort}
                   onSort={onSort}
                 />
+                <th>Source</th>
                 <th>Verdict</th>
               </tr>
             </thead>
@@ -318,6 +310,9 @@ export default function Funds() {
                         <span className="muted"> ({formatPaise(row.metrics?.cost_basis_paise)})</span>
                       </td>
                       <td>
+                        <SourceCell row={row} schemeKey={row.schemeKey} onSaved={refresh} />
+                      </td>
+                      <td>
                         {row.verdict ? (
                           <button onClick={() => toggle(k)}>
                             <span
@@ -334,7 +329,7 @@ export default function Funds() {
                     </tr>
                     {isOpen && row.verdict && (
                       <tr>
-                        <td colSpan={5}>
+                        <td colSpan={6}>
                           <div style={{ padding: "8px 0" }}>
                             {row.verdict.overall_score !== null && (
                               <p className="muted">

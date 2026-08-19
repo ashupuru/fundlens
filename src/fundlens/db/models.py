@@ -508,6 +508,33 @@ class Goal(Base):
     )
 
 
+class HoldingSourceOverride(Base):
+    """A user correction to a position's derived source
+    (compute/metrics.py::position_sources).
+
+    The derived value is a heuristic over which import supplied the
+    transactions, and it can't distinguish "held under an AMC folio" from
+    "bought through a platform that also reports to the RTAs" -- the user
+    knows which it is. Same (folio, scheme_key) grain as GoalHolding, and
+    the same no-FK-cascade reasoning: SQLite doesn't enforce ON DELETE
+    without a per-connection PRAGMA this app never sets.
+
+    Absence of a row means "use the derived source", so clearing an override
+    is a delete rather than a sentinel value.
+    """
+
+    __tablename__ = "holding_source_override"
+
+    folio: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scheme_key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    source: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC).replace(tzinfo=None),
+        onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
+    )
+
+
 class GoalHolding(Base):
     """Many-to-many tag: one currently-open (folio, scheme_key) holding
     (compute/holdings.py's HoldingView key) counted toward one goal's

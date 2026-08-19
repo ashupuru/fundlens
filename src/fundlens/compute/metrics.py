@@ -61,6 +61,7 @@ from fundlens.compute.holdings import HoldingView, get_current_holdings
 from fundlens.compute.xirr import CashFlow, compute_xirr
 from fundlens.db.models import (
     GrowwFundMetadata,
+    HoldingSourceOverride,
     NavHistory,
     RawCASUpload,
     RawTransaction,
@@ -107,6 +108,11 @@ _PARSER_VERSION_SOURCES = {
 # parser_version is casparser's own version string) is an AMC folio.
 BROKER_SOURCES = frozenset({SOURCE_DEZERV, SOURCE_ZERODHA})
 
+# Offered as suggestions in the edit control. Not a closed set -- a user can
+# type any platform (Groww, Kuvera, an AMC's own app), and anything other
+# than SOURCE_DIRECT counts as broker-held for the Funds page's Personal tab.
+SELECTABLE_SOURCES = (SOURCE_DIRECT, SOURCE_DEZERV, SOURCE_ZERODHA, SOURCE_CSV)
+
 
 def _source_for_parser_version(parser_version: str) -> str:
     """A CAS is parsed by casparser, whose parser_version is its own release
@@ -123,7 +129,7 @@ def _source_for_parser_version(parser_version: str) -> str:
     return _PARSER_VERSION_SOURCES.get(parser_version, SOURCE_DIRECT)
 
 
-def position_sources(session: Session) -> dict[tuple[str, str], str]:
+def derived_position_sources(session: Session) -> dict[tuple[str, str], str]:
     """Maps each (folio, scheme_key) to the source that supplied its
     transactions. Real-data-verified that no position mixes sources (folios
     differ per platform), but a position that somehow did is reported as
@@ -149,6 +155,32 @@ def position_sources(session: Session) -> dict[tuple[str, str], str]:
     }
 
 
+def position_sources(session: Session) -> dict[tuple[str, str], tuple[str, bool]]:
+    """Effective source per position: the derived attribution, with any user
+    override applied on top. Returns (source, is_override) so callers can
+    show which values are corrections rather than inferences.
+
+    An override wins outright rather than being merged -- the user is
+    correcting a heuristic that has no way to know better (a CAS reports
+    platform-bought holdings too, compute-engine.md §23), so deferring to
+    the derived value in any case would defeat the point.
+    """
+    derived = derived_position_sources(session)
+    overrides = {
+        (o.folio, o.scheme_key): o.source
+        for o in session.scalars(select(HoldingSourceOverride))
+    }
+    keys = set(derived) | set(overrides)
+    return {
+        key: (
+            (overrides[key], True)
+            if key in overrides
+            else (derived.get(key, SOURCE_UNKNOWN), False)
+        )
+        for key in keys
+    }
+
+
 @dataclass(frozen=True)
 class HoldingMetrics:
     folio: str
@@ -156,6 +188,7 @@ class HoldingMetrics:
     scheme_name: str
     amc: str
     source: str  # where this position's transactions were imported from
+    source_is_override: bool  # True => a user correction, not the derived value
     category_broad: str
     category_specific: str
     invested_paise: int
@@ -297,6 +330,7 @@ def compute_holding_metrics(
     category_broad: str = "Uncategorized",
     category_specific: str = "Uncategorized",
     source: str = SOURCE_UNKNOWN,
+    source_is_override: bool = False,
 ) -> HoldingMetrics:
     scheme_name = transactions[0].scheme_name if transactions else key
     amc = transactions[0].amc if transactions else ""
@@ -349,6 +383,7 @@ def compute_holding_metrics(
         scheme_name=scheme_name,
         amc=amc,
         source=source,
+        source_is_override=source_is_override,
         category_broad=category_broad,
         category_specific=category_specific,
         invested_paise=pos.invested_paise,
@@ -395,7 +430,8 @@ def get_all_holding_metrics(session: Session) -> list[HoldingMetrics]:
             category_specific=category_labels.get(
                 (folio, key), ("Uncategorized", "Uncategorized")
             )[1],
-            source=sources.get((folio, key), SOURCE_UNKNOWN),
+            source=sources.get((folio, key), (SOURCE_UNKNOWN, False))[0],
+            source_is_override=sources.get((folio, key), (SOURCE_UNKNOWN, False))[1],
         )
         for folio, key in positions
     ]

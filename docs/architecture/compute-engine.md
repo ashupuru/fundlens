@@ -1108,3 +1108,35 @@ silently attributed to whichever row happened to win.
 All three tabs scope to **currently-held positions only**. On the real portfolio that matters more
 than it sounds: 44 of 86 positions are fully exited, and the page previously listed them
 interleaved with live holdings. Exited funds keep their realised history on the fund detail page.
+
+### Manual source overrides
+
+The derived attribution above is a heuristic that *cannot* distinguish "held under an AMC folio"
+from "bought through a platform that also reports to the RTAs" — so the user can correct it per
+position (`holding_source_override`, migration `ac8df065f1df`;
+`PUT /portfolio/holding-source`).
+
+An override **wins outright** rather than being merged with the derived value: the whole point is
+that the heuristic has no way to know better, so falling back to it in any case would defeat the
+correction. Absence of a row means "use the derived source", so clearing an override is a delete —
+no sentinel value, and existing installs start with none.
+
+The label is **free text**, not a closed enum: the app knows three importers, but a user may hold
+via Groww, Kuvera, or an AMC's own app. `GET /portfolio/holding-sources` returns the built-in
+labels plus everything already in use, so a custom platform only has to be spelled once. Anything
+other than `SOURCE_DIRECT` counts as broker-held for the Personal tab. A blank label clears rather
+than storing an empty string.
+
+Folio and scheme_key travel in the **request body, not the path** — a real CAS folio contains
+spaces and slashes (`"22629257 / 07"`), so a path parameter would need escaping every caller could
+get wrong.
+
+**A note on test isolation, found while building this.** `tests/conftest.py` now forces
+`FUNDLENS_DB_PATH` to a temporary directory at import time. `api/main.py`'s lifespan runs real
+Alembic migrations, and `TestClient` used as a context manager (which `tests/test_funds_api.py`
+does) triggers it — so the suite was migrating whatever `.env` pointed at, i.e. the developer's
+real portfolio database. That is not hypothetical: it left the real database with this migration's
+table created but `alembic_version` still on the prior revision (SQLite DDL is non-transactional),
+after which every run aborted with "table already exists". The env var is set rather than
+`Settings` patched because `get_settings()` is `lru_cache`d and read during app startup, long
+before any fixture could intervene.
