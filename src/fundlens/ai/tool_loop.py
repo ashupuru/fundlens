@@ -53,8 +53,10 @@ Call list_holdings or list_goals first when you need an amfi_code or goal_id. Ne
 Answer in "statements". For each statement:
 - Set "cited_metric_paths" to the exact paths supporting it. Paths address the portfolio \
 snapshot at the root (e.g. "concentration.hhi", "funds[2].expense_ratio") or a tool call by \
-index (e.g. "tool_calls[0].result.readiness_pct", "tool_calls[1].arguments.retirement_age"). \
-Tool calls are indexed in the order you made them, starting at 0.
+index. Every tool result tells you its own prefix in "cite_as" — use exactly that prefix, and \
+do not count the calls yourself. If a result arrives as {"cite_as": "tool_calls[2]", "result": \
+{"readiness_pct": 41.3}}, the path is "tool_calls[2].result.readiness_pct", and that call's \
+inputs are at "tool_calls[2].arguments".
 - Every number you write must appear in the cited evidence, to a reasonable rounding. Money is \
 given in rupees, lakh and crore at once — cite the unit you actually wrote.
 - A statement whose numbers you cannot cite will be discarded, so do not guess.
@@ -95,13 +97,34 @@ class AskOutcome:
     hit_iteration_cap: bool = False
 
 
-def _tool_result_block(block_id: str, record: ToolCallRecord) -> dict[str, Any]:
-    payload = record.error if record.error is not None else json.dumps(record.result, default=str)
+def _tool_result_block(block_id: str, record: ToolCallRecord, index: int) -> dict[str, Any]:
+    """Each result states its own citation prefix.
+
+    Real usage showed why this is necessary: asked which fund had the worst
+    risk-adjusted return, the model chained five calls and then cited
+    `tool_calls[0]...` for figures that were actually at `tool_calls[1]`,
+    consistently off by one -- it was indexing as though the `list_holdings`
+    discovery call didn't count. Every statement was rejected, despite the
+    numbers themselves being correct. Asking a model to track its own
+    position in a ledger the server assigns, across multiple turns, is a
+    counting task it has no reliable way to do; the server knows the index,
+    so the server states it. The wrapper mirrors the evidence layout exactly
+    (`tool_calls[i].result.<field>`) so the path the model reads back is the
+    path that resolves.
+    """
+    if record.error is not None:
+        return {
+            "type": "tool_result",
+            "tool_use_id": block_id,
+            "content": record.error,
+            "is_error": True,
+        }
     return {
         "type": "tool_result",
         "tool_use_id": block_id,
-        "content": payload,
-        **({"is_error": True} if record.error is not None else {}),
+        "content": json.dumps(
+            {"cite_as": f"tool_calls[{index}]", "result": record.result}, default=str
+        ),
     }
 
 
@@ -163,7 +186,7 @@ def run_ask_loop(
             except ToolError as exc:
                 record.error = str(exc)
             records.append(record)
-            results.append(_tool_result_block(block.id, record))
+            results.append(_tool_result_block(block.id, record, len(records) - 1))
         messages.append({"role": "user", "content": results})
 
         if iteration == max_iterations - 1:

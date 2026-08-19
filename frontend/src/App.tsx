@@ -4,6 +4,7 @@ import DataQuality from "./pages/DataQuality";
 import FundDetail from "./pages/FundDetail";
 import Funds from "./pages/Funds";
 import GoalPlanning from "./pages/GoalPlanning";
+import Ask from "./pages/Ask";
 import Insights from "./pages/Insights";
 import Retirement from "./pages/Retirement";
 import Upload from "./pages/Upload";
@@ -53,6 +54,25 @@ function InsightsIcon() {
         strokeLinejoin="round"
       />
       <path d="M6 13.5h4M6.5 15h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AskIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M2 3.5h12v8H8.5L5 14v-2.5H2v-8Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6.6 6.3a1.5 1.5 0 1 1 1.9 1.45V8.6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -119,6 +139,7 @@ function UploadIcon() {
 
 const links = [
   { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
+  { to: "/ask", label: "Ask", icon: AskIcon, end: false },
   { to: "/insights", label: "Insights", icon: InsightsIcon, end: false },
   { to: "/goals", label: "Goals", icon: GoalIcon, end: false },
   { to: "/retirement", label: "Retirement", icon: RetirementIcon, end: false },
@@ -148,6 +169,7 @@ function App() {
       <div className="app-main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/ask" element={<Ask />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/goals" element={<GoalPlanning />} />
           <Route path="/retirement" element={<Retirement />} />

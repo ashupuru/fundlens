@@ -46,7 +46,10 @@ class _FakeMessages:
         self.calls: list[dict[str, Any]] = []
 
     def create(self, **kwargs: Any) -> _Response:
-        self.calls.append(kwargs)
+        # Snapshot `messages`: the loop appends to the same list across
+        # turns, so recording the reference would make every assertion
+        # about an earlier turn silently read the final state instead.
+        self.calls.append({**kwargs, "messages": list(kwargs.get("messages", []))})
         # Repeat the last script entry once exhausted, so a test can script
         # "always asks for a tool" without listing MAX_ITERATIONS copies.
         index = min(len(self.calls) - 1, len(self._responses) - 1)
@@ -295,3 +298,82 @@ def test_missing_text_block_raises(
 
 def test_default_iteration_cap_is_bounded() -> None:
     assert 1 < MAX_ITERATIONS <= 12
+
+
+def test_each_tool_result_states_its_own_citation_index(
+    session: Session, snapshot: PortfolioMetricsSnapshot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression on a real failure: asked to compare funds, the model
+    chained five calls then cited tool_calls[0] for figures that were at
+    tool_calls[1] -- indexing as though the discovery call didn't count, so
+    every statement was rejected despite correct numbers. The server assigns
+    the index, so the server states it."""
+    messages = _patch(
+        monkeypatch,
+        [
+            _Response(
+                content=[
+                    _ToolUseBlock(id="a", name="stub_projection", input={"retirement_age": 52}),
+                    _ToolUseBlock(id="b", name="stub_projection", input={"retirement_age": 58}),
+                ]
+            ),
+            _answer(),
+        ],
+    )
+
+    run_ask_loop(session, "key", "52 or 58?", snapshot, tools=_STUB_TOOLS)
+
+    blocks = messages.calls[1]["messages"][-1]["content"]
+    first, second = json.loads(blocks[0]["content"]), json.loads(blocks[1]["content"])
+    assert first["cite_as"] == "tool_calls[0]"
+    assert second["cite_as"] == "tool_calls[1]"
+    # The wrapper mirrors the evidence layout, so the prefix the model reads
+    # back concatenates into a path that actually resolves.
+    assert first["result"] == {"readiness_pct": 41.3, "age": 52}
+
+
+def test_indices_keep_counting_across_turns(
+    session: Session, snapshot: PortfolioMetricsSnapshot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The off-by-one appeared across turns, which is where counting is
+    hardest for the model and where the ledger must stay authoritative."""
+    messages = _patch(
+        monkeypatch,
+        [
+            _Response(content=[_ToolUseBlock(id="a", name="stub_projection", input={})]),
+            _Response(content=[_ToolUseBlock(id="b", name="stub_projection", input={})]),
+            _answer(),
+        ],
+    )
+
+    run_ask_loop(session, "key", "q", snapshot, tools=_STUB_TOOLS)
+
+    turn_one = json.loads(messages.calls[1]["messages"][-1]["content"][0]["content"])
+    turn_two = json.loads(messages.calls[2]["messages"][-1]["content"][0]["content"])
+    assert turn_one["cite_as"] == "tool_calls[0]"
+    assert turn_two["cite_as"] == "tool_calls[1]"
+
+
+def test_a_failed_call_still_consumes_its_index(
+    session: Session, snapshot: PortfolioMetricsSnapshot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure occupies a ledger slot, so the next success must not reuse
+    it -- otherwise the stated index would drift from the real one."""
+    messages = _patch(
+        monkeypatch,
+        [
+            _Response(
+                content=[
+                    _ToolUseBlock(id="a", name="always_fails", input={}),
+                    _ToolUseBlock(id="b", name="stub_projection", input={}),
+                ]
+            ),
+            _answer(),
+        ],
+    )
+
+    run_ask_loop(session, "key", "q", snapshot, tools=_STUB_TOOLS)
+
+    blocks = messages.calls[1]["messages"][-1]["content"]
+    assert blocks[0]["is_error"] is True
+    assert json.loads(blocks[1]["content"])["cite_as"] == "tool_calls[1]"

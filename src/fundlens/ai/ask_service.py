@@ -17,7 +17,12 @@ from sqlalchemy.orm import Session
 from fundlens.ai.claude_client import MODEL, GroundedStatement
 from fundlens.ai.snapshot import build_portfolio_snapshot
 from fundlens.ai.tool_loop import ToolCallRecord, run_ask_loop
-from fundlens.ai.validator import RejectedStatement, build_evidence, validate_narrative
+from fundlens.ai.validator import (
+    RejectedStatement,
+    build_evidence,
+    scan_for_foreign_numbers,
+    validate_narrative,
+)
 from fundlens.db.models import AiAnalysisStatus, AiQuestion
 from fundlens.settings import get_settings
 
@@ -41,6 +46,16 @@ class AskResult:
     tool_calls: list[dict]
     status: AiAnalysisStatus
     error_message: str | None
+    # Figures in `answer_summary` that don't trace to the evidence. The
+    # summary carries no citations by construction, so this is the only
+    # check available to it -- and the blunt scan over-rejects (a benchmark
+    # name like "Nifty 50" reads as an uncited 50). Withholding the text
+    # outright on that basis would delete the most useful part of the answer
+    # over a false positive, so it is surfaced instead: the summary renders
+    # visually distinct with these figures named, the same treatment
+    # `news_context` already gets for unvalidated content (ai-layer.md §3).
+    # The validated statements remain the authoritative part.
+    summary_unverified_figures: list[str]
 
 
 def _persist(
@@ -54,6 +69,7 @@ def _persist(
     rejected: list[RejectedStatement],
     status: AiAnalysisStatus,
     error_message: str | None,
+    summary_unverified_figures: list[str] | None = None,
 ) -> AskResult:
     row = AiQuestion(
         question=question,
@@ -80,6 +96,7 @@ def _persist(
         tool_calls=tool_calls,
         status=status,
         error_message=error_message,
+        summary_unverified_figures=summary_unverified_figures or [],
     )
 
 
@@ -125,6 +142,11 @@ def ask_question(session: Session, question: str) -> AskResult:
     # -- only the evidence it resolves against is wider.
     validated = validate_narrative(outcome.response, evidence)
 
+    # Leaving the summary unchecked would put the least-verified prose in
+    # the most-read place, so it gets the blunt scan -- reported, not
+    # suppressed. See `AskResult.summary_unverified_figures`.
+    unverified = scan_for_foreign_numbers(outcome.response.answer_summary, evidence)
+
     if outcome.hit_iteration_cap:
         status = AiAnalysisStatus.UNAVAILABLE
         error: str | None = "Reached the tool-call limit without producing an answer"
@@ -145,6 +167,7 @@ def ask_question(session: Session, question: str) -> AskResult:
         rejected=validated.rejected,
         status=status,
         error_message=error,
+        summary_unverified_figures=unverified,
     )
 
 
@@ -164,6 +187,12 @@ def _row_to_result(row: AiQuestion) -> AskResult:
         tool_calls=json.loads(row.tool_calls_json),
         status=row.status,
         error_message=row.error_message,
+        # Recomputed rather than stored: the evidence is persisted verbatim,
+        # so the scan is reproducible and can't drift from the text it
+        # describes.
+        summary_unverified_figures=scan_for_foreign_numbers(
+            row.answer_summary, json.loads(row.evidence_json)
+        ),
     )
 
 

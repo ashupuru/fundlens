@@ -89,6 +89,7 @@ class AskResponseModel(BaseModel):
     tool_calls: list[ToolCallResponse]
     status: str
     error_message: str | None
+    summary_unverified_figures: list[str]
 
 
 def _ask_to_response(result: AskResult) -> AskResponseModel:
@@ -109,6 +110,7 @@ def _ask_to_response(result: AskResult) -> AskResponseModel:
         tool_calls=[ToolCallResponse(**call) for call in result.tool_calls],
         status=result.status.value,
         error_message=result.error_message,
+        summary_unverified_figures=result.summary_unverified_figures,
     )
 
 

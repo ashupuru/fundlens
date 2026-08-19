@@ -713,6 +713,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ai/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask */
+        post: operations["ask_ai_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ai/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Questions */
+        get: operations["questions_ai_questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/goals": {
         parameters: {
             query?: never;
@@ -956,6 +990,32 @@ export interface components {
             scheme_count: number;
             /** Cost Basis Paise */
             cost_basis_paise: number;
+        };
+        /** AskRequest */
+        AskRequest: {
+            /** Question */
+            question: string;
+        };
+        /** AskResponseModel */
+        AskResponseModel: {
+            /** Id */
+            id: string;
+            /** Created At */
+            created_at: string;
+            /** Question */
+            question: string;
+            /** Answer Summary */
+            answer_summary: string;
+            /** Statements */
+            statements: components["schemas"]["GroundedStatementResponse"][];
+            /** Tool Calls */
+            tool_calls: components["schemas"]["ToolCallResponse"][];
+            /** Status */
+            status: string;
+            /** Error Message */
+            error_message: string | null;
+            /** Summary Unverified Figures */
+            summary_unverified_figures: string[];
         };
         /** AssumptionVersionResponse */
         AssumptionVersionResponse: {
@@ -1299,8 +1359,8 @@ export interface components {
             units: string;
             /** Rows */
             rows: components["schemas"]["fundlens__api__routers__portfolio__DuplicateSideResponse"][];
-            /** Removable Txn Id */
-            removable_txn_id: string | null;
+            /** Removable Txn Ids */
+            removable_txn_ids: string[];
             /** Keep Folio */
             keep_folio: string | null;
         };
@@ -2095,6 +2155,19 @@ export interface components {
             exit_load_modeled: boolean;
             /** Breakeven Note */
             breakeven_note: string;
+        };
+        /** ToolCallResponse */
+        ToolCallResponse: {
+            /** Tool */
+            tool: string;
+            /** Arguments */
+            arguments: {
+                [key: string]: unknown;
+            };
+            /** Result */
+            result?: unknown | null;
+            /** Error */
+            error?: string | null;
         };
         /** UnmatchedSchemeResponse */
         UnmatchedSchemeResponse: {
@@ -3347,6 +3420,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiAnalysisResponse"];
+                };
+            };
+        };
+    };
+    ask_ai_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    questions_ai_questions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponseModel"][];
                 };
             };
         };

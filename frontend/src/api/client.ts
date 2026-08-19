@@ -482,6 +482,29 @@ export async function getLatestAiAnalysis(): Promise<AiAnalysisResponse | null> 
   return response.json() as Promise<AiAnalysisResponse>;
 }
 
+export type AiAnswer = components["schemas"]["AskResponseModel"];
+export type AiToolCall = components["schemas"]["ToolCallResponse"];
+
+export async function postAiAsk(question: string): Promise<AiAnswer> {
+  const response = await fetch(`${API_BASE_URL}/ai/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!response.ok) {
+    throw new Error(`Question failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<AiAnswer>;
+}
+
+export async function getAiQuestions(): Promise<AiAnswer[]> {
+  const response = await fetch(`${API_BASE_URL}/ai/questions`);
+  if (!response.ok) {
+    throw new Error(`Failed to load question history: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<AiAnswer[]>;
+}
+
 export type Goal = components["schemas"]["GoalResponse"];
 export type GoalHoldingRef = components["schemas"]["GoalHoldingRef"];
 export type GoalProjection = components["schemas"]["GoalProjectionResponse"];

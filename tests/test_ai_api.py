@@ -150,3 +150,64 @@ def test_ask_reports_hitting_the_tool_call_limit(
 
     assert body["status"] == "unavailable"
     assert "tool-call limit" in body["error_message"]
+
+
+def test_ask_flags_a_summary_figure_that_does_not_trace_to_evidence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The summary carries no citations by construction and is the most
+    prominent text on the page, so it gets the blunt scan. Reported rather
+    than suppressed -- that scan over-rejects, and deleting the whole
+    summary over a false positive would cost more than it protects."""
+    monkeypatch.setattr(
+        ask_service, "get_settings", lambda: Settings(anthropic_api_key="fake-key")
+    )
+    monkeypatch.setattr(
+        ask_service,
+        "run_ask_loop",
+        lambda *a, **kw: AskOutcome(
+            response=AskResponse(
+                answer_summary="Your corpus will reach 987654 crore by then.",
+                statements=[],
+            ),
+            tool_calls=[],
+        ),
+    )
+
+    body = client.post("/ai/ask", json={"question": "how much?"}).json()
+
+    # Kept, so the user sees it -- but flagged, so they know which figure
+    # isn't backed by a calculation.
+    assert body["answer_summary"] == "Your corpus will reach 987654 crore by then."
+    assert body["summary_unverified_figures"] == ["987654"]
+
+
+def test_ask_keeps_a_summary_whose_figures_all_trace_to_evidence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        ask_service, "get_settings", lambda: Settings(anthropic_api_key="fake-key")
+    )
+    monkeypatch.setattr(
+        ask_service,
+        "run_ask_loop",
+        lambda *a, **kw: AskOutcome(
+            response=AskResponse(answer_summary="Readiness sits at 41.3%.", statements=[]),
+            tool_calls=[
+                ToolCallRecord(
+                    tool="compute_retirement_projection",
+                    arguments={},
+                    result={"readiness_pct": 41.3},
+                )
+            ],
+        ),
+    )
+
+    body = client.post("/ai/ask", json={"question": "how ready am i?"}).json()
+
+    assert body["answer_summary"] == "Readiness sits at 41.3%."
+    assert body["summary_unverified_figures"] == []
+
+    # And it survives a round trip through history, where the scan is
+    # recomputed from the persisted evidence rather than stored.
+    assert client.get("/ai/questions").json()[0]["summary_unverified_figures"] == []

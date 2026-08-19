@@ -1279,6 +1279,72 @@
         }
       }
     },
+    "/ai/ask": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Ask",
+        "operationId": "ask_ai_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponseModel"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ai/questions": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Questions",
+        "operationId": "questions_ai_questions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AskResponseModel"
+                  },
+                  "type": "array",
+                  "title": "Response Questions Ai Questions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/goals": {
       "get": {
         "tags": [
@@ -2113,6 +2179,88 @@
           "cost_basis_paise"
         ],
         "title": "AmcHoldingResponse"
+      },
+      "AskRequest": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest"
+      },
+      "AskResponseModel": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "answer_summary": {
+            "type": "string",
+            "title": "Answer Summary"
+          },
+          "statements": {
+            "items": {
+              "$ref": "#/components/schemas/GroundedStatementResponse"
+            },
+            "type": "array",
+            "title": "Statements"
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ToolCallResponse"
+            },
+            "type": "array",
+            "title": "Tool Calls"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "summary_unverified_figures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Summary Unverified Figures"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "question",
+          "answer_summary",
+          "statements",
+          "tool_calls",
+          "status",
+          "error_message",
+          "summary_unverified_figures"
+        ],
+        "title": "AskResponseModel"
       },
       "AssumptionVersionResponse": {
         "properties": {
@@ -3181,16 +3329,12 @@
             "type": "array",
             "title": "Rows"
           },
-          "removable_txn_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Removable Txn Id"
+          "removable_txn_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removable Txn Ids"
           },
           "keep_folio": {
             "anyOf": [
@@ -3212,7 +3356,7 @@
           "direction",
           "units",
           "rows",
-          "removable_txn_id",
+          "removable_txn_ids",
           "keep_folio"
         ],
         "title": "DuplicateResponse"
@@ -6202,6 +6346,45 @@
           "breakeven_note"
         ],
         "title": "TaxImpactResponse"
+      },
+      "ToolCallResponse": {
+        "properties": {
+          "tool": {
+            "type": "string",
+            "title": "Tool"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Arguments"
+          },
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool",
+          "arguments"
+        ],
+        "title": "ToolCallResponse"
       },
       "UnmatchedSchemeResponse": {
         "properties": {
