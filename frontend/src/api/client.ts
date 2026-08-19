@@ -145,6 +145,16 @@ export async function getRetirementScenarios(): Promise<RetirementScenario[]> {
   return response.json() as Promise<RetirementScenario[]>;
 }
 
+export type RetirementMonteCarlo = components["schemas"]["RetirementMonteCarloResponse"];
+
+export async function getRetirementMonteCarlo(): Promise<RetirementMonteCarlo> {
+  const response = await fetch(`${API_BASE_URL}/retirement/monte-carlo`);
+  if (!response.ok) {
+    throw new Error(`Retirement simulation failed: ${await detailOrStatus(response)}`);
+  }
+  return response.json() as Promise<RetirementMonteCarlo>;
+}
+
 export type RetirementWhatIf = {
   retirement_age?: number | null;
   annual_investment_rupees?: string | null;

@@ -2,11 +2,92 @@
  * conservative/base/optimistic scenario comparison.
  */
 import type {
+  RetirementMonteCarlo,
   RetirementProjection,
   RetirementScenario,
   RetirementWhatIf,
 } from "../api/client";
 import { formatPaise } from "./retirementFormat";
+
+export type MonteCarloState =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "error"; message: string }
+  | { status: "ready"; result: RetirementMonteCarlo };
+
+export function MonteCarloSection({
+  state,
+  onRun,
+  projection,
+}: {
+  state: MonteCarloState;
+  onRun: () => void;
+  projection: RetirementProjection;
+}) {
+  const deterministicallyFine = projection.depletion_age === null;
+  return (
+    <div className="card">
+      <h3>Chance of lasting</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        The projection above earns the average return every single year. Real markets deliver the
+        same average in an <em>order</em>, and a poor first decade of retirement sells units
+        cheaply — permanently shrinking what the later good years compound on. This runs 5,000
+        random orderings.
+      </p>
+      <button onClick={onRun} disabled={state.status === "running"}>
+        {state.status === "running" ? "Running 5,000 simulations…" : "Run simulation"}
+      </button>
+
+      {state.status === "error" && (
+        <p style={{ color: "var(--negative)", marginTop: 8 }}>{state.message}</p>
+      )}
+
+      {state.status === "ready" && (
+        <>
+          <div className="card-grid" style={{ marginTop: 16, marginBottom: 0 }}>
+            <div className="stat">
+              <div className="stat-label">Plans that last to {projection.life_expectancy}</div>
+              <div
+                className={`stat-value ${
+                  state.result.success_probability_pct >= 80 ? "positive" : "negative"
+                }`}
+              >
+                {state.result.success_probability_pct.toFixed(1)}%
+              </div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">When failures run out</div>
+              <div className="stat-value">
+                {state.result.median_depletion_age !== null
+                  ? `Age ${state.result.median_depletion_age}`
+                  : "—"}
+              </div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">Median corpus left</div>
+              <div className="stat-value">
+                {formatPaise(state.result.percentile_50_terminal_corpus_paise)}
+              </div>
+            </div>
+          </div>
+          <p className="muted" style={{ marginTop: 12 }}>
+            Outcome range (10th–90th percentile):{" "}
+            {formatPaise(state.result.percentile_10_terminal_corpus_paise)} –{" "}
+            {formatPaise(state.result.percentile_90_terminal_corpus_paise)}, at{" "}
+            {state.result.volatility_pct}% assumed volatility.
+            {deterministicallyFine && state.result.success_probability_pct < 100 && (
+              <>
+                {" "}
+                Note the projection above calls this plan sustainable — that holds on average, not
+                in every ordering.
+              </>
+            )}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function WhatIfSection({
   whatIf,

@@ -22,8 +22,10 @@ from fundlens.allocation.service import (
 from fundlens.api.deps import get_session
 from fundlens.assumptions.service import (
     get_current_goal_assumptions,
+    get_current_monte_carlo_assumptions,
     get_current_scenario_assumptions,
 )
+from fundlens.compute.monte_carlo import run_retirement_monte_carlo
 from fundlens.compute.retirement import (
     RetirementProjection,
     compute_retirement_projection,
@@ -166,6 +168,7 @@ class RetirementProjectionResponse(BaseModel):
     readiness_pct: float | None
     monthly_withdrawal_today_paise: int | None
     first_year_monthly_withdrawal_paise: int | None
+    first_year_annual_withdrawal_paise: int | None
     depletion_age: int | None
     terminal_corpus_paise: int | None
     total_lump_sum_paise: int | None
@@ -199,6 +202,7 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
         readiness_pct=p.readiness_pct,
         monthly_withdrawal_today_paise=p.monthly_withdrawal_today_paise,
         first_year_monthly_withdrawal_paise=p.first_year_monthly_withdrawal_paise,
+        first_year_annual_withdrawal_paise=p.first_year_annual_withdrawal_paise,
         depletion_age=p.depletion_age,
         terminal_corpus_paise=p.terminal_corpus_paise,
         total_lump_sum_paise=p.total_lump_sum_paise,
@@ -330,3 +334,72 @@ def get_retirement_scenarios(
             scenario_assumptions.inflation_delta_pct,
         )
     ]
+
+
+class RetirementMonteCarloResponse(BaseModel):
+    simulations_run: int
+    success_probability_pct: float
+    median_depletion_age: int | None
+    percentile_10_terminal_corpus_paise: int
+    percentile_50_terminal_corpus_paise: int
+    percentile_90_terminal_corpus_paise: int
+    volatility_pct: str
+
+
+@router.get("/monte-carlo", response_model=RetirementMonteCarloResponse)
+def get_retirement_monte_carlo(
+    session: Session = Depends(get_session),
+) -> RetirementMonteCarloResponse:
+    """Its own endpoint rather than folded into the projection: 5,000
+    simulated paths is a different cost tier from the projection's few dozen
+    rows of arithmetic, and the frontend triggers it explicitly (same
+    precedent as the goal Monte Carlo and POST /ai/analyze)."""
+    profile = get_risk_profile(session)
+    if profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No risk profile set — complete onboarding first (POST /risk-profile)",
+        )
+
+    assumptions = get_current_goal_assumptions(session)
+    projection = compute_retirement_projection(session, profile, assumptions)
+    if projection.reason is not None:
+        raise HTTPException(status_code=404, detail=projection.reason)
+
+    mc_assumptions = get_current_monte_carlo_assumptions(session)
+    # Blended the same weighted-average way the expected return is
+    # (compute-engine.md §14) -- one volatility for the whole portfolio.
+    volatility_pct = (
+        profile.target_equity_pct / 100 * mc_assumptions.equity_volatility_pct
+        + profile.target_debt_pct / 100 * mc_assumptions.debt_volatility_pct
+    )
+
+    lump_sum_by_age = {
+        e.age: e.inflated_cost_paise
+        for e in projection.events
+        if e.excluded_reason is None and e.age is not None and e.inflated_cost_paise is not None
+    }
+
+    result = run_retirement_monte_carlo(
+        starting_corpus_paise=projection.starting_corpus_paise or 0,
+        annual_investment_paise=profile.annual_investment_paise or 0,
+        step_up_pct=profile.annual_investment_step_up_pct or Decimal(0),
+        current_age=projection.current_age or 0,
+        retirement_age=projection.retirement_age or 0,
+        life_expectancy=projection.life_expectancy or 0,
+        first_year_withdrawal_paise=projection.first_year_annual_withdrawal_paise or 0,
+        lump_sum_by_age=lump_sum_by_age,
+        pre_return_pct=projection.blended_return_pct or Decimal(0),
+        post_return_pct=projection.post_retirement_return_pct or Decimal(0),
+        volatility_pct=volatility_pct,
+        inflation_pct=projection.inflation_pct or Decimal(0),
+    )
+    return RetirementMonteCarloResponse(
+        simulations_run=result.simulations_run,
+        success_probability_pct=result.success_probability_pct,
+        median_depletion_age=result.median_depletion_age,
+        percentile_10_terminal_corpus_paise=result.percentile_10_terminal_corpus_paise,
+        percentile_50_terminal_corpus_paise=result.percentile_50_terminal_corpus_paise,
+        percentile_90_terminal_corpus_paise=result.percentile_90_terminal_corpus_paise,
+        volatility_pct=str(volatility_pct),
+    )

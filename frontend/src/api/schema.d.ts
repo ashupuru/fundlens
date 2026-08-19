@@ -764,6 +764,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/retirement/monte-carlo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Retirement Monte Carlo
+         * @description Its own endpoint rather than folded into the projection: 5,000
+         *     simulated paths is a different cost tier from the projection's few dozen
+         *     rows of arithmetic, and the frontend triggers it explicitly (same
+         *     precedent as the goal Monte Carlo and POST /ai/analyze).
+         */
+        get: operations["get_retirement_monte_carlo_retirement_monte_carlo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1569,6 +1592,23 @@ export interface components {
             /** Amfi Error */
             amfi_error: string | null;
         };
+        /** RetirementMonteCarloResponse */
+        RetirementMonteCarloResponse: {
+            /** Simulations Run */
+            simulations_run: number;
+            /** Success Probability Pct */
+            success_probability_pct: number;
+            /** Median Depletion Age */
+            median_depletion_age: number | null;
+            /** Percentile 10 Terminal Corpus Paise */
+            percentile_10_terminal_corpus_paise: number;
+            /** Percentile 50 Terminal Corpus Paise */
+            percentile_50_terminal_corpus_paise: number;
+            /** Percentile 90 Terminal Corpus Paise */
+            percentile_90_terminal_corpus_paise: number;
+            /** Volatility Pct */
+            volatility_pct: string;
+        };
         /** RetirementProfileRequest */
         RetirementProfileRequest: {
             /** Current Age */
@@ -1635,6 +1675,8 @@ export interface components {
             monthly_withdrawal_today_paise: number | null;
             /** First Year Monthly Withdrawal Paise */
             first_year_monthly_withdrawal_paise: number | null;
+            /** First Year Annual Withdrawal Paise */
+            first_year_annual_withdrawal_paise: number | null;
             /** Depletion Age */
             depletion_age: number | null;
             /** Terminal Corpus Paise */
@@ -3368,6 +3410,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetirementScenarioResponse"][];
+                };
+            };
+        };
+    };
+    get_retirement_monte_carlo_retirement_monte_carlo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementMonteCarloResponse"];
                 };
             };
         };

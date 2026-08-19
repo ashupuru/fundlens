@@ -109,6 +109,10 @@ class RetirementProjection:
     readiness_pct: float | None
     monthly_withdrawal_today_paise: int | None  # today's purchasing power
     first_year_monthly_withdrawal_paise: int | None  # nominal, at retirement
+    # The annual figure, kept exact rather than left to be reconstructed as
+    # monthly*12 -- that rounding loses up to 12 paise, which then compounds
+    # over the whole retirement (real effect: ~700 paise by life expectancy).
+    first_year_annual_withdrawal_paise: int | None
     depletion_age: int | None  # None => corpus survives to life expectancy
     terminal_corpus_paise: int | None
     total_lump_sum_paise: int | None
@@ -140,6 +144,7 @@ def _incomplete(reason: str) -> RetirementProjection:
         readiness_pct=None,
         monthly_withdrawal_today_paise=None,
         first_year_monthly_withdrawal_paise=None,
+        first_year_annual_withdrawal_paise=None,
         depletion_age=None,
         terminal_corpus_paise=None,
         total_lump_sum_paise=None,
@@ -545,6 +550,7 @@ def compute_retirement_projection(
         readiness_pct=readiness,
         monthly_withdrawal_today_paise=profile.monthly_withdrawal_today_paise,
         first_year_monthly_withdrawal_paise=_round_paise(first_year_monthly_withdrawal),
+        first_year_annual_withdrawal_paise=_round_paise(annual_withdrawal),
         depletion_age=depletion_age,
         terminal_corpus_paise=_round_paise(corpus),
         total_lump_sum_paise=_round_paise(sum(lump_sum_by_age.values(), Decimal(0))),

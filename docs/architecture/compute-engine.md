@@ -1004,3 +1004,45 @@ different numbers — they can't disagree.
 Real-portfolio sanity check, all four from one saved plan and leaving it untouched: retiring at 65
 lifts readiness 52% → 83% and pushes depletion 71 → 81; +₹25k/month SIP moves it to 55%; a 3%
 worse return drops it to 29% with the corpus gone by 67.
+
+## 21. Retirement Sequence-of-Returns Risk (shipped — `compute/monte_carlo.py`)
+
+The deterministic projection (§16) earns the *average* return every single year. Real markets
+deliver the same average **in an order**, and order matters enormously once you are withdrawing: a
+poor first decade of retirement sells units at depressed prices, permanently shrinking the base the
+later good years compound on. Two paths with identical mean returns can end solvent or bankrupt.
+Averaging hides precisely the risk a retiree cares about, so `run_retirement_monte_carlo` puts a
+probability next to the point estimate — 5,000 random orderings of the same accumulate-then-
+decumulate path, asking how many survive to life expectancy.
+
+Real-portfolio demonstration, and the clearest argument for the feature: a ₹1L/month plan the
+deterministic projection scores at **259% readiness, lasting to 85** survives only **89.3%** of
+orderings — about one run in nine depletes, typically at 81. The point estimate isn't wrong; it
+just isn't a probability.
+
+**Annual steps, deliberately.** §16 steps annually, so this does too. Monthly steps would be
+finer-grained but could no longer collapse *exactly* onto the deterministic result — and that
+collapse is the correctness gate. The vectorized simulation and the year loop are two
+implementations of the same ordering (return on opening balance → contribution or withdrawal →
+lump sums → floor at zero), so **at zero volatility every simulated path must reproduce the
+deterministic terminal corpus and depletion age exactly**. Nothing else stops the two drifting
+apart as either changes.
+
+That gate immediately earned its keep: the first run missed by ~700 paise on ₹86 Cr, which turned
+out not to be float noise but the *caller* reconstructing the annual withdrawal as
+`round(monthly) × 12` — losing up to 12 paise that then compounded across 25 retirement years. The
+projection now exposes `first_year_annual_withdrawal_paise` exactly, so the endpoint can't
+reintroduce the same error.
+
+**Returns are stochastic; inflation is not.** Sequence-of-returns is the dominant, best-evidenced
+retirement risk, and equity/debt volatility are already grounded assumptions here (blended by
+target allocation, §14). Inflation variability (also named in the spec) would need a volatility
+figure this app has no basis for, so it is deferred rather than invented — the same treatment
+`debt_marginal_tax_rate_pct` gets.
+
+A depleted corpus is **absorbing**: returns on zero are zero and further withdrawals clamp back to
+zero, so a path that fails stays failed rather than mathematically recovering.
+
+Its own endpoint (`GET /retirement/monte-carlo`, button-triggered) rather than folded into the
+projection — 5,000 paths is a different cost tier from a few dozen rows of arithmetic, matching the
+goal Monte Carlo and `POST /ai/analyze` precedent.

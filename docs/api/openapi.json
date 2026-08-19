@@ -1738,6 +1738,28 @@
           }
         }
       }
+    },
+    "/retirement/monte-carlo": {
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Get Retirement Monte Carlo",
+        "description": "Its own endpoint rather than folded into the projection: 5,000\nsimulated paths is a different cost tier from the projection's few dozen\nrows of arithmetic, and the frontend triggers it explicitly (same\nprecedent as the goal Monte Carlo and POST /ai/analyze).",
+        "operationId": "get_retirement_monte_carlo_retirement_monte_carlo_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementMonteCarloResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4466,6 +4488,56 @@
         ],
         "title": "RefreshResponse"
       },
+      "RetirementMonteCarloResponse": {
+        "properties": {
+          "simulations_run": {
+            "type": "integer",
+            "title": "Simulations Run"
+          },
+          "success_probability_pct": {
+            "type": "number",
+            "title": "Success Probability Pct"
+          },
+          "median_depletion_age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Depletion Age"
+          },
+          "percentile_10_terminal_corpus_paise": {
+            "type": "integer",
+            "title": "Percentile 10 Terminal Corpus Paise"
+          },
+          "percentile_50_terminal_corpus_paise": {
+            "type": "integer",
+            "title": "Percentile 50 Terminal Corpus Paise"
+          },
+          "percentile_90_terminal_corpus_paise": {
+            "type": "integer",
+            "title": "Percentile 90 Terminal Corpus Paise"
+          },
+          "volatility_pct": {
+            "type": "string",
+            "title": "Volatility Pct"
+          }
+        },
+        "type": "object",
+        "required": [
+          "simulations_run",
+          "success_probability_pct",
+          "median_depletion_age",
+          "percentile_10_terminal_corpus_paise",
+          "percentile_50_terminal_corpus_paise",
+          "percentile_90_terminal_corpus_paise",
+          "volatility_pct"
+        ],
+        "title": "RetirementMonteCarloResponse"
+      },
       "RetirementProfileRequest": {
         "properties": {
           "current_age": {
@@ -4808,6 +4880,17 @@
             ],
             "title": "First Year Monthly Withdrawal Paise"
           },
+          "first_year_annual_withdrawal_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Year Annual Withdrawal Paise"
+          },
           "depletion_age": {
             "anyOf": [
               {
@@ -4928,6 +5011,7 @@
           "readiness_pct",
           "monthly_withdrawal_today_paise",
           "first_year_monthly_withdrawal_paise",
+          "first_year_annual_withdrawal_paise",
           "depletion_age",
           "terminal_corpus_paise",
           "total_lump_sum_paise",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  getRetirementMonteCarlo,
   getRetirementProfile,
   getRetirementProjection,
   getRetirementScenarios,
@@ -9,7 +10,12 @@ import {
   type RetirementScenario,
   type RetirementWhatIf,
 } from "../api/client";
-import { ScenarioSection, WhatIfSection } from "./RetirementPlanning";
+import {
+  MonteCarloSection,
+  ScenarioSection,
+  WhatIfSection,
+  type MonteCarloState,
+} from "./RetirementPlanning";
 import { REASON_MESSAGES, formatPaise } from "./retirementFormat";
 import { CorpusChart, EventsSection, ReadinessSection, YearTable } from "./RetirementSections";
 
@@ -129,6 +135,19 @@ export default function Retirement() {
   const [scenarios, setScenarios] = useState<RetirementScenario[]>([]);
   const [whatIf, setWhatIf] = useState<RetirementWhatIf>({});
   const [whatIfProjection, setWhatIfProjection] = useState<RetirementProjection | null>(null);
+  const [monteCarlo, setMonteCarlo] = useState<MonteCarloState>({ status: "idle" });
+
+  async function runMonteCarlo() {
+    setMonteCarlo({ status: "running" });
+    try {
+      setMonteCarlo({ status: "ready", result: await getRetirementMonteCarlo() });
+    } catch (err) {
+      setMonteCarlo({
+        status: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -218,6 +237,11 @@ export default function Retirement() {
             current={whatIfProjection ?? projection}
           />
           <ScenarioSection scenarios={scenarios} />
+          <MonteCarloSection
+            state={monteCarlo}
+            onRun={() => void runMonteCarlo()}
+            projection={projection}
+          />
           <CorpusChart p={projection} />
           <EventsSection p={projection} />
           <YearTable p={projection} />

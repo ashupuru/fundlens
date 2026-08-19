@@ -168,3 +168,28 @@ def test_what_if_rejects_a_non_numeric_override(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_monte_carlo_404s_without_a_complete_plan(client: TestClient) -> None:
+    _set_risk_profile(client)
+    response = client.get("/retirement/monte-carlo")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "retirement_profile_incomplete"
+
+
+def test_monte_carlo_returns_a_probability_and_a_spread(client: TestClient) -> None:
+    _set_risk_profile(client)
+    client.post("/retirement/profile", json=_RETIREMENT_PROFILE)
+
+    body = client.get("/retirement/monte-carlo").json()
+
+    assert body["simulations_run"] == 5000
+    assert 0.0 <= body["success_probability_pct"] <= 100.0
+    assert (
+        body["percentile_10_terminal_corpus_paise"]
+        <= body["percentile_50_terminal_corpus_paise"]
+        <= body["percentile_90_terminal_corpus_paise"]
+    )
+    # This fixture has no holdings, so it's funded by SIP alone and fails
+    # essentially always -- the depletion age must be reported, not None.
+    assert body["median_depletion_age"] is not None
