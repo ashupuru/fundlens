@@ -27,6 +27,8 @@ class GoalResponse(BaseModel):
     name: str
     target_amount_paise: int
     target_date: date
+    inflation_pct_override: str | None
+    include_in_retirement_projection: bool
     created_at: str
     updated_at: str
 
@@ -37,6 +39,12 @@ def _to_response(goal: Goal) -> GoalResponse:
         name=goal.name,
         target_amount_paise=goal.target_amount_paise,
         target_date=goal.target_date,
+        # `is not None`, not truthiness: an explicit 0% override (a cost that
+        # shouldn't inflate at all) is meaningful and must round-trip.
+        inflation_pct_override=(
+            str(goal.inflation_pct_override) if goal.inflation_pct_override is not None else None
+        ),
+        include_in_retirement_projection=goal.include_in_retirement_projection,
         created_at=goal.created_at.isoformat(),
         updated_at=goal.updated_at.isoformat(),
     )
@@ -46,12 +54,16 @@ class CreateGoalRequest(BaseModel):
     name: str
     target_amount_rupees: str
     target_date: date
+    inflation_pct_override: str | None = None
+    include_in_retirement_projection: bool = True
 
 
 class UpdateGoalRequest(BaseModel):
     name: str | None = None
     target_amount_rupees: str | None = None
     target_date: date | None = None
+    inflation_pct_override: str | None = None
+    include_in_retirement_projection: bool | None = None
 
 
 def _get_goal_or_404(session: Session, goal_id: str) -> Goal:
@@ -71,6 +83,12 @@ def create_goal(
             name=request.name,
             target_amount_paise=to_paise_strict(Decimal(request.target_amount_rupees)),
             target_date=request.target_date,
+            inflation_pct_override=(
+                Decimal(request.inflation_pct_override)
+                if request.inflation_pct_override is not None
+                else None
+            ),
+            include_in_retirement_projection=request.include_in_retirement_projection,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -103,6 +121,20 @@ def update_goal(
                 else None
             ),
             target_date=request.target_date,
+            # Only touched when the caller actually sent the field -- sending
+            # it as null explicitly clears the override back to the global
+            # rate, which is why `model_fields_set` is needed rather than a
+            # plain None check.
+            inflation_pct_override=(
+                (
+                    Decimal(request.inflation_pct_override)
+                    if request.inflation_pct_override is not None
+                    else None
+                )
+                if "inflation_pct_override" in request.model_fields_set
+                else service.UNSET
+            ),
+            include_in_retirement_projection=request.include_in_retirement_projection,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

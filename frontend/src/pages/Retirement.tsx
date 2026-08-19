@@ -30,6 +30,11 @@ const REASON_MESSAGES: Record<string, string> = {
     "Life expectancy must be later than retirement age.",
 };
 
+const EXCLUDED_REASON_MESSAGES: Record<string, string> = {
+  target_date_already_passed: "target date has passed",
+  beyond_life_expectancy: "falls beyond life expectancy",
+};
+
 function formatPaise(paise: number): string {
   const rupees = paise / 100;
   if (Math.abs(rupees) >= 10_000_000) return `₹${(rupees / 10_000_000).toFixed(2)} Cr`;
@@ -211,6 +216,76 @@ function ReadinessSection({ p }: { p: RetirementProjection }) {
   );
 }
 
+function EventsSection({ p }: { p: RetirementProjection }) {
+  if (p.events.length === 0) {
+    return (
+      <div className="card">
+        <h3>Planned life events</h3>
+        <p className="muted">
+          No goals yet. Goals you create on the Goals page are treated as future claims on this
+          same portfolio and withdrawn from the projection in the year they fall due.
+        </p>
+      </div>
+    );
+  }
+
+  const included = p.events.filter((e) => e.excluded_reason === null);
+  const excluded = p.events.filter((e) => e.excluded_reason !== null);
+
+  return (
+    <div className="card">
+      <h3>Planned life events</h3>
+      <p className="muted" style={{ marginBottom: 12 }}>
+        Every goal is treated as a future claim on this portfolio — tagging holdings to a goal
+        labels them, it doesn't set the money aside, and this projection starts from your whole
+        portfolio.
+      </p>
+      {included.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Age</th>
+              <th>Cost today</th>
+              <th>Inflation</th>
+              <th>Cost then</th>
+            </tr>
+          </thead>
+          <tbody>
+            {included.map((e) => (
+              <tr key={e.goal_id}>
+                <td>{e.name}</td>
+                <td>{e.age}</td>
+                <td>{formatPaise(e.today_cost_paise)}</td>
+                <td>{e.inflation_pct_used}%</td>
+                <td>{formatPaise(e.inflated_cost_paise ?? 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {(p.total_lump_sum_shortfall_paise ?? 0) > 0 && (
+        <p style={{ color: "var(--negative)", marginTop: 12 }}>
+          {formatPaise(p.total_lump_sum_shortfall_paise ?? 0)} of planned events can't be funded
+          from the projected corpus.
+        </p>
+      )}
+      {excluded.length > 0 && (
+        <p className="muted" style={{ marginTop: 12 }}>
+          Not included:{" "}
+          {excluded
+            .map(
+              (e) =>
+                `${e.name} (${EXCLUDED_REASON_MESSAGES[e.excluded_reason ?? ""] ?? e.excluded_reason})`,
+            )
+            .join(", ")}
+          .
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CorpusChart({ p }: { p: RetirementProjection }) {
   const data = p.years.map((y) => ({
     age: y.age,
@@ -268,6 +343,7 @@ function YearTable({ p }: { p: RetirementProjection }) {
             <th>Investment</th>
             <th>Return</th>
             <th>Withdrawal</th>
+            <th>Life events</th>
             <th>Closing</th>
           </tr>
         </thead>
@@ -283,6 +359,15 @@ function YearTable({ p }: { p: RetirementProjection }) {
               <td>{formatPaise(y.return_paise)}</td>
               <td className={y.withdrawal_paise > 0 ? "negative" : ""}>
                 {y.withdrawal_paise > 0 ? formatPaise(y.withdrawal_paise) : "—"}
+              </td>
+              <td className={y.lump_sum_paise > 0 ? "negative" : ""}>
+                {y.lump_sum_paise > 0 ? formatPaise(y.lump_sum_paise) : "—"}
+                {y.lump_sum_shortfall_paise > 0 && (
+                  <span className="muted">
+                    {" "}
+                    ({formatPaise(y.lump_sum_shortfall_paise)} unfunded)
+                  </span>
+                )}
               </td>
               <td>{formatPaise(y.closing_corpus_paise)}</td>
             </tr>
@@ -359,6 +444,7 @@ export default function Retirement() {
         <>
           <ReadinessSection p={projection} />
           <CorpusChart p={projection} />
+          <EventsSection p={projection} />
           <YearTable p={projection} />
         </>
       )}
@@ -375,7 +461,8 @@ export default function Retirement() {
           value), {projection.blended_return_pct}% pre-retirement return (from your target
           allocation), {projection.post_retirement_return_pct}% post-retirement,{" "}
           {projection.inflation_pct}% inflation. Returns are applied to each year's opening balance
-          and contributions added at year end. Pre-tax; lump-sum life events aren't modelled yet.
+          and contributions added at year end. Your goals are included as life-event withdrawals.
+          Pre-tax.
         </p>
       )}
     </div>

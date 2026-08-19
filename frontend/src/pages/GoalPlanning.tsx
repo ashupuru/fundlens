@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   createGoal,
   deleteGoal,
@@ -240,6 +241,8 @@ export default function GoalPlanning() {
   const [name, setName] = useState("");
   const [targetAmount, setTargetAmount] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [inflationOverride, setInflationOverride] = useState("");
+  const [includeInRetirement, setIncludeInRetirement] = useState(true);
   const [createError, setCreateError] = useState<string | null>(null);
 
   function refreshGoals() {
@@ -255,10 +258,18 @@ export default function GoalPlanning() {
     e.preventDefault();
     setCreateError(null);
     try {
-      await createGoal(name, targetAmount, targetDate);
+      await createGoal(
+        name,
+        targetAmount,
+        targetDate,
+        inflationOverride === "" ? null : inflationOverride,
+        includeInRetirement,
+      );
       setName("");
       setTargetAmount("");
       setTargetDate("");
+      setInflationOverride("");
+      setIncludeInRetirement(true);
       refreshGoals();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Unknown error");
@@ -299,9 +310,34 @@ export default function GoalPlanning() {
               onChange={(e) => setTargetDate(e.target.value)}
               required
             />
+            <input
+              type="number"
+              placeholder="Inflation % (optional)"
+              value={inflationOverride}
+              onChange={(e) => setInflationOverride(e.target.value)}
+              min="0"
+              step="0.01"
+              title="Leave blank to use the global inflation assumption. Education and healthcare typically run higher; enter 0 for a cost that shouldn't inflate."
+            />
             <button type="submit">Add goal</button>
           </div>
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 14 }}
+          >
+            <input
+              type="checkbox"
+              checked={includeInRetirement}
+              onChange={(e) => setIncludeInRetirement(e.target.checked)}
+            />
+            Draw this from the portfolio in the retirement projection
+          </label>
         </form>
+        <p className="muted" style={{ marginTop: 8 }}>
+          Included goals are withdrawn from the corpus in the{" "}
+          <Link to="/retirement">retirement projection</Link>, inflated to their target year.
+          Untick for a goal already counted elsewhere (a goal tracking retirement itself would
+          double-count the monthly income) or funded from outside the portfolio.
+        </p>
         {createError && <p style={{ color: "var(--negative)", marginTop: 8 }}>{createError}</p>}
       </div>
 

@@ -5,7 +5,18 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    true,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from fundlens.tax.asset_class import TaxAssetClass
@@ -460,6 +471,23 @@ class Goal(Base):
     name: Mapped[str] = mapped_column(String(200))
     target_amount_paise: Mapped[int] = mapped_column(Integer)
     target_date: Mapped[date] = mapped_column(Date)
+    # Per-goal inflation, overriding the global `inflation_pct` assumption --
+    # education and healthcare inflate faster than the general rate in
+    # practice. None => use the global rate. Setting this to 0 is how you
+    # express a fixed nominal amount that shouldn't inflate at all (rather
+    # than a separate is_inflation_adjusted flag, which would be a second
+    # way to say the same thing).
+    inflation_pct_override: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # Whether the retirement projection (compute/retirement.py) draws this
+    # goal out of the corpus as a life event. Defaults to True -- a goal is
+    # normally a real future claim on the portfolio. Turn it off for a goal
+    # already represented some other way (most obviously a goal literally
+    # tracking "retirement", which the projection's own income stream
+    # already models -- counting both would double-count), or one funded
+    # from outside the portfolio entirely.
+    include_in_retirement_projection: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=true()
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )

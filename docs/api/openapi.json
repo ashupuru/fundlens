@@ -2440,6 +2440,22 @@
             "type": "string",
             "format": "date",
             "title": "Target Date"
+          },
+          "inflation_pct_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inflation Pct Override"
+          },
+          "include_in_retirement_projection": {
+            "type": "boolean",
+            "title": "Include In Retirement Projection",
+            "default": true
           }
         },
         "type": "object",
@@ -3483,6 +3499,21 @@
             "format": "date",
             "title": "Target Date"
           },
+          "inflation_pct_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inflation Pct Override"
+          },
+          "include_in_retirement_projection": {
+            "type": "boolean",
+            "title": "Include In Retirement Projection"
+          },
           "created_at": {
             "type": "string",
             "title": "Created At"
@@ -3498,6 +3529,8 @@
           "name",
           "target_amount_paise",
           "target_date",
+          "inflation_pct_override",
+          "include_in_retirement_projection",
           "created_at",
           "updated_at"
         ],
@@ -3924,6 +3957,82 @@
           "source_url"
         ],
         "title": "NewsContextItemResponse"
+      },
+      "PlannedEventResponse": {
+        "properties": {
+          "goal_id": {
+            "type": "string",
+            "title": "Goal Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "target_date": {
+            "type": "string",
+            "title": "Target Date"
+          },
+          "age": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age"
+          },
+          "today_cost_paise": {
+            "type": "integer",
+            "title": "Today Cost Paise"
+          },
+          "inflated_cost_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inflated Cost Paise"
+          },
+          "inflation_pct_used": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inflation Pct Used"
+          },
+          "excluded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "goal_id",
+          "name",
+          "target_date",
+          "age",
+          "today_cost_paise",
+          "inflated_cost_paise",
+          "inflation_pct_used",
+          "excluded_reason"
+        ],
+        "title": "PlannedEventResponse"
       },
       "PortfolioBenchmarkComparisonResponse": {
         "properties": {
@@ -4603,6 +4712,35 @@
             ],
             "title": "Terminal Corpus Paise"
           },
+          "total_lump_sum_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Lump Sum Paise"
+          },
+          "total_lump_sum_shortfall_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Lump Sum Shortfall Paise"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/PlannedEventResponse"
+            },
+            "type": "array",
+            "title": "Events"
+          },
           "years": {
             "items": {
               "$ref": "#/components/schemas/RetirementYearResponse"
@@ -4630,6 +4768,9 @@
           "first_year_monthly_withdrawal_paise",
           "depletion_age",
           "terminal_corpus_paise",
+          "total_lump_sum_paise",
+          "total_lump_sum_shortfall_paise",
+          "events",
           "years"
         ],
         "title": "RetirementProjectionResponse"
@@ -4660,6 +4801,14 @@
             "type": "integer",
             "title": "Withdrawal Paise"
           },
+          "lump_sum_paise": {
+            "type": "integer",
+            "title": "Lump Sum Paise"
+          },
+          "lump_sum_shortfall_paise": {
+            "type": "integer",
+            "title": "Lump Sum Shortfall Paise"
+          },
           "closing_corpus_paise": {
             "type": "integer",
             "title": "Closing Corpus Paise"
@@ -4673,6 +4822,8 @@
           "investment_paise",
           "return_paise",
           "withdrawal_paise",
+          "lump_sum_paise",
+          "lump_sum_shortfall_paise",
           "closing_corpus_paise"
         ],
         "title": "RetirementYearResponse"
@@ -5340,6 +5491,28 @@
               }
             ],
             "title": "Target Date"
+          },
+          "inflation_pct_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inflation Pct Override"
+          },
+          "include_in_retirement_projection": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Include In Retirement Projection"
           }
         },
         "type": "object",

@@ -7,6 +7,7 @@ deriving derived state fresh rather than caching it prematurely.
 """
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -20,10 +21,21 @@ def _validate_target_date(target_date: date) -> None:
 
 
 def create_goal(
-    session: Session, name: str, target_amount_paise: int, target_date: date
+    session: Session,
+    name: str,
+    target_amount_paise: int,
+    target_date: date,
+    inflation_pct_override: Decimal | None = None,
+    include_in_retirement_projection: bool = True,
 ) -> Goal:
     _validate_target_date(target_date)
-    goal = Goal(name=name, target_amount_paise=target_amount_paise, target_date=target_date)
+    goal = Goal(
+        name=name,
+        target_amount_paise=target_amount_paise,
+        target_date=target_date,
+        inflation_pct_override=inflation_pct_override,
+        include_in_retirement_projection=include_in_retirement_projection,
+    )
     session.add(goal)
     session.commit()
     return goal
@@ -37,12 +49,24 @@ def list_goals(session: Session) -> list[Goal]:
     return list(session.scalars(select(Goal).order_by(Goal.target_date)))
 
 
+class _Unset:
+    """Distinguishes "caller didn't mention this field" from an explicit
+    None. Needed only for `inflation_pct_override`, where None is itself a
+    meaningful value ("fall back to the global inflation assumption") and so
+    can't double as the not-provided marker the other fields use."""
+
+
+UNSET = _Unset()
+
+
 def update_goal(
     session: Session,
     goal: Goal,
     name: str | None = None,
     target_amount_paise: int | None = None,
     target_date: date | None = None,
+    inflation_pct_override: Decimal | None | _Unset = UNSET,
+    include_in_retirement_projection: bool | None = None,
 ) -> Goal:
     if target_date is not None:
         _validate_target_date(target_date)
@@ -51,6 +75,10 @@ def update_goal(
         goal.name = name
     if target_amount_paise is not None:
         goal.target_amount_paise = target_amount_paise
+    if not isinstance(inflation_pct_override, _Unset):
+        goal.inflation_pct_override = inflation_pct_override
+    if include_in_retirement_projection is not None:
+        goal.include_in_retirement_projection = include_in_retirement_projection
     goal.updated_at = datetime.now(UTC).replace(tzinfo=None)
     session.commit()
     return goal

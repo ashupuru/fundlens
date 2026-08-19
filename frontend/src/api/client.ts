@@ -434,6 +434,8 @@ export async function createGoal(
   name: string,
   targetAmountRupees: string,
   targetDate: string,
+  inflationPctOverride?: string | null,
+  includeInRetirementProjection = true,
 ): Promise<Goal> {
   const response = await fetch(`${API_BASE_URL}/goals`, {
     method: "POST",
@@ -442,6 +444,8 @@ export async function createGoal(
       name,
       target_amount_rupees: targetAmountRupees,
       target_date: targetDate,
+      inflation_pct_override: inflationPctOverride ?? null,
+      include_in_retirement_projection: includeInRetirementProjection,
     }),
   });
   if (!response.ok) {

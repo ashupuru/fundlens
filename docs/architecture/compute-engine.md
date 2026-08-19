@@ -878,9 +878,48 @@ negative corpus isn't a meaningful figure to display, and every later year would
 figures (not the rounding of their difference) so the three numbers shown together reconcile
 exactly on screen, the same requirement the Funds page's headline stats already hold to.
 
-**Deliberately deferred**, each its own follow-up phase: lump-sum life events against the same
-corpus (existing `Goal` rows feed in as withdrawals rather than inventing a second event
-concept), conservative/base/optimistic scenarios, reverse planning ("what SIP do I need?"),
-interactive what-if, Monte Carlo sequence-of-returns risk on the retirement corpus, and the
-healthcare / emergency-reserve / tax / terminal-corpus layers. The projection is pre-tax, and
-the UI says so alongside every assumption it used.
+**Deliberately deferred**, each its own follow-up phase: conservative/base/optimistic scenarios,
+reverse planning ("what SIP do I need?"), interactive what-if, Monte Carlo sequence-of-returns
+risk on the retirement corpus, and the healthcare / emergency-reserve / tax / terminal-corpus
+layers. The projection is pre-tax, and the UI says so alongside every assumption it used.
+
+## 17. Lump-Sum Life Events in the Retirement Projection (shipped — `compute/retirement.py`)
+
+Education, marriage, a house — one-off future costs that hit the same corpus retirement draws
+from. Rather than inventing a second "event" entity, these are the existing `Goal` rows (§10)
+read a second way: a goal is a dated, today's-rupees amount, which is exactly what an event is.
+
+**Why counting goals here isn't double-counting**: `GoalHolding` tagging *labels* holdings, it
+doesn't move money into a separate pot, and this projection's starting corpus is the entire
+portfolio — tagged holdings included. Ignoring goals would be the choice that overstates what's
+actually available for retirement.
+
+**But a goal can opt out** (`Goal.include_in_retirement_projection`, default true, migration
+`8a41c02b7f13`). Found immediately against real data: a goal literally named "Retirement"
+duplicates the projection's own income stream, so drawing it as a lump sum *as well* double-counts
+— on the real portfolio it swung readiness from 259% to 100%. The flag also covers goals funded
+from outside the portfolio. This is the "funding source" idea from the source spec, in its
+minimum honest form.
+
+**Per-goal inflation** (`Goal.inflation_pct_override`, migration `67373d8ea0e9`): education and
+healthcare inflate faster than the general rate, so a goal may override the global
+`inflation_pct`. Setting it to **0** is how a fixed nominal cost (a loan payoff) is expressed —
+deliberately *not* a separate `is_inflation_adjusted` boolean, which would be a second way to say
+the same thing. Because `None` means "use the global rate" and is therefore a meaningful stored
+value, `update_goal` needs an explicit `UNSET` sentinel to tell "clear the override" apart from
+"don't touch it" — a plain `None` default can't express both.
+
+**Whole-year bucketing**: an event's age is `current_age + floor(years until target_date)`, and
+it's inflated over exactly that many years. So an event shown in the age-55 row is inflated by
+precisely the number of rows between now and that row — the ledger stays internally consistent,
+rather than mixing fractional-year inflation into an integer-year table.
+
+**Events are claims, and claims can exceed the corpus.** A lump sum is taken after the year's
+growth and contribution, capped at what's actually there: the excess is reported as
+`lump_sum_shortfall_paise` rather than modelled as borrowing, and the corpus floors at zero.
+**Post-retirement events also raise the required corpus** (each discounted at the post-retirement
+return back to the retirement year) — they're claims on the same corpus as the income stream, so
+counting only the income stream would understate what's needed. Pre-retirement events instead
+reduce the *projected* corpus, via the simulation itself, and leave the required figure alone.
+Events falling after life expectancy, or whose target date has already passed, are reported with
+an `excluded_reason` rather than silently dropped.

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from fundlens.assumptions.service import GoalAssumptions
 from fundlens.compute.retirement import (
     ACCUMULATION,
+    EXCLUDED_BEYOND_LIFE_EXPECTANCY,
     REASON_ALREADY_RETIRED,
     REASON_INCOMPLETE,
     REASON_INVALID_AGES,
@@ -336,6 +337,230 @@ def test_incomplete_profile_reports_reason_and_no_fabricated_numbers(
     assert result.years == []
     assert result.corpus_at_retirement_paise is None
     assert result.readiness_pct is None
+
+
+def _add_goal(
+    session: Session,
+    name: str,
+    rupees: int,
+    years_from_now: int,
+    inflation_override: Decimal | None = None,
+    include_in_retirement: bool = True,
+) -> None:
+    from datetime import date, timedelta
+
+    from fundlens.db.models import Goal
+
+    session.add(
+        Goal(
+            name=name,
+            target_amount_paise=rupees * 100,
+            # +2 days of slack so integer-year flooring lands on the intended
+            # year regardless of leap days.
+            target_date=date.today() + timedelta(days=int(years_from_now * 365) + 2),
+            inflation_pct_override=inflation_override,
+            include_in_retirement_projection=include_in_retirement,
+        )
+    )
+    session.commit()
+
+
+def test_goal_opted_out_is_not_drawn_from_the_corpus(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The case this exists for: a goal literally tracking "retirement"
+    duplicates the projection's own income stream, so counting it as a
+    lump-sum spend too would double-count."""
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(
+        session, "Retirement", rupees=30_000_000, years_from_now=4,
+        include_in_retirement=False,
+    )
+    profile = _profile(current_age=51, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    assert result.events == []
+    assert result.total_lump_sum_paise == 0
+    assert all(y.lump_sum_paise == 0 for y in result.years)
+
+
+def test_goal_becomes_a_lump_sum_withdrawal_at_the_right_age(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rs 10,00,000 goal 3 years out, 0% inflation everywhere -> lands at age
+    # 53 (current 50) at exactly its today-cost, and the corpus that year
+    # drops by exactly that amount beyond the usual investment.
+    _seed_corpus(session, monkeypatch, 100_000_000)
+    _add_goal(session, "Education", rupees=1_000_000, years_from_now=3)
+    profile = _profile(
+        current_age=50, retirement_age=60, annual_investment_paise=0,
+        monthly_withdrawal_today_paise=1_000_000,
+    )
+
+    result = compute_retirement_projection(
+        session, profile, _assumptions(inflation="0", equity="0", debt="0")
+    )
+
+    event = result.events[0]
+    assert event.name == "Education"
+    assert event.age == 53
+    assert event.inflated_cost_paise == 100_000_000  # 0% inflation -> unchanged
+    assert event.excluded_reason is None
+
+    by_age = {y.age: y for y in result.years}
+    assert by_age[53].lump_sum_paise == 100_000_000
+    assert by_age[52].lump_sum_paise == 0
+    # No return, no investment -> the corpus falls by exactly the event.
+    assert by_age[53].closing_corpus_paise == by_age[53].opening_corpus_paise - 100_000_000
+
+
+def test_goal_cost_inflates_at_its_own_override_rate(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rs 25L education 4 years out at 8% (vs the 7% global rate):
+    # 25,00,000 * 1.08^4 = Rs 34,012,24.6... -> hand-computed below.
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(
+        session, "Education", rupees=2_500_000, years_from_now=4,
+        inflation_override=Decimal("8"),
+    )
+    profile = _profile(current_age=51, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions(inflation="7"))
+
+    event = result.events[0]
+    assert event.inflation_pct_used == Decimal("8")
+    expected = Decimal("250000000") * Decimal("1.08") ** 4
+    assert event.inflated_cost_paise is not None
+    assert abs(event.inflated_cost_paise - expected) < 1
+
+
+def test_goal_without_override_uses_the_global_inflation_rate(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(session, "Marriage", rupees=3_000_000, years_from_now=5)
+    profile = _profile(current_age=51, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions(inflation="7"))
+
+    event = result.events[0]
+    assert event.inflation_pct_used == Decimal("7")
+    expected = Decimal("300000000") * Decimal("1.07") ** 5
+    assert event.inflated_cost_paise is not None
+    assert abs(event.inflated_cost_paise - expected) < 1
+
+
+def test_zero_override_means_a_fixed_nominal_cost(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(
+        session, "Loan payoff", rupees=1_000_000, years_from_now=5,
+        inflation_override=Decimal("0"),
+    )
+    profile = _profile(current_age=51, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions(inflation="7"))
+
+    assert result.events[0].inflated_cost_paise == 100_000_000  # unchanged by inflation
+
+
+def test_post_retirement_event_raises_the_required_corpus(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A life event after retirement is a claim on the same corpus as the
+    income stream, so it must raise the required figure -- not just show up
+    in the year table."""
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=51, retirement_age=60, life_expectancy=85)
+
+    without = compute_retirement_projection(session, profile, _assumptions())
+
+    _add_goal(session, "Late-life travel", rupees=5_000_000, years_from_now=15)  # age 66
+    with_event = compute_retirement_projection(session, profile, _assumptions())
+
+    assert with_event.required_corpus_at_retirement_paise is not None
+    assert without.required_corpus_at_retirement_paise is not None
+    assert (
+        with_event.required_corpus_at_retirement_paise
+        > without.required_corpus_at_retirement_paise
+    )
+
+
+def test_pre_retirement_event_lowers_corpus_at_retirement_not_required_corpus(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=51, retirement_age=60, life_expectancy=85)
+
+    without = compute_retirement_projection(session, profile, _assumptions())
+
+    _add_goal(session, "Education", rupees=2_500_000, years_from_now=4)  # age 55
+    with_event = compute_retirement_projection(session, profile, _assumptions())
+
+    assert with_event.corpus_at_retirement_paise is not None
+    assert without.corpus_at_retirement_paise is not None
+    assert with_event.corpus_at_retirement_paise < without.corpus_at_retirement_paise
+    # A pre-retirement event isn't funded from the retirement corpus, so the
+    # required figure is untouched.
+    assert (
+        with_event.required_corpus_at_retirement_paise
+        == without.required_corpus_at_retirement_paise
+    )
+
+
+def test_event_larger_than_the_corpus_is_reported_as_a_shortfall_never_negative(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000)  # Rs 1L
+    _add_goal(session, "Impossible house", rupees=50_000_000, years_from_now=2)  # Rs 5 Cr
+    profile = _profile(
+        current_age=50, retirement_age=60, annual_investment_paise=0,
+        monthly_withdrawal_today_paise=1_000_000,
+    )
+
+    result = compute_retirement_projection(
+        session, profile, _assumptions(inflation="0", equity="0", debt="0")
+    )
+
+    by_age = {y.age: y for y in result.years}
+    assert by_age[52].lump_sum_shortfall_paise > 0
+    assert by_age[52].closing_corpus_paise == 0
+    assert all(y.closing_corpus_paise >= 0 for y in result.years)
+    assert result.total_lump_sum_shortfall_paise is not None
+    assert result.total_lump_sum_shortfall_paise > 0
+
+
+def test_goal_beyond_life_expectancy_is_excluded_with_a_reason(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(session, "Way out there", rupees=1_000_000, years_from_now=40)
+    profile = _profile(current_age=51, retirement_age=60, life_expectancy=85)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    event = result.events[0]
+    assert event.excluded_reason == EXCLUDED_BEYOND_LIFE_EXPECTANCY
+    assert event.inflated_cost_paise is None
+    assert all(y.lump_sum_paise == 0 for y in result.years)
+
+
+def test_multiple_events_in_one_year_are_summed(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    _add_goal(session, "A", rupees=1_000_000, years_from_now=3, inflation_override=Decimal("0"))
+    _add_goal(session, "B", rupees=2_000_000, years_from_now=3, inflation_override=Decimal("0"))
+    profile = _profile(current_age=50, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    by_age = {y.age: y for y in result.years}
+    assert by_age[53].lump_sum_paise == 300_000_000  # Rs 10L + Rs 20L
+    assert result.total_lump_sum_paise == 300_000_000
 
 
 def test_current_age_at_or_past_retirement_age_is_reported_not_projected(

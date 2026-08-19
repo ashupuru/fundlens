@@ -126,7 +126,20 @@ class RetirementYearResponse(BaseModel):
     investment_paise: int
     return_paise: int
     withdrawal_paise: int
+    lump_sum_paise: int
+    lump_sum_shortfall_paise: int
     closing_corpus_paise: int
+
+
+class PlannedEventResponse(BaseModel):
+    goal_id: str
+    name: str
+    target_date: str
+    age: int | None
+    today_cost_paise: int
+    inflated_cost_paise: int | None
+    inflation_pct_used: str | None
+    excluded_reason: str | None
 
 
 class RetirementProjectionResponse(BaseModel):
@@ -147,6 +160,9 @@ class RetirementProjectionResponse(BaseModel):
     first_year_monthly_withdrawal_paise: int | None
     depletion_age: int | None
     terminal_corpus_paise: int | None
+    total_lump_sum_paise: int | None
+    total_lump_sum_shortfall_paise: int | None
+    events: list[PlannedEventResponse]
     years: list[RetirementYearResponse]
 
 
@@ -173,6 +189,23 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
         first_year_monthly_withdrawal_paise=p.first_year_monthly_withdrawal_paise,
         depletion_age=p.depletion_age,
         terminal_corpus_paise=p.terminal_corpus_paise,
+        total_lump_sum_paise=p.total_lump_sum_paise,
+        total_lump_sum_shortfall_paise=p.total_lump_sum_shortfall_paise,
+        events=[
+            PlannedEventResponse(
+                goal_id=e.goal_id,
+                name=e.name,
+                target_date=e.target_date.isoformat(),
+                age=e.age,
+                today_cost_paise=e.today_cost_paise,
+                inflated_cost_paise=e.inflated_cost_paise,
+                inflation_pct_used=(
+                    str(e.inflation_pct_used) if e.inflation_pct_used is not None else None
+                ),
+                excluded_reason=e.excluded_reason,
+            )
+            for e in p.events
+        ],
         years=[
             RetirementYearResponse(
                 age=y.age,
@@ -181,6 +214,8 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
                 investment_paise=y.investment_paise,
                 return_paise=y.return_paise,
                 withdrawal_paise=y.withdrawal_paise,
+                lump_sum_paise=y.lump_sum_paise,
+                lump_sum_shortfall_paise=y.lump_sum_shortfall_paise,
                 closing_corpus_paise=y.closing_corpus_paise,
             )
             for y in p.years

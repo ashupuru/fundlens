@@ -33,6 +33,7 @@ risk, and the healthcare/emergency/tax/terminal-corpus layers.
 """
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy.orm import Session
@@ -40,9 +41,14 @@ from sqlalchemy.orm import Session
 from fundlens.assumptions.service import GoalAssumptions
 from fundlens.compute.goal import blended_expected_return_pct
 from fundlens.compute.metrics import compute_portfolio_metrics
-from fundlens.db.models import RiskProfile
+from fundlens.db.models import Goal, RiskProfile
+from fundlens.goals.service import list_goals
 
 _MONTHS_PER_YEAR = 12
+_DAYS_PER_YEAR = 365.0
+
+EXCLUDED_DATE_PASSED = "target_date_already_passed"
+EXCLUDED_BEYOND_LIFE_EXPECTANCY = "beyond_life_expectancy"
 
 ACCUMULATION = "accumulation"
 RETIREMENT = "retirement"
@@ -63,8 +69,24 @@ class RetirementYear:
     opening_corpus_paise: int
     investment_paise: int  # 0 once retired
     return_paise: int
-    withdrawal_paise: int  # 0 until retired
+    withdrawal_paise: int  # retirement income; 0 until retired
+    lump_sum_paise: int  # planned life events landing in this year
+    lump_sum_shortfall_paise: int  # events the corpus couldn't cover
     closing_corpus_paise: int
+
+
+@dataclass(frozen=True)
+class PlannedEvent:
+    """One `Goal` read as a future claim on the retirement corpus."""
+
+    goal_id: str
+    name: str
+    target_date: date
+    age: int | None  # None when excluded
+    today_cost_paise: int
+    inflated_cost_paise: int | None  # None when excluded
+    inflation_pct_used: Decimal | None
+    excluded_reason: str | None
 
 
 @dataclass(frozen=True)
@@ -89,6 +111,9 @@ class RetirementProjection:
     first_year_monthly_withdrawal_paise: int | None  # nominal, at retirement
     depletion_age: int | None  # None => corpus survives to life expectancy
     terminal_corpus_paise: int | None
+    total_lump_sum_paise: int | None
+    total_lump_sum_shortfall_paise: int | None
+    events: list[PlannedEvent]
     years: list[RetirementYear]
 
 
@@ -111,8 +136,94 @@ def _incomplete(reason: str) -> RetirementProjection:
         first_year_monthly_withdrawal_paise=None,
         depletion_age=None,
         terminal_corpus_paise=None,
+        total_lump_sum_paise=None,
+        total_lump_sum_shortfall_paise=None,
+        events=[],
         years=[],
     )
+
+
+def _plan_events(
+    goals: list[Goal],
+    current_age: int,
+    life_expectancy: int,
+    default_inflation_pct: Decimal,
+    today: date,
+) -> list[PlannedEvent]:
+    """Maps each `Goal` onto the age it lands at and inflates its cost to
+    that year.
+
+    **Goals are claims on the whole portfolio by default**, because that is
+    what they are: `GoalHolding` tagging labels holdings, it doesn't
+    segregate money into a separate pot, and this projection's starting
+    corpus is the *entire* portfolio (including any tagged holdings). So
+    counting a goal here is not double-counting -- ignoring goals entirely
+    would be the choice that overstates what's available for retirement.
+    A goal can opt out via `include_in_retirement_projection` when it is
+    already represented elsewhere (a goal tracking "retirement" itself
+    duplicates the income stream modelled below) or funded from outside.
+
+    Ages are whole years from today so an event shown in the age-55 row is
+    inflated by exactly the number of rows between now and that row -- the
+    table stays internally consistent, rather than mixing fractional-year
+    inflation into an integer-year ledger.
+    """
+    events: list[PlannedEvent] = []
+    for goal in goals:
+        if not goal.include_in_retirement_projection:
+            continue
+        inflation_pct = (
+            goal.inflation_pct_override
+            if goal.inflation_pct_override is not None
+            else default_inflation_pct
+        )
+        years_until = int((goal.target_date - today).days // _DAYS_PER_YEAR)
+
+        if years_until < 0:
+            events.append(
+                PlannedEvent(
+                    goal_id=goal.id,
+                    name=goal.name,
+                    target_date=goal.target_date,
+                    age=None,
+                    today_cost_paise=goal.target_amount_paise,
+                    inflated_cost_paise=None,
+                    inflation_pct_used=None,
+                    excluded_reason=EXCLUDED_DATE_PASSED,
+                )
+            )
+            continue
+
+        age = current_age + years_until
+        if age >= life_expectancy:
+            events.append(
+                PlannedEvent(
+                    goal_id=goal.id,
+                    name=goal.name,
+                    target_date=goal.target_date,
+                    age=age,
+                    today_cost_paise=goal.target_amount_paise,
+                    inflated_cost_paise=None,
+                    inflation_pct_used=None,
+                    excluded_reason=EXCLUDED_BEYOND_LIFE_EXPECTANCY,
+                )
+            )
+            continue
+
+        inflated = Decimal(goal.target_amount_paise) * (1 + inflation_pct / 100) ** years_until
+        events.append(
+            PlannedEvent(
+                goal_id=goal.id,
+                name=goal.name,
+                target_date=goal.target_date,
+                age=age,
+                today_cost_paise=goal.target_amount_paise,
+                inflated_cost_paise=_round_paise(inflated),
+                inflation_pct_used=inflation_pct,
+                excluded_reason=None,
+            )
+        )
+    return events
 
 
 def required_corpus_for_withdrawals(
@@ -191,6 +302,19 @@ def compute_retirement_projection(
     starting_corpus_paise = compute_portfolio_metrics(session).current_value_paise
     years_to_retirement = retirement_age - current_age
 
+    events = _plan_events(
+        list_goals(session), current_age, life_expectancy, inflation_pct, date.today()
+    )
+    lump_sum_by_age: dict[int, Decimal] = {}
+    for event in events:
+        if event.excluded_reason is None and event.age is not None:
+            assert event.inflated_cost_paise is not None
+            lump_sum_by_age[event.age] = lump_sum_by_age.get(
+                event.age, Decimal(0)
+            ) + Decimal(event.inflated_cost_paise)
+
+    total_shortfall = Decimal(0)
+
     corpus = Decimal(starting_corpus_paise)
     investment = Decimal(profile.annual_investment_paise)
     years: list[RetirementYear] = []
@@ -198,7 +322,18 @@ def compute_retirement_projection(
     for age in range(current_age, retirement_age):
         opening = corpus
         year_return = opening * pre_return_pct / 100
-        closing = opening + year_return + investment
+        available = opening + year_return + investment
+
+        # Lump sums come out after the year's growth and contribution, and
+        # can't take the corpus below zero: an event bigger than what's
+        # there is reported as a shortfall rather than silently modelled as
+        # borrowing.
+        lump_sum = lump_sum_by_age.get(age, Decimal(0))
+        funded = min(lump_sum, max(available, Decimal(0)))
+        shortfall = lump_sum - funded
+        total_shortfall += shortfall
+        closing = available - funded
+
         years.append(
             RetirementYear(
                 age=age,
@@ -207,6 +342,8 @@ def compute_retirement_projection(
                 investment_paise=_round_paise(investment),
                 return_paise=_round_paise(year_return),
                 withdrawal_paise=0,
+                lump_sum_paise=_round_paise(funded),
+                lump_sum_shortfall_paise=_round_paise(shortfall),
                 closing_corpus_paise=_round_paise(closing),
             )
         )
@@ -226,16 +363,30 @@ def compute_retirement_projection(
     first_year_monthly_withdrawal = annual_withdrawal / _MONTHS_PER_YEAR
 
     retirement_years = life_expectancy - retirement_age
+    # Required corpus must cover the income stream *and* any life events
+    # falling after retirement -- both are claims on the same corpus, so
+    # counting only the income stream would understate what's needed.
     required_corpus = required_corpus_for_withdrawals(
         annual_withdrawal, post_return_pct, inflation_pct, retirement_years
     )
+    for event_age, amount in lump_sum_by_age.items():
+        if event_age >= retirement_age:
+            required_corpus += amount / (1 + post_return_pct / 100) ** (
+                event_age - retirement_age
+            )
 
     depletion_age: int | None = None
     withdrawal = annual_withdrawal
     for age in range(retirement_age, life_expectancy):
         opening = corpus
         year_return = opening * post_return_pct / 100
-        closing = opening + year_return - withdrawal
+        after_income = opening + year_return - withdrawal
+
+        lump_sum = lump_sum_by_age.get(age, Decimal(0))
+        funded = min(lump_sum, max(after_income, Decimal(0)))
+        shortfall = lump_sum - funded
+        total_shortfall += shortfall
+        closing = after_income - funded
 
         depleted = closing < 0
         if depleted:
@@ -253,6 +404,8 @@ def compute_retirement_projection(
                 investment_paise=0,
                 return_paise=_round_paise(year_return),
                 withdrawal_paise=_round_paise(withdrawal),
+                lump_sum_paise=_round_paise(funded),
+                lump_sum_shortfall_paise=_round_paise(shortfall),
                 closing_corpus_paise=_round_paise(closing),
             )
         )
@@ -291,5 +444,8 @@ def compute_retirement_projection(
         first_year_monthly_withdrawal_paise=_round_paise(first_year_monthly_withdrawal),
         depletion_age=depletion_age,
         terminal_corpus_paise=_round_paise(corpus),
+        total_lump_sum_paise=_round_paise(sum(lump_sum_by_age.values(), Decimal(0))),
+        total_lump_sum_shortfall_paise=_round_paise(total_shortfall),
+        events=events,
         years=years,
     )

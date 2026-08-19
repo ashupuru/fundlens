@@ -1003,6 +1003,13 @@ export interface components {
              * Format: date
              */
             target_date: string;
+            /** Inflation Pct Override */
+            inflation_pct_override?: string | null;
+            /**
+             * Include In Retirement Projection
+             * @default true
+             */
+            include_in_retirement_projection: boolean;
         };
         /** DataFreshnessResponse */
         DataFreshnessResponse: {
@@ -1297,6 +1304,10 @@ export interface components {
              * Format: date
              */
             target_date: string;
+            /** Inflation Pct Override */
+            inflation_pct_override: string | null;
+            /** Include In Retirement Projection */
+            include_in_retirement_projection: boolean;
             /** Created At */
             created_at: string;
             /** Updated At */
@@ -1432,6 +1443,25 @@ export interface components {
             text: string;
             /** Source Url */
             source_url: string | null;
+        };
+        /** PlannedEventResponse */
+        PlannedEventResponse: {
+            /** Goal Id */
+            goal_id: string;
+            /** Name */
+            name: string;
+            /** Target Date */
+            target_date: string;
+            /** Age */
+            age: number | null;
+            /** Today Cost Paise */
+            today_cost_paise: number;
+            /** Inflated Cost Paise */
+            inflated_cost_paise: number | null;
+            /** Inflation Pct Used */
+            inflation_pct_used: string | null;
+            /** Excluded Reason */
+            excluded_reason: string | null;
         };
         /** PortfolioBenchmarkComparisonResponse */
         PortfolioBenchmarkComparisonResponse: {
@@ -1586,6 +1616,12 @@ export interface components {
             depletion_age: number | null;
             /** Terminal Corpus Paise */
             terminal_corpus_paise: number | null;
+            /** Total Lump Sum Paise */
+            total_lump_sum_paise: number | null;
+            /** Total Lump Sum Shortfall Paise */
+            total_lump_sum_shortfall_paise: number | null;
+            /** Events */
+            events: components["schemas"]["PlannedEventResponse"][];
             /** Years */
             years: components["schemas"]["RetirementYearResponse"][];
         };
@@ -1603,6 +1639,10 @@ export interface components {
             return_paise: number;
             /** Withdrawal Paise */
             withdrawal_paise: number;
+            /** Lump Sum Paise */
+            lump_sum_paise: number;
+            /** Lump Sum Shortfall Paise */
+            lump_sum_shortfall_paise: number;
             /** Closing Corpus Paise */
             closing_corpus_paise: number;
         };
@@ -1784,6 +1824,10 @@ export interface components {
             target_amount_rupees?: string | null;
             /** Target Date */
             target_date?: string | null;
+            /** Inflation Pct Override */
+            inflation_pct_override?: string | null;
+            /** Include In Retirement Projection */
+            include_in_retirement_projection?: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
