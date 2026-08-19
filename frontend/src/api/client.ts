@@ -123,6 +123,9 @@ export async function setRetirementProfile(request: {
   annual_investment_step_up_pct?: string | null;
   monthly_withdrawal_today_rupees?: string | null;
   post_retirement_return_pct?: string | null;
+  emergency_reserve_rupees?: string | null;
+  annual_healthcare_today_rupees?: string | null;
+  desired_terminal_corpus_today_rupees?: string | null;
 }): Promise<RetirementProfile> {
   const response = await fetch(`${API_BASE_URL}/retirement/profile`, {
     method: "POST",

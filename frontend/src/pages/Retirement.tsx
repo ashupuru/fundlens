@@ -39,6 +39,19 @@ function RetirementForm({
       : "",
   );
   const [postReturn, setPostReturn] = useState(initial?.post_retirement_return_pct ?? "");
+  const [reserve, setReserve] = useState(
+    initial?.emergency_reserve_paise != null ? String(initial.emergency_reserve_paise / 100) : "",
+  );
+  const [healthcare, setHealthcare] = useState(
+    initial?.annual_healthcare_today_paise != null
+      ? String(initial.annual_healthcare_today_paise / 100)
+      : "",
+  );
+  const [terminal, setTerminal] = useState(
+    initial?.desired_terminal_corpus_today_paise != null
+      ? String(initial.desired_terminal_corpus_today_paise / 100)
+      : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +68,9 @@ function RetirementForm({
         annual_investment_step_up_pct: stepUp === "" ? null : stepUp,
         monthly_withdrawal_today_rupees: monthlyWithdrawal === "" ? null : monthlyWithdrawal,
         post_retirement_return_pct: postReturn === "" ? null : postReturn,
+        emergency_reserve_rupees: reserve === "" ? null : reserve,
+        annual_healthcare_today_rupees: healthcare === "" ? null : healthcare,
+        desired_terminal_corpus_today_rupees: terminal === "" ? null : terminal,
       });
       onSaved();
     } catch (err) {
@@ -118,6 +134,38 @@ function RetirementForm({
             placeholder="same as pre-retirement"
             value={postReturn}
             onChange={(e) => setPostReturn(e.target.value)}
+          />
+        </label>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
+        <label style={field}>
+          Emergency reserve (₹)
+          <input
+            type="number"
+            placeholder="not set aside"
+            value={reserve}
+            onChange={(e) => setReserve(e.target.value)}
+            title="Held back from the projection — real money, but not available to fund retirement."
+          />
+        </label>
+        <label style={field}>
+          Healthcare / yr, today's ₹
+          <input
+            type="number"
+            placeholder="none"
+            value={healthcare}
+            onChange={(e) => setHealthcare(e.target.value)}
+            title="Post-retirement healthcare, escalating at its own (higher) inflation rate."
+          />
+        </label>
+        <label style={field}>
+          Leave behind (today's ₹)
+          <input
+            type="number"
+            placeholder="nothing"
+            value={terminal}
+            onChange={(e) => setTerminal(e.target.value)}
+            title="Money you want preserved at life expectancy — it can't also be spent, so it raises the corpus you need."
           />
         </label>
       </div>

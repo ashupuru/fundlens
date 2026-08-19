@@ -72,6 +72,10 @@ class AssumptionKey(enum.StrEnum):
     # pessimistic is the pessimistic case" stays a single legible number.
     SCENARIO_RETURN_DELTA_PCT = "scenario_return_delta_pct"
     SCENARIO_INFLATION_DELTA_PCT = "scenario_inflation_delta_pct"
+    # Healthcare inflates materially faster than the general basket, so the
+    # retirement projection escalates it separately (compute-engine.md §22)
+    # rather than folding it into the general figure.
+    HEALTHCARE_INFLATION_PCT = "healthcare_inflation_pct"
 
 
 DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
@@ -112,6 +116,10 @@ DEFAULT_ASSUMPTIONS: dict[AssumptionKey, str] = {
     # forecast of how wrong the base case might be.
     AssumptionKey.SCENARIO_RETURN_DELTA_PCT: "2",
     AssumptionKey.SCENARIO_INFLATION_DELTA_PCT: "1",
+    # The figure the source spec itself uses for healthcare. Editable, and
+    # not asserted as a forecast -- but consistently higher than general
+    # inflation is the well-attested part, not the exact number.
+    AssumptionKey.HEALTHCARE_INFLATION_PCT: "10",
 }
 
 
@@ -294,6 +302,18 @@ def get_current_monte_carlo_assumptions(session: Session) -> MonteCarloAssumptio
 class ScenarioAssumptions:
     return_delta_pct: Decimal
     inflation_delta_pct: Decimal
+
+
+@dataclass(frozen=True)
+class HealthcareAssumptions:
+    healthcare_inflation_pct: Decimal
+
+
+def get_current_healthcare_assumptions(session: Session) -> HealthcareAssumptions:
+    values = get_current_values(session)
+    return HealthcareAssumptions(
+        healthcare_inflation_pct=Decimal(values[AssumptionKey.HEALTHCARE_INFLATION_PCT.value])
+    )
 
 
 def get_current_scenario_assumptions(session: Session) -> ScenarioAssumptions:

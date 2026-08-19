@@ -146,6 +146,8 @@ def run_retirement_monte_carlo(
     life_expectancy: int,
     first_year_withdrawal_paise: int,
     lump_sum_by_age: dict[int, int],
+    first_year_healthcare_paise: int = 0,
+    healthcare_inflation_pct: Decimal | None = None,
     pre_return_pct: Decimal,
     post_return_pct: Decimal,
     volatility_pct: Decimal,
@@ -212,14 +214,19 @@ def run_retirement_monte_carlo(
         investment *= 1 + float(step_up_pct) / 100
 
     withdrawal = float(first_year_withdrawal_paise)
+    healthcare = float(first_year_healthcare_paise)
+    healthcare_growth = 1 + float(
+        healthcare_inflation_pct if healthcare_inflation_pct is not None else inflation_pct
+    ) / 100
     for i in range(retirement_years):
         age = retirement_age + i
-        corpus = corpus * (1 + returns[:, accumulation_years + i]) - withdrawal
+        corpus = corpus * (1 + returns[:, accumulation_years + i]) - withdrawal - healthcare
         corpus = corpus - lump_sum_by_age.get(age, 0)
         newly_depleted = (corpus <= 0) & (depleted_at < 0)
         depleted_at = np.where(newly_depleted, age, depleted_at)
         corpus = np.maximum(corpus, 0.0)
         withdrawal *= 1 + float(inflation_pct) / 100
+        healthcare *= healthcare_growth
 
     survived = depleted_at < 0
     failures = depleted_at[~survived]

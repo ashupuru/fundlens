@@ -824,3 +824,145 @@ def test_additional_investment_is_the_gap_above_what_is_already_planned(
     assert result.required_monthly_investment_paise == round(
         result.required_annual_investment_paise / 12
     )
+
+
+def test_emergency_reserve_is_carved_out_of_the_investable_corpus(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 10_000_000_000)  # Rs 1 Cr
+    profile = _profile(current_age=59, retirement_age=60, emergency_reserve_paise=2_000_000_000)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    assert result.total_portfolio_paise == 10_000_000_000
+    assert result.emergency_reserve_paise == 2_000_000_000
+    assert result.starting_corpus_paise == 8_000_000_000  # Rs 80 L invested
+    assert result.years[0].opening_corpus_paise == 8_000_000_000
+
+
+def test_reserve_larger_than_the_portfolio_floors_at_zero(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 100_000_000)
+    profile = _profile(current_age=59, retirement_age=60, emergency_reserve_paise=500_000_000)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    assert result.starting_corpus_paise == 0  # not negative
+
+
+def test_healthcare_escalates_at_its_own_rate_not_general_inflation(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rs 1L/yr today at 10% healthcare inflation, retiring in 1 year:
+    # first retirement year = 100000 * 1.10 = Rs 1,10,000, then +10%/yr
+    # while the general withdrawal escalates at only 7%.
+    _seed_corpus(session, monkeypatch, 100_000_000_000)
+    profile = _profile(
+        current_age=59, retirement_age=60, life_expectancy=64,
+        annual_healthcare_today_paise=10_000_000,
+    )
+
+    result = compute_retirement_projection(
+        session, profile, _assumptions(inflation="7"), healthcare_inflation_pct=Decimal("10")
+    )
+
+    assert result.healthcare_inflation_pct == Decimal("10")
+    assert result.first_year_annual_healthcare_paise == 11_000_000  # 1L * 1.10
+
+    retirement_years = [y for y in result.years if y.phase == RETIREMENT]
+    for n, year in enumerate(retirement_years):
+        expected = Decimal("11000000") * Decimal("1.10") ** n
+        assert abs(Decimal(year.healthcare_paise) - expected) <= n + 1
+
+    # ...and it really is a separate stream from the general withdrawal.
+    assert retirement_years[0].withdrawal_paise != retirement_years[0].healthcare_paise
+
+
+def test_healthcare_raises_the_required_corpus(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 100_000_000_000)
+    plain = compute_retirement_projection(
+        session, _profile(current_age=51, retirement_age=60), _assumptions()
+    )
+    with_healthcare = compute_retirement_projection(
+        session,
+        _profile(current_age=51, retirement_age=60, annual_healthcare_today_paise=20_000_000),
+        _assumptions(),
+        healthcare_inflation_pct=Decimal("10"),
+    )
+
+    assert (
+        with_healthcare.required_corpus_at_retirement_paise
+        > plain.required_corpus_at_retirement_paise
+    )
+
+
+def test_desired_terminal_corpus_raises_the_requirement_and_is_reported_inflated(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rs 1 Cr in today's money, 34 years to life expectancy at 7%:
+    # 1 Cr * 1.07^34 -- reported as the nominal figure actually needed then.
+    _seed_corpus(session, monkeypatch, 100_000_000_000)
+    plain = compute_retirement_projection(
+        session, _profile(current_age=51, retirement_age=60), _assumptions()
+    )
+    with_terminal = compute_retirement_projection(
+        session,
+        _profile(
+            current_age=51, retirement_age=60,
+            desired_terminal_corpus_today_paise=1_000_000_000,
+        ),
+        _assumptions(inflation="7"),
+    )
+
+    expected = Decimal("1000000000") * Decimal("1.07") ** 34
+    assert with_terminal.desired_terminal_corpus_paise is not None
+    assert abs(with_terminal.desired_terminal_corpus_paise - expected) < 100
+    assert (
+        with_terminal.required_corpus_at_retirement_paise
+        > plain.required_corpus_at_retirement_paise
+    )
+
+
+def test_terminal_corpus_target_met_flag_tracks_the_final_balance(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed_corpus(session, monkeypatch, 500_000_000_000)  # Rs 50 Cr -- plenty left over
+    rich = compute_retirement_projection(
+        session,
+        _profile(
+            current_age=59, retirement_age=60,
+            desired_terminal_corpus_today_paise=1_000_000_000,
+        ),
+        _assumptions(),
+    )
+    assert rich.terminal_corpus_target_met is True
+
+    _seed_corpus(session, monkeypatch, 100_000_000)  # depletes
+    poor = compute_retirement_projection(
+        session,
+        _profile(
+            current_age=59, retirement_age=60, annual_investment_paise=0,
+            desired_terminal_corpus_today_paise=1_000_000_000,
+        ),
+        _assumptions(),
+    )
+    assert poor.terminal_corpus_target_met is False
+
+
+def test_new_inputs_are_inert_when_unset(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An existing plan that predates these fields must project identically."""
+    _seed_corpus(session, monkeypatch, 10_000_000_000)
+    profile = _profile(current_age=51, retirement_age=60)
+
+    result = compute_retirement_projection(session, profile, _assumptions())
+
+    assert result.emergency_reserve_paise == 0
+    assert result.starting_corpus_paise == result.total_portfolio_paise
+    assert result.first_year_annual_healthcare_paise == 0
+    assert result.desired_terminal_corpus_paise == 0
+    assert all(y.healthcare_paise == 0 for y in result.years)

@@ -22,6 +22,7 @@ from fundlens.allocation.service import (
 from fundlens.api.deps import get_session
 from fundlens.assumptions.service import (
     get_current_goal_assumptions,
+    get_current_healthcare_assumptions,
     get_current_monte_carlo_assumptions,
     get_current_scenario_assumptions,
 )
@@ -45,6 +46,9 @@ class RetirementProfileRequest(BaseModel):
     annual_investment_step_up_pct: str | None = None
     monthly_withdrawal_today_rupees: str | None = None
     post_retirement_return_pct: str | None = None
+    emergency_reserve_rupees: str | None = None
+    annual_healthcare_today_rupees: str | None = None
+    desired_terminal_corpus_today_rupees: str | None = None
 
 
 class RetirementProfileResponse(BaseModel):
@@ -55,6 +59,9 @@ class RetirementProfileResponse(BaseModel):
     annual_investment_step_up_pct: str | None
     monthly_withdrawal_today_paise: int | None
     post_retirement_return_pct: str | None
+    emergency_reserve_paise: int | None
+    annual_healthcare_today_paise: int | None
+    desired_terminal_corpus_today_paise: int | None
 
 
 def _profile_response(profile: RiskProfile) -> RetirementProfileResponse:
@@ -77,6 +84,9 @@ def _profile_response(profile: RiskProfile) -> RetirementProfileResponse:
             if profile.post_retirement_return_pct is not None
             else None
         ),
+        emergency_reserve_paise=profile.emergency_reserve_paise,
+        annual_healthcare_today_paise=profile.annual_healthcare_today_paise,
+        desired_terminal_corpus_today_paise=profile.desired_terminal_corpus_today_paise,
     )
 
 
@@ -123,6 +133,21 @@ def post_retirement_profile(
                 if request.post_retirement_return_pct
                 else None
             ),
+            emergency_reserve_paise=(
+                to_paise_strict(Decimal(request.emergency_reserve_rupees))
+                if request.emergency_reserve_rupees
+                else None
+            ),
+            annual_healthcare_today_paise=(
+                to_paise_strict(Decimal(request.annual_healthcare_today_rupees))
+                if request.annual_healthcare_today_rupees
+                else None
+            ),
+            desired_terminal_corpus_today_paise=(
+                to_paise_strict(Decimal(request.desired_terminal_corpus_today_rupees))
+                if request.desired_terminal_corpus_today_rupees
+                else None
+            ),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -136,6 +161,7 @@ class RetirementYearResponse(BaseModel):
     investment_paise: int
     return_paise: int
     withdrawal_paise: int
+    healthcare_paise: int
     lump_sum_paise: int
     lump_sum_shortfall_paise: int
     closing_corpus_paise: int
@@ -158,6 +184,8 @@ class RetirementProjectionResponse(BaseModel):
     retirement_age: int | None
     life_expectancy: int | None
     years_to_retirement: int | None
+    total_portfolio_paise: int | None
+    emergency_reserve_paise: int | None
     starting_corpus_paise: int | None
     blended_return_pct: str | None
     post_retirement_return_pct: str | None
@@ -173,6 +201,10 @@ class RetirementProjectionResponse(BaseModel):
     terminal_corpus_paise: int | None
     total_lump_sum_paise: int | None
     total_lump_sum_shortfall_paise: int | None
+    first_year_annual_healthcare_paise: int | None
+    healthcare_inflation_pct: str | None
+    desired_terminal_corpus_paise: int | None
+    terminal_corpus_target_met: bool | None
     current_annual_investment_paise: int | None
     required_annual_investment_paise: int | None
     required_monthly_investment_paise: int | None
@@ -188,6 +220,8 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
         retirement_age=p.retirement_age,
         life_expectancy=p.life_expectancy,
         years_to_retirement=p.years_to_retirement,
+        total_portfolio_paise=p.total_portfolio_paise,
+        emergency_reserve_paise=p.emergency_reserve_paise,
         starting_corpus_paise=p.starting_corpus_paise,
         blended_return_pct=str(p.blended_return_pct) if p.blended_return_pct is not None else None,
         post_retirement_return_pct=(
@@ -207,6 +241,12 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
         terminal_corpus_paise=p.terminal_corpus_paise,
         total_lump_sum_paise=p.total_lump_sum_paise,
         total_lump_sum_shortfall_paise=p.total_lump_sum_shortfall_paise,
+        first_year_annual_healthcare_paise=p.first_year_annual_healthcare_paise,
+        healthcare_inflation_pct=(
+            str(p.healthcare_inflation_pct) if p.healthcare_inflation_pct is not None else None
+        ),
+        desired_terminal_corpus_paise=p.desired_terminal_corpus_paise,
+        terminal_corpus_target_met=p.terminal_corpus_target_met,
         current_annual_investment_paise=p.current_annual_investment_paise,
         required_annual_investment_paise=p.required_annual_investment_paise,
         required_monthly_investment_paise=p.required_monthly_investment_paise,
@@ -234,6 +274,7 @@ def _to_response(p: RetirementProjection) -> RetirementProjectionResponse:
                 investment_paise=y.investment_paise,
                 return_paise=y.return_paise,
                 withdrawal_paise=y.withdrawal_paise,
+                healthcare_paise=y.healthcare_paise,
                 lump_sum_paise=y.lump_sum_paise,
                 lump_sum_shortfall_paise=y.lump_sum_shortfall_paise,
                 closing_corpus_paise=y.closing_corpus_paise,
@@ -294,6 +335,9 @@ def get_retirement_projection(
             assumptions,
             return_delta_pct=deltas[0],
             inflation_delta_pct=deltas[1],
+            healthcare_inflation_pct=get_current_healthcare_assumptions(
+                session
+            ).healthcare_inflation_pct,
         )
     )
 
@@ -362,7 +406,14 @@ def get_retirement_monte_carlo(
         )
 
     assumptions = get_current_goal_assumptions(session)
-    projection = compute_retirement_projection(session, profile, assumptions)
+    projection = compute_retirement_projection(
+        session,
+        profile,
+        assumptions,
+        healthcare_inflation_pct=get_current_healthcare_assumptions(
+            session
+        ).healthcare_inflation_pct,
+    )
     if projection.reason is not None:
         raise HTTPException(status_code=404, detail=projection.reason)
 
@@ -388,6 +439,8 @@ def get_retirement_monte_carlo(
         retirement_age=projection.retirement_age or 0,
         life_expectancy=projection.life_expectancy or 0,
         first_year_withdrawal_paise=projection.first_year_annual_withdrawal_paise or 0,
+        first_year_healthcare_paise=projection.first_year_annual_healthcare_paise or 0,
+        healthcare_inflation_pct=projection.healthcare_inflation_pct,
         lump_sum_by_age=lump_sum_by_age,
         pre_return_pct=projection.blended_return_pct or Decimal(0),
         post_return_pct=projection.post_retirement_return_pct or Decimal(0),

@@ -70,6 +70,7 @@ class RetirementYear:
     investment_paise: int  # 0 once retired
     return_paise: int
     withdrawal_paise: int  # retirement income; 0 until retired
+    healthcare_paise: int  # post-retirement healthcare, escalating separately
     lump_sum_paise: int  # planned life events landing in this year
     lump_sum_shortfall_paise: int  # events the corpus couldn't cover
     closing_corpus_paise: int
@@ -99,7 +100,9 @@ class RetirementProjection:
     retirement_age: int | None
     life_expectancy: int | None
     years_to_retirement: int | None
-    starting_corpus_paise: int | None
+    total_portfolio_paise: int | None  # everything, before the reserve carve-out
+    emergency_reserve_paise: int | None
+    starting_corpus_paise: int | None  # investable: total minus the reserve
     blended_return_pct: Decimal | None
     post_retirement_return_pct: Decimal | None
     inflation_pct: Decimal | None
@@ -117,6 +120,10 @@ class RetirementProjection:
     terminal_corpus_paise: int | None
     total_lump_sum_paise: int | None
     total_lump_sum_shortfall_paise: int | None
+    first_year_annual_healthcare_paise: int | None  # nominal, at retirement
+    healthcare_inflation_pct: Decimal | None
+    desired_terminal_corpus_paise: int | None  # inflated to life expectancy
+    terminal_corpus_target_met: bool | None
     # Reverse planning: what the annual contribution would have to be to
     # land exactly on `required_corpus_at_retirement_paise`.
     current_annual_investment_paise: int | None  # what the plan says today
@@ -134,6 +141,8 @@ def _incomplete(reason: str) -> RetirementProjection:
         retirement_age=None,
         life_expectancy=None,
         years_to_retirement=None,
+        total_portfolio_paise=None,
+        emergency_reserve_paise=None,
         starting_corpus_paise=None,
         blended_return_pct=None,
         post_retirement_return_pct=None,
@@ -149,6 +158,10 @@ def _incomplete(reason: str) -> RetirementProjection:
         terminal_corpus_paise=None,
         total_lump_sum_paise=None,
         total_lump_sum_shortfall_paise=None,
+        first_year_annual_healthcare_paise=None,
+        healthcare_inflation_pct=None,
+        desired_terminal_corpus_paise=None,
+        terminal_corpus_target_met=None,
         current_annual_investment_paise=None,
         required_annual_investment_paise=None,
         required_monthly_investment_paise=None,
@@ -311,6 +324,7 @@ def compute_retirement_projection(
     return_delta_pct: Decimal = Decimal(0),
     inflation_delta_pct: Decimal = Decimal(0),
     starting_corpus_paise: int | None = None,
+    healthcare_inflation_pct: Decimal | None = None,
 ) -> RetirementProjection:
     """`*_delta_pct` shift the return and inflation assumptions for scenario
     analysis (see `compute_retirement_scenarios`); both default to 0, so the
@@ -358,7 +372,29 @@ def compute_retirement_projection(
 
     if starting_corpus_paise is None:
         starting_corpus_paise = compute_portfolio_metrics(session).current_value_paise
+    total_portfolio_paise = starting_corpus_paise
+
+    # The emergency reserve is real money in the portfolio but explicitly not
+    # available to fund retirement, so the projection compounds only what's
+    # left (spec §12). Floored at zero: a reserve larger than the portfolio
+    # means nothing is investable, not a negative corpus.
+    reserve_paise = profile.emergency_reserve_paise or 0
+    starting_corpus_paise = max(total_portfolio_paise - reserve_paise, 0)
+
     years_to_retirement = retirement_age - current_age
+
+    # Healthcare escalates at its own, typically higher rate (spec §13) --
+    # a second stream rather than a bigger general withdrawal, because
+    # blending the two would understate it in later years.
+    healthcare_inflation = (
+        healthcare_inflation_pct if healthcare_inflation_pct is not None else inflation_pct
+    ) + inflation_delta_pct
+    annual_healthcare = (
+        Decimal(profile.annual_healthcare_today_paise)
+        * (1 + healthcare_inflation / 100) ** years_to_retirement
+        if profile.annual_healthcare_today_paise
+        else Decimal(0)
+    )
 
     events = _plan_events(
         list_goals(session),
@@ -405,6 +441,7 @@ def compute_retirement_projection(
                 investment_paise=_round_paise(investment),
                 return_paise=_round_paise(year_return),
                 withdrawal_paise=0,
+                healthcare_paise=0,
                 lump_sum_paise=_round_paise(funded),
                 lump_sum_shortfall_paise=_round_paise(shortfall),
                 closing_corpus_paise=_round_paise(closing),
@@ -432,18 +469,39 @@ def compute_retirement_projection(
     required_corpus = required_corpus_for_withdrawals(
         annual_withdrawal, post_return_pct, inflation_pct, retirement_years
     )
+    # Healthcare is its own growing annuity -- same formula, its own rate.
+    required_corpus += required_corpus_for_withdrawals(
+        annual_healthcare, post_return_pct, healthcare_inflation, retirement_years
+    )
     for event_age, amount in lump_sum_by_age.items():
         if event_age >= retirement_age:
             required_corpus += amount / (1 + post_return_pct / 100) ** (
                 event_age - retirement_age
             )
 
+    # Money the user wants left behind can't also be spent, so the corpus
+    # needed at retirement includes its present value (spec §23). Entered in
+    # today's rupees and inflated to life expectancy, matching how the
+    # monthly requirement is handled -- "leave Rs 1 Cr" means Rs 1 Cr of
+    # today's purchasing power, not a nominal figure worth far less by then.
+    desired_terminal_corpus = (
+        Decimal(profile.desired_terminal_corpus_today_paise)
+        * (1 + inflation_pct / 100) ** (life_expectancy - current_age)
+        if profile.desired_terminal_corpus_today_paise
+        else Decimal(0)
+    )
+    if desired_terminal_corpus > 0:
+        required_corpus += desired_terminal_corpus / (1 + post_return_pct / 100) ** (
+            retirement_years
+        )
+
     depletion_age: int | None = None
     withdrawal = annual_withdrawal
+    healthcare = annual_healthcare
     for age in range(retirement_age, life_expectancy):
         opening = corpus
         year_return = opening * post_return_pct / 100
-        after_income = opening + year_return - withdrawal
+        after_income = opening + year_return - withdrawal - healthcare
 
         lump_sum = lump_sum_by_age.get(age, Decimal(0))
         funded = min(lump_sum, max(after_income, Decimal(0)))
@@ -467,6 +525,7 @@ def compute_retirement_projection(
                 investment_paise=0,
                 return_paise=_round_paise(year_return),
                 withdrawal_paise=_round_paise(withdrawal),
+                healthcare_paise=_round_paise(healthcare),
                 lump_sum_paise=_round_paise(funded),
                 lump_sum_shortfall_paise=_round_paise(shortfall),
                 closing_corpus_paise=_round_paise(closing),
@@ -476,6 +535,7 @@ def compute_retirement_projection(
         if depleted:
             break
         withdrawal = withdrawal * (1 + inflation_pct / 100)
+        healthcare = healthcare * (1 + healthcare_inflation / 100)
 
     # Surplus is the difference of the *rounded* figures, not the rounding of
     # the difference: these three numbers are shown together, and a reader
@@ -540,6 +600,8 @@ def compute_retirement_projection(
         retirement_age=retirement_age,
         life_expectancy=life_expectancy,
         years_to_retirement=years_to_retirement,
+        total_portfolio_paise=total_portfolio_paise,
+        emergency_reserve_paise=reserve_paise,
         starting_corpus_paise=starting_corpus_paise,
         blended_return_pct=pre_return_pct,
         post_retirement_return_pct=post_return_pct,
@@ -555,6 +617,10 @@ def compute_retirement_projection(
         terminal_corpus_paise=_round_paise(corpus),
         total_lump_sum_paise=_round_paise(sum(lump_sum_by_age.values(), Decimal(0))),
         total_lump_sum_shortfall_paise=_round_paise(total_shortfall),
+        first_year_annual_healthcare_paise=_round_paise(annual_healthcare),
+        healthcare_inflation_pct=healthcare_inflation,
+        desired_terminal_corpus_paise=_round_paise(desired_terminal_corpus),
+        terminal_corpus_target_met=corpus >= desired_terminal_corpus,
         current_annual_investment_paise=profile.annual_investment_paise,
         required_annual_investment_paise=required_annual_investment_paise,
         required_monthly_investment_paise=required_monthly_investment_paise,

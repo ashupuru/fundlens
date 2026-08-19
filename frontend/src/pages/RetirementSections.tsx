@@ -91,6 +91,15 @@ export function ReadinessSection({ p }: { p: RetirementProjection }) {
           </div>
         )}
 
+      {(p.emergency_reserve_paise ?? 0) > 0 && (
+        <p className="muted" style={{ marginBottom: 20 }}>
+          Projecting from {formatPaise(p.starting_corpus_paise ?? 0)} —
+          your {formatPaise(p.total_portfolio_paise ?? 0)} portfolio less the{" "}
+          {formatPaise(p.emergency_reserve_paise ?? 0)} emergency reserve, which is held back
+          rather than invested for retirement.
+        </p>
+      )}
+
       <div className="card">
         <h3>Retirement income</h3>
         <table>
@@ -106,6 +115,27 @@ export function ReadinessSection({ p }: { p: RetirementProjection }) {
               </td>
               <td>{formatPaise(p.first_year_monthly_withdrawal_paise ?? 0)}</td>
             </tr>
+            {(p.first_year_annual_healthcare_paise ?? 0) > 0 && (
+              <tr>
+                <td>
+                  Healthcare at {p.retirement_age}
+                  <span className="muted"> (own inflation {p.healthcare_inflation_pct}%/yr)</span>
+                </td>
+                <td>{formatPaise(p.first_year_annual_healthcare_paise ?? 0)}/yr</td>
+              </tr>
+            )}
+            {(p.desired_terminal_corpus_paise ?? 0) > 0 && (
+              <tr>
+                <td>
+                  To leave behind at {p.life_expectancy}
+                  <span className="muted"> (your target, inflated)</span>
+                </td>
+                <td className={p.terminal_corpus_target_met ? "positive" : "negative"}>
+                  {formatPaise(p.desired_terminal_corpus_paise ?? 0)}
+                  {p.terminal_corpus_target_met ? " — on track" : " — not reached"}
+                </td>
+              </tr>
+            )}
             <tr>
               <td>Corpus lasts until</td>
               <td className={p.depletion_age !== null ? "negative" : "positive"}>
@@ -252,6 +282,7 @@ export function YearTable({ p }: { p: RetirementProjection }) {
             <th>Investment</th>
             <th>Return</th>
             <th>Withdrawal</th>
+            <th>Healthcare</th>
             <th>Life events</th>
             <th>Closing</th>
           </tr>
@@ -268,6 +299,9 @@ export function YearTable({ p }: { p: RetirementProjection }) {
               <td>{formatPaise(y.return_paise)}</td>
               <td className={y.withdrawal_paise > 0 ? "negative" : ""}>
                 {y.withdrawal_paise > 0 ? formatPaise(y.withdrawal_paise) : "—"}
+              </td>
+              <td className={y.healthcare_paise > 0 ? "negative" : ""}>
+                {y.healthcare_paise > 0 ? formatPaise(y.healthcare_paise) : "—"}
               </td>
               <td className={y.lump_sum_paise > 0 ? "negative" : ""}>
                 {y.lump_sum_paise > 0 ? formatPaise(y.lump_sum_paise) : "—"}

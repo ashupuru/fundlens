@@ -1625,6 +1625,12 @@ export interface components {
             monthly_withdrawal_today_rupees?: string | null;
             /** Post Retirement Return Pct */
             post_retirement_return_pct?: string | null;
+            /** Emergency Reserve Rupees */
+            emergency_reserve_rupees?: string | null;
+            /** Annual Healthcare Today Rupees */
+            annual_healthcare_today_rupees?: string | null;
+            /** Desired Terminal Corpus Today Rupees */
+            desired_terminal_corpus_today_rupees?: string | null;
         };
         /** RetirementProfileResponse */
         RetirementProfileResponse: {
@@ -1642,6 +1648,12 @@ export interface components {
             monthly_withdrawal_today_paise: number | null;
             /** Post Retirement Return Pct */
             post_retirement_return_pct: string | null;
+            /** Emergency Reserve Paise */
+            emergency_reserve_paise: number | null;
+            /** Annual Healthcare Today Paise */
+            annual_healthcare_today_paise: number | null;
+            /** Desired Terminal Corpus Today Paise */
+            desired_terminal_corpus_today_paise: number | null;
         };
         /** RetirementProjectionResponse */
         RetirementProjectionResponse: {
@@ -1655,6 +1667,10 @@ export interface components {
             life_expectancy: number | null;
             /** Years To Retirement */
             years_to_retirement: number | null;
+            /** Total Portfolio Paise */
+            total_portfolio_paise: number | null;
+            /** Emergency Reserve Paise */
+            emergency_reserve_paise: number | null;
             /** Starting Corpus Paise */
             starting_corpus_paise: number | null;
             /** Blended Return Pct */
@@ -1685,6 +1701,14 @@ export interface components {
             total_lump_sum_paise: number | null;
             /** Total Lump Sum Shortfall Paise */
             total_lump_sum_shortfall_paise: number | null;
+            /** First Year Annual Healthcare Paise */
+            first_year_annual_healthcare_paise: number | null;
+            /** Healthcare Inflation Pct */
+            healthcare_inflation_pct: string | null;
+            /** Desired Terminal Corpus Paise */
+            desired_terminal_corpus_paise: number | null;
+            /** Terminal Corpus Target Met */
+            terminal_corpus_target_met: boolean | null;
             /** Current Annual Investment Paise */
             current_annual_investment_paise: number | null;
             /** Required Annual Investment Paise */
@@ -1724,6 +1748,8 @@ export interface components {
             return_paise: number;
             /** Withdrawal Paise */
             withdrawal_paise: number;
+            /** Healthcare Paise */
+            healthcare_paise: number;
             /** Lump Sum Paise */
             lump_sum_paise: number;
             /** Lump Sum Shortfall Paise */

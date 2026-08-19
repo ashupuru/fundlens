@@ -1046,3 +1046,40 @@ zero, so a path that fails stays failed rather than mathematically recovering.
 Its own endpoint (`GET /retirement/monte-carlo`, button-triggered) rather than folded into the
 projection — 5,000 paths is a different cost tier from a few dozen rows of arithmetic, matching the
 goal Monte Carlo and `POST /ai/analyze` precedent.
+
+## 22. Reserve, Healthcare and Terminal Corpus (shipped — `compute/retirement.py`)
+
+Three inputs from the source spec that each change the retirement math in a specific way, added
+together because they interact. All nullable, and **inert when unset** — an existing plan projects
+identically until they're filled in (asserted in tests).
+
+**Emergency reserve** (spec §12). Real money in the portfolio, but explicitly *not* available to
+fund retirement, so the projection compounds `portfolio − reserve` and reports both figures. A
+reserve larger than the portfolio floors the investable corpus at zero rather than going negative.
+
+**Healthcare** (spec §13) is a **second withdrawal stream with its own escalation**, not a bigger
+general withdrawal. Blending it into the general figure would understate it badly in later years,
+since healthcare compounds faster: over a 25-year retirement, 10% vs 6% is a ~2.5× divergence.
+Entered in today's rupees, inflated to retirement, then escalating at `healthcare_inflation_pct`
+(default 10, the spec's own figure) while the general withdrawal escalates at general inflation.
+It adds its own growing-annuity term to the required corpus — the same formula, its own rate.
+
+**Terminal / inheritance corpus** (spec §23). Money the user wants left behind can't also be
+spent, so its present value is added to the corpus needed at retirement. Entered in **today's**
+rupees and inflated to life expectancy, matching how the monthly requirement is handled: "leave
+₹1 Cr" means ₹1 Cr of today's purchasing power, not a nominal figure worth a fraction of that by
+then. Depletion still means *hitting zero* — the terminal target is reported separately via
+`terminal_corpus_target_met` rather than redefining what failure means, which would have made
+"depleted" ambiguous.
+
+Real-portfolio effect, and why they belong in one phase: individually each looks modest
+(readiness 259% → 242% for a ₹25L reserve, → 168% for ₹3L/yr healthcare, → 166% for a ₹2 Cr
+bequest), but **together they take readiness from 259% to 115%**. Modelling any one alone would
+leave a materially over-optimistic picture.
+
+The Monte Carlo simulation (§21) carries the healthcare stream too, with its own escalation —
+otherwise the zero-volatility collapse against the deterministic engine would no longer hold, and
+that gate is what keeps the two implementations honest.
+
+**Tax remains deferred** (spec §14), which the spec itself sanctions for a first version: every
+figure here is pre-tax, and the UI says so.

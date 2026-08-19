@@ -412,6 +412,16 @@ class RiskProfile(Base):
     monthly_withdrawal_today_paise: Mapped[int | None] = mapped_column(Integer)
     # None => fall back to the blended pre-retirement rate.
     post_retirement_return_pct: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # Cash set aside for emergencies -- real money in the portfolio, but not
+    # available to fund retirement, so the projection starts from the
+    # portfolio *minus* this (compute-engine.md §22).
+    emergency_reserve_paise: Mapped[int | None] = mapped_column(Integer)
+    # Post-retirement healthcare, in today's rupees. Modelled as a second
+    # withdrawal stream escalating at its own (typically higher) inflation
+    # rather than folded into the general figure.
+    annual_healthcare_today_paise: Mapped[int | None] = mapped_column(Integer)
+    # What the user wants left at life expectancy, in today's rupees.
+    desired_terminal_corpus_today_paise: Mapped[int | None] = mapped_column(Integer)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)

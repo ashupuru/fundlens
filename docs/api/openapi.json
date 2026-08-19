@@ -4616,6 +4616,39 @@
               }
             ],
             "title": "Post Retirement Return Pct"
+          },
+          "emergency_reserve_rupees": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Reserve Rupees"
+          },
+          "annual_healthcare_today_rupees": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Healthcare Today Rupees"
+          },
+          "desired_terminal_corpus_today_rupees": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Terminal Corpus Today Rupees"
           }
         },
         "type": "object",
@@ -4699,6 +4732,39 @@
               }
             ],
             "title": "Post Retirement Return Pct"
+          },
+          "emergency_reserve_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Reserve Paise"
+          },
+          "annual_healthcare_today_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Healthcare Today Paise"
+          },
+          "desired_terminal_corpus_today_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Terminal Corpus Today Paise"
           }
         },
         "type": "object",
@@ -4709,7 +4775,10 @@
           "annual_investment_paise",
           "annual_investment_step_up_pct",
           "monthly_withdrawal_today_paise",
-          "post_retirement_return_pct"
+          "post_retirement_return_pct",
+          "emergency_reserve_paise",
+          "annual_healthcare_today_paise",
+          "desired_terminal_corpus_today_paise"
         ],
         "title": "RetirementProfileResponse"
       },
@@ -4769,6 +4838,28 @@
               }
             ],
             "title": "Years To Retirement"
+          },
+          "total_portfolio_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Portfolio Paise"
+          },
+          "emergency_reserve_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emergency Reserve Paise"
           },
           "starting_corpus_paise": {
             "anyOf": [
@@ -4935,6 +5026,50 @@
             ],
             "title": "Total Lump Sum Shortfall Paise"
           },
+          "first_year_annual_healthcare_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Year Annual Healthcare Paise"
+          },
+          "healthcare_inflation_pct": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthcare Inflation Pct"
+          },
+          "desired_terminal_corpus_paise": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desired Terminal Corpus Paise"
+          },
+          "terminal_corpus_target_met": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terminal Corpus Target Met"
+          },
           "current_annual_investment_paise": {
             "anyOf": [
               {
@@ -5001,6 +5136,8 @@
           "retirement_age",
           "life_expectancy",
           "years_to_retirement",
+          "total_portfolio_paise",
+          "emergency_reserve_paise",
           "starting_corpus_paise",
           "blended_return_pct",
           "post_retirement_return_pct",
@@ -5016,6 +5153,10 @@
           "terminal_corpus_paise",
           "total_lump_sum_paise",
           "total_lump_sum_shortfall_paise",
+          "first_year_annual_healthcare_paise",
+          "healthcare_inflation_pct",
+          "desired_terminal_corpus_paise",
+          "terminal_corpus_target_met",
           "current_annual_investment_paise",
           "required_annual_investment_paise",
           "required_monthly_investment_paise",
@@ -5083,6 +5224,10 @@
             "type": "integer",
             "title": "Withdrawal Paise"
           },
+          "healthcare_paise": {
+            "type": "integer",
+            "title": "Healthcare Paise"
+          },
           "lump_sum_paise": {
             "type": "integer",
             "title": "Lump Sum Paise"
@@ -5104,6 +5249,7 @@
           "investment_paise",
           "return_paise",
           "withdrawal_paise",
+          "healthcare_paise",
           "lump_sum_paise",
           "lump_sum_shortfall_paise",
           "closing_corpus_paise"

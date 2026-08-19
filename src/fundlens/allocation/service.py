@@ -76,6 +76,9 @@ def set_retirement_profile(
     annual_investment_step_up_pct: Decimal | None = None,
     monthly_withdrawal_today_paise: int | None = None,
     post_retirement_return_pct: Decimal | None = None,
+    emergency_reserve_paise: int | None = None,
+    annual_healthcare_today_paise: int | None = None,
+    desired_terminal_corpus_today_paise: int | None = None,
 ) -> RiskProfile:
     """Updates only the retirement-projection inputs (compute/retirement.py),
     leaving persona/target allocation untouched -- the two live on the same
@@ -96,6 +99,9 @@ def set_retirement_profile(
     profile.annual_investment_step_up_pct = annual_investment_step_up_pct
     profile.monthly_withdrawal_today_paise = monthly_withdrawal_today_paise
     profile.post_retirement_return_pct = post_retirement_return_pct
+    profile.emergency_reserve_paise = emergency_reserve_paise
+    profile.annual_healthcare_today_paise = annual_healthcare_today_paise
+    profile.desired_terminal_corpus_today_paise = desired_terminal_corpus_today_paise
     profile.updated_at = datetime.now(UTC).replace(tzinfo=None)
     session.commit()
     return profile

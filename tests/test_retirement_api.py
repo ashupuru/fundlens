@@ -193,3 +193,31 @@ def test_monte_carlo_returns_a_probability_and_a_spread(client: TestClient) -> N
     # This fixture has no holdings, so it's funded by SIP alone and fails
     # essentially always -- the depletion age must be reported, not None.
     assert body["median_depletion_age"] is not None
+
+
+def test_reserve_healthcare_and_terminal_corpus_round_trip(client: TestClient) -> None:
+    _set_risk_profile(client)
+
+    body = client.post(
+        "/retirement/profile",
+        json={
+            **_RETIREMENT_PROFILE,
+            "emergency_reserve_rupees": "2500000",
+            "annual_healthcare_today_rupees": "300000",
+            "desired_terminal_corpus_today_rupees": "20000000",
+        },
+    ).json()
+
+    assert body["emergency_reserve_paise"] == 250_000_000
+    assert body["annual_healthcare_today_paise"] == 30_000_000
+    assert body["desired_terminal_corpus_today_paise"] == 2_000_000_000
+    assert client.get("/retirement/profile").json() == body
+
+    projection = client.get("/retirement/projection").json()
+    assert projection["emergency_reserve_paise"] == 250_000_000
+    # This fixture's portfolio is empty, so the carve-out floors at zero
+    # rather than going negative -- the reserve is still reported in full.
+    assert projection["total_portfolio_paise"] == 0
+    assert projection["starting_corpus_paise"] == 0
+    assert projection["first_year_annual_healthcare_paise"] > 0
+    assert projection["desired_terminal_corpus_paise"] > 0
