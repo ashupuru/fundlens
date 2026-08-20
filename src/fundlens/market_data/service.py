@@ -89,7 +89,13 @@ def record_freshness(
     status: FetchStatus,
     rows_updated: int | None,
     error_message: str | None,
+    rows_considered: int | None = None,
 ) -> None:
+    """`rows_considered` is how many rows this fetch examined; `rows_updated`
+    how many of them were new. Reporting only the latter makes a healthy
+    "already up to date" indistinguishable from a broken parser -- both show
+    zero. Optional so a failure path, which examined nothing meaningful, can
+    leave it unset."""
     now = datetime.now(UTC).replace(tzinfo=None)
     freshness = session.get(DataFreshness, source)
     if freshness is None:
@@ -98,6 +104,7 @@ def record_freshness(
     freshness.last_attempt_at = now
     freshness.status = status
     freshness.rows_updated = rows_updated
+    freshness.rows_considered = rows_considered
     freshness.error_message = error_message
     if status == FetchStatus.OK:
         freshness.last_success_at = now
@@ -113,7 +120,9 @@ def backfill_scheme_via_mfapi(session: Session, amfi_code: str) -> int:
 
     rows = parse_scheme_history(amfi_code, payload)
     inserted = _insert_new_rows(session, rows, NavSource.MFAPI)
-    record_freshness(session, NavSource.MFAPI, FetchStatus.OK, inserted, None)
+    record_freshness(
+        session, NavSource.MFAPI, FetchStatus.OK, inserted, None, rows_considered=len(rows)
+    )
     session.commit()
     return inserted
 
@@ -141,7 +150,9 @@ def refresh_latest_via_amfi(session: Session, held_amfi_codes: set[str]) -> tupl
             "the upstream column layout has likely changed "
             "(see market_data/amfi_client.py)"
         )
-        record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.FAILED, 0, message)
+        record_freshness(
+            session, NavSource.AMFI_NAVALL, FetchStatus.FAILED, 0, message, rows_considered=0
+        )
         session.commit()
         return 0, message
 
@@ -154,7 +165,14 @@ def refresh_latest_via_amfi(session: Session, held_amfi_codes: set[str]) -> tupl
     relevant_categories = [r for r in category_rows if r.amfi_code in held_amfi_codes]
     _upsert_scheme_metadata(session, relevant_categories)
 
-    record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.OK, inserted, None)
+    record_freshness(
+        session,
+        NavSource.AMFI_NAVALL,
+        FetchStatus.OK,
+        inserted,
+        None,
+        rows_considered=len(relevant_rows),
+    )
     session.commit()
     return inserted, None
 

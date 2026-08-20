@@ -298,3 +298,37 @@ def test_genuinely_empty_feed_is_not_treated_as_a_layout_change(
 
     assert inserted == 0
     assert error is None
+
+
+def test_successful_refresh_records_what_it_looked_at_not_just_what_changed(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`rows_updated=0` alone cannot distinguish "already current" from "the
+    parser returned nothing" — the ambiguity that hid AMFI's column change."""
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: NAVALL_TEXT)
+
+    service.refresh_latest_via_amfi(session, {"119551"})
+    freshness = session.get(DataFreshness, NavSource.AMFI_NAVALL)
+    assert freshness is not None
+    assert freshness.rows_updated == 1
+    assert freshness.rows_considered == 1
+
+    # Second run: nothing new, but it still looked at the same scheme.
+    service.refresh_latest_via_amfi(session, {"119551"})
+    session.refresh(freshness)
+    assert freshness.status == FetchStatus.OK
+    assert freshness.rows_updated == 0
+    assert freshness.rows_considered == 1
+
+
+def test_holding_nothing_is_distinguishable_from_an_up_to_date_refresh(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: NAVALL_TEXT)
+
+    service.refresh_latest_via_amfi(session, {"999999999"})  # held, but absent upstream
+
+    freshness = session.get(DataFreshness, NavSource.AMFI_NAVALL)
+    assert freshness is not None
+    assert freshness.rows_updated == 0
+    assert freshness.rows_considered == 0  # vs 1 when it genuinely checked one

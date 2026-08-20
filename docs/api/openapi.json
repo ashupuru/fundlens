@@ -2949,6 +2949,17 @@
               }
             ],
             "title": "Rows Updated"
+          },
+          "rows_considered": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows Considered"
           }
         },
         "type": "object",
@@ -2958,7 +2969,8 @@
           "last_success_at",
           "status",
           "error_message",
-          "rows_updated"
+          "rows_updated",
+          "rows_considered"
         ],
         "title": "DataFreshnessResponse"
       },

@@ -21,6 +21,18 @@ type BenchmarkRefreshState =
   | { status: "error"; message: string }
   | { status: "done"; inserted: number; failedBenchmarks: string[] };
 
+/** A bare "0" in this column reads as failure when it usually means "already
+ * up to date". Both numbers together tell them apart: AMFI's Aug-2026 column
+ * change showed 0 updated for days while the parser was silently returning
+ * nothing, and nothing on this page distinguished that from a healthy no-op. */
+function describeRows(updated: number | null, considered: number | null): string {
+  if (updated === null && considered === null) return "—";
+  if (considered === null) return `${updated ?? 0} new`;
+  if (considered === 0) return "nothing to check";
+  if (updated) return `${updated} new of ${considered}`;
+  return `0 new — all ${considered} current`;
+}
+
 export default function DataQuality() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [growwRefresh, setGrowwRefresh] = useState<GrowwRefreshState>({ status: "idle" });
@@ -328,7 +340,7 @@ export default function DataQuality() {
                 <th>Source</th>
                 <th>Status</th>
                 <th>Last success</th>
-                <th>Rows updated</th>
+                <th>Rows</th>
                 <th>Error</th>
               </tr>
             </thead>
@@ -338,7 +350,7 @@ export default function DataQuality() {
                   <td>{fr.source}</td>
                   <td>{fr.status}</td>
                   <td>{fr.last_success_at ?? "never"}</td>
-                  <td>{fr.rows_updated ?? "—"}</td>
+                  <td>{describeRows(fr.rows_updated, fr.rows_considered)}</td>
                   <td>{fr.error_message ?? "—"}</td>
                 </tr>
               ))}

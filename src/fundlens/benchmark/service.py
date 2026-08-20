@@ -75,7 +75,9 @@ def backfill_benchmark_history(
 
     rows = parse_scheme_history(amfi_code, payload)
     inserted = _insert_new_benchmark_rows(session, benchmark_id, rows)
-    record_freshness(session, NavSource.MFAPI, FetchStatus.OK, inserted, None)
+    record_freshness(
+        session, NavSource.MFAPI, FetchStatus.OK, inserted, None, rows_considered=len(rows)
+    )
     session.commit()
     return BenchmarkRefreshResult(benchmark_id=benchmark_id, inserted=inserted, error=None)
 

@@ -1242,6 +1242,8 @@ export interface components {
             error_message: string | null;
             /** Rows Updated */
             rows_updated: number | null;
+            /** Rows Considered */
+            rows_considered: number | null;
         };
         /** DataQualitySummaryResponse */
         DataQualitySummaryResponse: {

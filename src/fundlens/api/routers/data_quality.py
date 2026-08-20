@@ -62,6 +62,7 @@ class DataFreshnessResponse(BaseModel):
     status: str
     error_message: str | None
     rows_updated: int | None
+    rows_considered: int | None
 
 
 class DuplicateSideResponse(BaseModel):
@@ -159,6 +160,7 @@ def summary(session: Session = Depends(get_session)) -> DataQualitySummaryRespon
                 status=fr.status,
                 error_message=fr.error_message,
                 rows_updated=fr.rows_updated,
+                rows_considered=fr.rows_considered,
             )
             for fr in get_data_freshness(session)
         ],

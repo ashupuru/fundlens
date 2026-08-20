@@ -109,7 +109,14 @@ def refresh_groww_metadata(session: Session) -> GrowwRefreshSummary:
         return GrowwRefreshSummary(rows_upserted=0, ok=False, error=str(exc))
 
     rows_upserted = _upsert_groww_metadata(session, rows)
-    record_freshness(session, NavSource.GROWW_METADATA, FetchStatus.OK, rows_upserted, None)
+    record_freshness(
+        session,
+        NavSource.GROWW_METADATA,
+        FetchStatus.OK,
+        rows_upserted,
+        None,
+        rows_considered=len(rows),
+    )
     session.commit()
 
     return GrowwRefreshSummary(rows_upserted=rows_upserted, ok=True, error=None)

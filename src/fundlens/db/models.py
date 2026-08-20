@@ -159,6 +159,13 @@ class DataFreshness(Base):
     status: Mapped[FetchStatus] = mapped_column(Enum(FetchStatus))
     error_message: Mapped[str | None] = mapped_column(String(500))
     rows_updated: Mapped[int | None] = mapped_column()
+    # How many rows the fetch actually looked at, as opposed to how many were
+    # new. Without it `rows_updated = 0` is ambiguous between "everything is
+    # already current", "nothing is held to look up", and "the parser is
+    # broken and silently returned nothing" -- and it was that ambiguity that
+    # let AMFI's Aug-2026 column change sit unnoticed while the refresh
+    # reported OK every day (see market_data/amfi_client.py).
+    rows_considered: Mapped[int | None] = mapped_column()
 
 
 class BenchmarkId(enum.StrEnum):

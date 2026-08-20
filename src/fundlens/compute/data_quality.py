@@ -94,6 +94,7 @@ class DataFreshnessView:
     status: str
     error_message: str | None
     rows_updated: int | None
+    rows_considered: int | None
 
 
 def get_data_freshness(session: Session) -> list[DataFreshnessView]:
@@ -106,6 +107,7 @@ def get_data_freshness(session: Session) -> list[DataFreshnessView]:
             status=r.status.value,
             error_message=r.error_message,
             rows_updated=r.rows_updated,
+            rows_considered=r.rows_considered,
         )
         for r in rows
     ]
