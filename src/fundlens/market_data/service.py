@@ -130,6 +130,21 @@ def refresh_latest_via_amfi(session: Session, held_amfi_codes: set[str]) -> tupl
         return 0, str(exc)
 
     all_rows = parse_navall(text)
+    if text.strip() and not all_rows:
+        # A healthy download that parses to nothing means the upstream layout
+        # changed under us, not that there is no data. Reporting OK here is
+        # what let AMFI's Aug-2026 column change sit undetected: the refresh
+        # logged `status=OK, rows_updated=0` every day while NAVs went stale
+        # and every broker import matched `no_candidates`. Fail loudly.
+        message = (
+            f"NAVAll returned {len(text):,} characters but no parsable NAV rows — "
+            "the upstream column layout has likely changed "
+            "(see market_data/amfi_client.py)"
+        )
+        record_freshness(session, NavSource.AMFI_NAVALL, FetchStatus.FAILED, 0, message)
+        session.commit()
+        return 0, message
+
     relevant_rows = [r for r in all_rows if r.amfi_code in held_amfi_codes]
     inserted = _insert_new_rows(session, relevant_rows, NavSource.AMFI_NAVALL)
 

@@ -263,3 +263,38 @@ def test_refresh_updates_existing_scheme_metadata_not_duplicates(
     service.refresh_latest_via_amfi(session, {"119551"})  # re-run
 
     assert len(session.scalars(select(SchemeMetadata)).all()) == 1
+
+
+def test_unparsable_feed_is_reported_as_failed_not_ok(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bug behind AMFI's Aug-2026 column change going unnoticed for days:
+    a healthy download that parses to zero rows was recorded as
+    `status=OK, rows_updated=0`, so nothing ever surfaced while NAVs went
+    stale and every broker import matched `no_candidates`."""
+    unparsable = "Scheme Code|ISIN|Name|NAV|Date\n119551|INF209KA12Z1|Some Fund|107.17|19-Aug-2026\n"
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: unparsable)
+
+    inserted, error = service.refresh_latest_via_amfi(session, {"119551"})
+
+    assert inserted == 0
+    assert error is not None
+    assert "no parsable NAV rows" in error
+
+    freshness = session.get(DataFreshness, NavSource.AMFI_NAVALL)
+    assert freshness is not None
+    assert freshness.status == FetchStatus.FAILED
+    assert freshness.last_success_at is None
+
+
+def test_genuinely_empty_feed_is_not_treated_as_a_layout_change(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard only fires on non-empty input — an empty body is a different
+    failure and must not be misreported as a column-layout change."""
+    monkeypatch.setattr(service, "fetch_navall_text", lambda: "   \n")
+
+    inserted, error = service.refresh_latest_via_amfi(session, {"119551"})
+
+    assert inserted == 0
+    assert error is None
