@@ -109,3 +109,9 @@ def test_duplicate_looking_same_day_rows_all_kept_distinguished_by_trade_id() ->
     result = parse_zerodha_csv(content)
     assert len(result.rows) == 2
     assert {r.trade_id for r in result.rows} == {"2010313668", "2010217308"}
+
+
+_ROW = (
+    "MIRAE ASSET FLEXI CAP FUND - DIRECT PLAN,INF769K01JJ2,2025-08-01,BSE,MF,,buy,false,"
+    "62.337000,16.041000,2004399965,2004399965,2025-08-01T00:00:00\n"
+)
