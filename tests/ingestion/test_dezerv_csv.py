@@ -94,3 +94,10 @@ def test_multiple_mfdemat_rows_across_schemes() -> None:
     result = parse_dezerv_csv(content)
     assert len(result.rows) == 2
     assert {r.security for r in result.rows} == {"Fund A Direct-G", "Fund B Direct-G"}
+
+
+def _sell_row(amount: str) -> str:
+    return (
+        "1,Test,ICICI-1,ICICI Bank,Sell,20/06/2023,20/06/2023,MFDEMAT,ABC,Fund A Direct-G,"
+        f'"{amount}",0.00,0.00,0.00,"50,000.00",NSDL-1,,,1\n'
+    )
