@@ -97,7 +97,10 @@ def parse_zerodha_csv(content: str) -> ZerodhaParseResult:
     if reader.fieldnames is None:
         raise ZerodhaFormatError("Empty file")
 
-    header = {name.strip() for name in reader.fieldnames}
+    # Normalize once so validation and row lookups use the same names: strip
+    # strays spaces and UTF-8 BOM (which strip() does not remove)
+    reader.fieldnames = [name.strip().lstrip("\ufeff") for name in reader.fieldnames]
+    header = set(reader.fieldnames)
     missing = [c for c in _REQUIRED_COLUMNS if c not in header]
     if missing:
         raise ZerodhaFormatError(

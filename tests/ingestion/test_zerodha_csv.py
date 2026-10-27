@@ -115,3 +115,30 @@ _ROW = (
     "MIRAE ASSET FLEXI CAP FUND - DIRECT PLAN,INF769K01JJ2,2025-08-01,BSE,MF,,buy,false,"
     "62.337000,16.041000,2004399965,2004399965,2025-08-01T00:00:00\n"
 )
+
+
+def test_header_with_space_after_commas_still_passes_rows() -> None:
+    content = _HEADER.replace(",", ", ") + "\n" + _ROW
+    result = parse_zerodha_csv(content)
+    assert len(result.rows) == 1
+    assert result.rows[0].isin == "INF769K01JJ2"
+
+
+def test_header_with_trailing_space_on_column_name_still_parses_rows() -> None:
+    content = _HEADER.replace("trade_id", "trade_id ") + "\n" + _ROW
+    result = parse_zerodha_csv(content)
+    assert len(result.rows) == 1
+    assert result.rows[0].trade_id == "2004399965"
+
+
+def test_header_with_utf8_bom_still_parses_rows() -> None:
+    content = "\ufeff" + _sample(_ROW)
+    result = parse_zerodha_csv(content)
+    assert len(result.rows) == 1
+    assert result.rows[0].isin == "INF769K01JJ2"
+
+
+def test_padded_header_missing_a_required_column_still_raises() -> None:
+    header = _HEADER.replace("isin", ", ").replace(",", ", ")
+    with pytest.raises(ZerodhaFormatError):
+        parse_zerodha_csv(header + "\n" + _ROW)
